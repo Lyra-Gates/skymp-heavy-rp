@@ -1,5 +1,6 @@
 references/
 skymp/server/
+skymp/artifacts/
 skymp/data/
 skymp/world/
 skymp/*.log

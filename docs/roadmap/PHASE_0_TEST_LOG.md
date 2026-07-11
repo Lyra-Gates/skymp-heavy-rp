@@ -4,26 +4,34 @@ Use este arquivo para registrar evidencias reais dos testes SkyMP.
 
 ## Ambiente
 
-- Data:
-- Responsavel:
-- Maquina:
-- Sistema operacional:
-- Skyrim versao:
-- SkyMP build:
-- SkyMP origem:
-- Commit/tag:
+- Data: 2026-07-11
+- Responsavel: Codex/Vinicius
+- Maquina: Windows local
+- Sistema operacional: Windows
+- Skyrim versao: Steam SE/AE alvo 1.6.1170, a confirmar pelo executavel
+- SkyMP build: GitHub Actions artifact `server-dist`
+- SkyMP origem: `skyrim-multiplayer/skymp`, workflow `PR Windows Flatrim (AE/SE)`, run `29137896242`
+- Commit/tag: `dbbc6b7e4bb33f79c45387a144eaa513aa88030c`
 - Cliente usado:
-- `databaseDriver`:
-- Porta principal:
-- Porta UI:
-- Observacoes:
+- `databaseDriver`: `file`
+- Porta principal: `7777`
+- Porta UI: `3000`
+- Observacoes: CMake/MSBuild nao encontrados localmente; foi usada build pronta do GitHub Actions.
 
 ## Teste 0.1 - Boot do Servidor
 
 - Resultado esperado: servidor inicia sem erro critico.
-- Resultado real:
+- Resultado real: servidor inicializou, carregou `dataDir`, storage `file`, gamemode minimo e ficou vivo por 12 segundos ate ser encerrado pelo script de teste.
 - Logs relevantes:
-- Status: pendente
+  - `Hot reload is disabled for Papyrus`
+  - `Using data dir '..\data'`
+  - `Using file with name '..\world'`
+  - `Gamemode path is "D:\Documents\New project\skymp\gamemode\phase0-basic.js"`
+  - `[phase0] SkyMP Heavy RP gamemode loaded`
+  - `[phase0] mp API available`
+  - UDP `127.0.0.1:7777`
+  - `Server resources folder is listening on 3000`
+- Status: aprovado para boot local
 
 ## Teste 0.2 - Conexao Cliente 1
 

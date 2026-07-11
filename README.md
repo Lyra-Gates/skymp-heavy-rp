@@ -56,6 +56,8 @@ Arquivos reais como `server-settings.local.json`, builds SkyMP, `data/`, `world/
 ```powershell
 .\scripts\phase0\Initialize-LocalConfig.ps1
 .\scripts\phase0\Prepare-SkyMPDataDir.ps1
+.\scripts\phase0\Install-SkyMPServerArtifact.ps1
+.\scripts\phase0\Start-Phase0Server.ps1 -Seconds 12
 ```
 
 O segundo comando roda em modo seco por padrao. Use `-CopyMasters` apenas quando for preparar a pasta local real do servidor.

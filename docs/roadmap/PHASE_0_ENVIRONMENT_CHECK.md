@@ -50,19 +50,53 @@ Commit inspecionado:
 5de4aa8 internal: bump lodash from 4.17.21 to 4.17.23 in /misc/prettier (#2633)
 ```
 
+Build pronta usada para boot local:
+
+```text
+Repo: skyrim-multiplayer/skymp
+Workflow: PR Windows Flatrim (AE/SE)
+Run: 29137896242
+Artifact: server-dist
+Head SHA: dbbc6b7e4bb33f79c45387a144eaa513aa88030c
+```
+
 ## Bloqueio Atual
 
 Compilar SkyMP localmente nao e o caminho mais rapido neste momento porque CMake e MSBuild/Visual Studio Build Tools nao estao disponiveis no PATH.
 
 Para a primeira execucao, priorizar uma build pronta do servidor SkyMP. Se isso falhar ou estiver indisponivel, instalar CMake + Visual Studio Build Tools e compilar pelo repo.
 
+Status: build pronta `server-dist` foi baixada via GitHub Actions e inicializou localmente.
+
+## Primeiro Boot Local
+
+Resultado:
+
+- Servidor iniciou.
+- `dataDir` local foi reconhecido.
+- Masters vanilla foram copiados para `skymp/data`.
+- `data/scripts/ActiveMagicEffect.pex` foi copiado do artifact.
+- Storage `file` criou `skymp/world`.
+- Gamemode minimo `skymp/gamemode/phase0-basic.js` carregou.
+- API `mp` estava disponivel.
+- Porta UDP `127.0.0.1:7777` ficou aberta.
+- UI resources ficaram ouvindo em `127.0.0.1:3000`.
+- O processo foi encerrado manualmente apos 12 segundos pelo script de teste.
+
+Pendencia:
+
+- Confirmar porta UDP principal durante teste com cliente.
+- Confirmar cliente conectado.
+- Confirmar versao exata do `SkyrimSE.exe`.
+
 ## Proxima Acao Recomendada
 
 1. Rodar `scripts/phase0/Initialize-LocalConfig.ps1`.
 2. Rodar `scripts/phase0/Prepare-SkyMPDataDir.ps1` sem `-CopyMasters` para confirmar fontes.
 3. Quando a build do servidor estiver disponivel, rodar `Prepare-SkyMPDataDir.ps1 -CopyMasters`.
-4. Copiar/ajustar `server-settings.local.json` para o local esperado pela build.
-5. Executar o servidor e preencher `docs/roadmap/PHASE_0_TEST_LOG.md`.
+4. Rodar `scripts/phase0/Install-SkyMPServerArtifact.ps1`.
+5. Rodar `scripts/phase0/Start-Phase0Server.ps1 -Seconds 12`.
+6. Executar teste com cliente e preencher `docs/roadmap/PHASE_0_TEST_LOG.md`.
 
 ## Fontes Publicas Checadas
 
