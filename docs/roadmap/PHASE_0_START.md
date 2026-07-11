@@ -81,6 +81,13 @@ Copiar os masters oficiais:
 
 Conferir se `loadOrder` bate com esses arquivos.
 
+Script auxiliar:
+
+```powershell
+.\scripts\phase0\Prepare-SkyMPDataDir.ps1
+.\scripts\phase0\Prepare-SkyMPDataDir.ps1 -CopyMasters
+```
+
 ### Passo 3 - Criar `server-settings.json`
 
 Comecar com:
@@ -92,6 +99,12 @@ Comecar com:
 - `startPoints` controlado.
 
 Use `skymp/config/server-settings.local.example.json` como base. Copie para um arquivo local nao versionado antes de inserir chaves reais.
+
+Script auxiliar:
+
+```powershell
+.\scripts\phase0\Initialize-LocalConfig.ps1
+```
 
 ### Passo 4 - Testar Servidor Local
 

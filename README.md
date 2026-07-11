@@ -50,3 +50,12 @@ O proximo trabalho e executar a Fase 0 e registrar evidencias reais.
 Templates seguros foram criados em `skymp/config/`.
 
 Arquivos reais como `server-settings.local.json`, builds SkyMP, `data/`, `world/`, masters do Skyrim e secrets nao devem ser versionados.
+
+## Scripts da Fase 0
+
+```powershell
+.\scripts\phase0\Initialize-LocalConfig.ps1
+.\scripts\phase0\Prepare-SkyMPDataDir.ps1
+```
+
+O segundo comando roda em modo seco por padrao. Use `-CopyMasters` apenas quando for preparar a pasta local real do servidor.

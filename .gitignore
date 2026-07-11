@@ -6,6 +6,9 @@ skymp/*.log
 skymp/config/server-settings.local.json
 skymp/config/server-settings.staging.json
 skymp/config/server-settings.production.json
+skymp/config/server-options.local.json
+skymp/config/server-options.staging.json
+skymp/config/server-options.production.json
 skymp/config/secrets.*
 *.zip
 *.7z
