@@ -4,77 +4,376 @@
   <meta charset="UTF-8">
   <title>SkyMP Heavy RP - UI</title>
   <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden; /* Evita barras de rolagem no jogo */
-      font-family: 'Arial', sans-serif;
-      background: transparent; /* UI do jogo tem fundo transparente */
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+      background: transparent;
+      color: white;
     }
 
+    /* === VOIP HUD === */
+    #voip-hud {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 100;
+    }
+    .voip-peer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 4px 12px 4px 8px;
+      font-size: 13px;
+      transition: opacity 0.3s;
+    }
+    .voip-peer .icon {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #4caf50;
+      animation: pulse 1.2s infinite;
+    }
+    .voip-peer.muted .icon { background: #e53935; animation: none; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+    .voip-peer .vol-bar {
+      width: 50px; height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .voip-peer .vol-fill {
+      height: 100%;
+      background: #4caf50;
+      transition: width 0.4s;
+    }
+
+    /* === STATUS CHIP === */
+    #voip-status {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 4px 14px;
+      font-size: 12px;
+      display: none;
+      gap: 6px;
+      align-items: center;
+    }
+    #voip-status.visible { display: flex; }
+    #voip-status .dot { width: 7px; height: 7px; border-radius: 50%; }
+    #voip-status.ok .dot { background:#4caf50; }
+    #voip-status.error .dot { background:#e53935; }
+
+    /* === TRADE OVERLAY === */
     #trade-overlay {
       display: none;
-      position: absolute;
-      top: 50%;
-      left: 50%;
+      position: fixed;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      width: 600px;
-      height: 400px;
-      background: rgba(10, 10, 10, 0.9);
-      border: 2px solid #bba16b;
-      color: white;
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0px 0px 20px rgba(0,0,0,0.8);
+      width: 560px;
+      background: rgba(12,12,15,0.93);
+      border: 1px solid #bba16b;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.8);
     }
-
-    .trade-header {
+    #trade-overlay.open { display: block; }
+    .trade-title {
       text-align: center;
-      font-size: 24px;
-      border-bottom: 1px solid #555;
-      padding-bottom: 10px;
-      margin-bottom: 20px;
+      font-size: 18px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #bba16b;
+      border-bottom: 1px solid rgba(187,161,107,0.3);
+      padding-bottom: 12px;
+      margin-bottom: 18px;
     }
+    .trade-btn {
+      background: #bba16b; color: #000;
+      border: none; border-radius: 6px;
+      padding: 8px 20px; cursor: pointer;
+      font-weight: bold; font-size: 13px;
+      margin-top: 14px;
+    }
+    .trade-btn:hover { background: #d4b97e; }
   </style>
 </head>
 <body>
 
-  <!-- Estrutura do VOIP (Placeholder para a futura conexao WebRTC) -->
-  <div id="voip-container" style="display:none;"></div>
+<!-- Status VOIP -->
+<div id="voip-status">
+  <div class="dot"></div>
+  <span id="voip-status-text">VOIP</span>
+</div>
 
-  <!-- Estrutura da Troca (Trade) -->
-  <div id="trade-overlay">
-    <div class="trade-header">Comércio Seguro</div>
-    <div style="text-align: center;">
-      <p>Em breve: Interface de troca visual.</p>
-      <button onclick="closeTrade()">Cancelar</button>
-    </div>
+<!-- HUD de peers falando -->
+<div id="voip-hud"></div>
+
+<!-- Trade Overlay -->
+<div id="trade-overlay">
+  <div class="trade-title">⚖ Comércio Seguro</div>
+  <p style="text-align:center; color:#aaa; font-size:14px;">
+    Interface de troca em desenvolvimento.<br>
+    Use <strong>/tradeaccept</strong> para confirmar ou <strong>/tradecancel</strong> para recusar.
+  </p>
+  <div style="text-align:center">
+    <button class="trade-btn" onclick="closeTrade()">Fechar</button>
   </div>
+</div>
 
-  <script>
-    // Se 'mp' nao existir (testando fora do SkyMP), mockamos
-    if (typeof mp === 'undefined') {
-      window.mp = {
-        trigger: function() { console.log('Mock trigger:', arguments); }
-      };
+<script>
+  // ── Mock mp para testes fora do SkyMP ─────────────────────────────────────
+  if (typeof mp === 'undefined') {
+    window.mp = {
+      trigger: (ev, data) => console.log('[mock] trigger:', ev, data),
+      events: { add: (ev, cb) => console.log('[mock] event registered:', ev) }
+    };
+  }
+
+  // ── Estado Local ──────────────────────────────────────────────────────────
+  const state = {
+    actorId: null,
+    muted: false,
+    voiceMode: 'normal',       // normal | whisper | shout
+    peers: new Map(),          // actorId -> { pc, gainNode, audioEl }
+    ws: null,
+    audioCtx: null,
+    localStream: null
+  };
+
+  // ── WebSocket Signaling ───────────────────────────────────────────────────
+  function connectVoip(actorId) {
+    state.actorId = actorId;
+    const wsUrl = 'ws://127.0.0.1:7778';
+    state.ws = new WebSocket(wsUrl);
+
+    state.ws.onopen = () => {
+      state.ws.send(JSON.stringify({ type: 'auth', actorId }));
+      setStatus('ok', 'VOZ ATIVA');
+    };
+
+    state.ws.onmessage = async (e) => {
+      const msg = JSON.parse(e.data);
+      await handleSignal(msg);
+    };
+
+    state.ws.onerror = () => setStatus('error', 'VOZ INDISPONÍVEL');
+    state.ws.onclose = () => setStatus('error', 'VOZ DESCONECTADA');
+  }
+
+  async function handleSignal(msg) {
+    switch (msg.type) {
+      case 'auth_ok':
+        await initMicrophone();
+        break;
+
+      case 'proximity_update':
+        // Atualiza os volumes dos peers conforme distancia
+        for (const p of msg.peers) {
+          if (!state.peers.has(p.actorId)) {
+            await initiateCall(p.actorId);
+          }
+          const peer = state.peers.get(p.actorId);
+          if (peer && peer.gainNode) {
+            peer.gainNode.gain.setTargetAtTime(p.volume, state.audioCtx.currentTime, 0.1);
+          }
+          updatePeerHUD(p.actorId, p.volume, false);
+        }
+        // Remove peers que saíram do alcance
+        for (const [id] of state.peers) {
+          if (!msg.peers.find(p => p.actorId === id)) {
+            removePeer(id);
+          }
+        }
+        break;
+
+      case 'offer':
+        await handleOffer(msg.fromActorId, msg.sdp);
+        break;
+
+      case 'answer':
+        if (state.peers.has(msg.fromActorId)) {
+          await state.peers.get(msg.fromActorId).pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
+        }
+        break;
+
+      case 'ice':
+        if (state.peers.has(msg.fromActorId)) {
+          await state.peers.get(msg.fromActorId).pc.addIceCandidate(msg.candidate);
+        }
+        break;
+
+      case 'peer_left':
+        removePeer(msg.actorId);
+        break;
+    }
+  }
+
+  // ── WebRTC ────────────────────────────────────────────────────────────────
+  async function initMicrophone() {
+    try {
+      state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      state.audioCtx = new AudioContext();
+      console.log('[voip] Microphone initialized.');
+    } catch (err) {
+      setStatus('error', 'SEM MICROFONE');
+      console.error('[voip] Mic error:', err);
+    }
+  }
+
+  async function initiateCall(targetActorId) {
+    const pc = createPeerConnection(targetActorId);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendSignal({ type: 'offer', targetActorId, sdp: offer.sdp });
+  }
+
+  async function handleOffer(fromActorId, sdp) {
+    const pc = createPeerConnection(fromActorId);
+    await pc.setRemoteDescription({ type: 'offer', sdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    sendSignal({ type: 'answer', targetActorId: fromActorId, sdp: answer.sdp });
+  }
+
+  function createPeerConnection(remoteActorId) {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    });
+
+    // Adiciona o microfone local
+    if (state.localStream) {
+      state.localStream.getTracks().forEach(track => pc.addTrack(track, state.localStream));
     }
 
-    // Escutando eventos vindo do backend Node.js
-    if (typeof mp !== 'undefined' && mp.events) {
-      mp.events.add('showTradeUI', (data) => {
-        document.getElementById('trade-overlay').style.display = 'block';
-      });
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        sendSignal({ type: 'ice', targetActorId: remoteActorId, candidate: e.candidate });
+      }
+    };
 
-      mp.events.add('hideTradeUI', () => {
-        document.getElementById('trade-overlay').style.display = 'none';
-      });
-    }
+    // Recebe o audio remoto
+    pc.ontrack = (e) => {
+      if (!state.audioCtx) return;
+      const gainNode = state.audioCtx.createGain();
+      gainNode.gain.value = 0; // Começa silencioso — proximity_update vai ajustar
+      const source = state.audioCtx.createMediaStreamSource(new MediaStream([e.track]));
+      source.connect(gainNode);
+      gainNode.connect(state.audioCtx.destination);
 
-    function closeTrade() {
-      document.getElementById('trade-overlay').style.display = 'none';
-      // Manda pro servidor dizendo que cancelou
-      mp.trigger('cef::trade:cancel', {});
+      if (state.peers.has(remoteActorId)) {
+        state.peers.get(remoteActorId).gainNode = gainNode;
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        removePeer(remoteActorId);
+      }
+    };
+
+    state.peers.set(remoteActorId, { pc, gainNode: null });
+    return pc;
+  }
+
+  function removePeer(actorId) {
+    const peer = state.peers.get(actorId);
+    if (peer) {
+      peer.pc.close();
+      state.peers.delete(actorId);
     }
-  </script>
+    removePeerHUD(actorId);
+  }
+
+  function sendSignal(msg) {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({ ...msg, fromActorId: state.actorId }));
+    }
+  }
+
+  // ── HUD ──────────────────────────────────────────────────────────────────
+  function updatePeerHUD(actorId, volume, muted) {
+    let el = document.getElementById(`peer-${actorId}`);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = `peer-${actorId}`;
+      el.className = 'voip-peer';
+      el.innerHTML = `
+        <div class="icon"></div>
+        <span class="peer-name">Jogador</span>
+        <div class="vol-bar"><div class="vol-fill" style="width:0%"></div></div>
+      `;
+      document.getElementById('voip-hud').appendChild(el);
+    }
+    el.classList.toggle('muted', muted);
+    el.querySelector('.vol-fill').style.width = `${Math.round(volume * 100)}%`;
+  }
+
+  function removePeerHUD(actorId) {
+    const el = document.getElementById(`peer-${actorId}`);
+    if (el) el.remove();
+  }
+
+  function setStatus(type, text) {
+    const el = document.getElementById('voip-status');
+    el.className = `visible ${type}`;
+    document.getElementById('voip-status-text').textContent = text;
+  }
+
+  // ── Controles Expostos para o Gamemode ────────────────────────────────────
+  function toggleMute() {
+    state.muted = !state.muted;
+    if (state.localStream) {
+      state.localStream.getAudioTracks().forEach(t => t.enabled = !state.muted);
+    }
+    sendSignal({ type: 'mute', muted: state.muted });
+    mp.trigger('cef::voip:mute_changed', { muted: state.muted });
+  }
+
+  function setVoiceMode(mode) {
+    state.voiceMode = mode;
+    sendSignal({ type: 'voice_mode', mode });
+  }
+
+  // ── Trade Overlay ─────────────────────────────────────────────────────────
+  function closeTrade() {
+    document.getElementById('trade-overlay').classList.remove('open');
+    mp.trigger('cef::trade:cancel', {});
+  }
+
+  // ── Eventos vindos do backend Node.js ────────────────────────────────────
+  if (mp && mp.events) {
+    mp.events.add('voip:connect', (data) => {
+      const d = typeof data === 'string' ? JSON.parse(data) : data;
+      connectVoip(d.actorId);
+    });
+
+    mp.events.add('showTradeUI', () => {
+      document.getElementById('trade-overlay').classList.add('open');
+    });
+
+    mp.events.add('hideTradeUI', () => {
+      document.getElementById('trade-overlay').classList.remove('open');
+    });
+
+    mp.events.add('voip:mute', () => toggleMute());
+    mp.events.add('voip:setMode', (data) => {
+      const d = typeof data === 'string' ? JSON.parse(data) : data;
+      setVoiceMode(d.mode);
+    });
+  }
+</script>
 </body>
 </html>
