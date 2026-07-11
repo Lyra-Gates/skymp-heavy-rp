@@ -3,10 +3,14 @@
 CREATE DATABASE IF NOT EXISTS `skymp_rp` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `skymp_rp`;
 
--- 1. Contas de Jogadores
+-- 1. Contas de Jogadores (com suporte a VIP e Monetizacao)
 CREATE TABLE IF NOT EXISTS `accounts` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT 'active, suspended, banned',
+  -- VIP / Apoiador
+  `vip_level` INT NOT NULL DEFAULT 0 COMMENT '0: Padrao, 1: Apoiador, 2: VIP Gold, 3: VIP Platinum',
+  `vip_expires_at` TIMESTAMP NULL DEFAULT NULL COMMENT 'Data de expiracao do VIP (NULL para permanente ou inativo)',
+  `coins` INT NOT NULL DEFAULT 0 COMMENT 'Moedas da loja virtual (adquiridas por doacao)',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -53,7 +57,18 @@ CREATE TABLE IF NOT EXISTS `characters` (
   CONSTRAINT `fk_character_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- 5. Logs de Auditoria e Staff
+-- 5. Compras e Resgates da Loja de Apoiador
+CREATE TABLE IF NOT EXISTS `store_purchases` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `account_id` INT NOT NULL,
+  `item_type` VARCHAR(64) NOT NULL COMMENT 'cosmetic, slot, vip_subscription, custom_housing',
+  `item_name` VARCHAR(128) NOT NULL,
+  `cost_coins` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_store_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 6. Logs de Auditoria e Staff
 CREATE TABLE IF NOT EXISTS `audit_logs` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `action` VARCHAR(128) NOT NULL,

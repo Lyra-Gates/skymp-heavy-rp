@@ -48,10 +48,10 @@ O projeto deve ser tratado como um servico vivo e como um mundo narrativo modera
 
 - Persistencia nativa SkyMP para mundo/jogadores: avaliar `file`, `zip`, `mongodb` e `migration`.
 - MongoDB recomendado para estado nativo SkyMP em servidor publico, se os testes confirmarem compatibilidade com a build usada.
-- PostgreSQL recomendado para plataforma RP: whitelist, contas, personagens aprovados, staff, logs externos, economia RP e painel web.
+- MariaDB / MySQL recomendado para plataforma RP: whitelist, contas, personagens aprovados, staff, logs externos, economia RP, painel web e sistema VIP/Loja.
 - Redis opcional para filas, cache de sessao, rate limit e estado temporario.
 - Backups automaticos diarios.
-- Controle de schema por migrations.
+- Controle de schema por arquivos `.sql` e migrations.
 
 ### Plataforma Web
 
@@ -60,7 +60,7 @@ O projeto deve ser tratado como um servico vivo e como um mundo narrativo modera
   - Backend: Node.js/NestJS ou Fastify.
   - Frontend: Next.js ou React.
   - Autenticacao: Discord OAuth.
-  - Banco: PostgreSQL.
+  - Banco: MariaDB / MySQL.
 
 ### Operacao
 
@@ -748,7 +748,7 @@ Rodar o projeto de forma sustentavel.
 - Governos controlados por jogadores.
 - Guerras em larga escala.
 - Launcher completo com auto-patch.
-- Monetizacao.
+- Monetizacao agressiva (o sistema basico de VIP/Loja foi antecipado para o MVP).
 
 ## 13. Decisoes-Chave
 
