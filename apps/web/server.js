@@ -8,6 +8,14 @@ const cors    = require('cors');
 const app  = express();
 const PORT = process.env.PANEL_PORT || 3001;
 
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} must be set`);
+  }
+  return value;
+}
+
 // ── DB Pool ────────────────────────────────────────────────────────────────
 const pool = mysql.createPool({
   host:     process.env.DB_HOST     || '127.0.0.1',
@@ -29,14 +37,14 @@ app.use(cors({ origin: `http://localhost:${PORT}`, credentials: true }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'skymp-staff-secret-change-me',
+  secret: requireEnv('SESSION_SECRET'),
   resave: false,
   saveUninitialized: false,
   cookie: { secure: false, maxAge: 8 * 60 * 60 * 1000 } // 8h
 }));
 
 // ── Auth simples (PIN de staff — será substituído por OAuth Discord) ────────
-const STAFF_PIN = process.env.STAFF_PIN || '1234';
+const STAFF_PIN = requireEnv('STAFF_PIN');
 
 function requireAuth(req, res, next) {
   if (req.session?.auth) return next();
