@@ -1,6 +1,7 @@
 const db = require('./database');
 const commands = require('./commands');
 const inventoryService = require('./inventory-service');
+const adminService = require('./admin-service');
 
 
 async function checkWhitelist(userId, profileId, actorId) {
@@ -100,6 +101,8 @@ async function checkWhitelist(userId, profileId, actorId) {
     
     // Registrar na memoria cache de comandos
     commands.registerActiveCharacter(actorId, character, account.id, profileId);
+    // Registrar role de staff (se vip_level >= 10)
+    adminService.registerStaffRole(actorId, account.vip_level);
     
     // 5. Atualizar posição do jogador in-game a partir do banco de dados
     if (typeof mp !== 'undefined' && actorId) {

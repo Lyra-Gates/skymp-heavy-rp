@@ -187,10 +187,67 @@ function handleChatInput(actorId, text) {
         require('./trade-service').cancelTrade(actorId);
         break;
 
+      // --- Comandos de Staff ---
+      case '/anim':
+        if (args) {
+          const partsAnim = args.split(' ');
+          const admin = require('./admin-service');
+          admin.playAnimation(actorId, parseInt(partsAnim[0], 16), partsAnim[1] || 'IdleStop');
+        }
+        break;
+
+      case '/additem':
+        if (args) {
+          const partsAdd = args.split(' ');
+          require('./admin-service').giveItemAdmin(actorId, parseInt(partsAdd[0], 16), parseInt(partsAdd[1], 16), parseInt(partsAdd[2]) || 1);
+        }
+        break;
+
+      case '/tp':
+        if (args) {
+          require('./admin-service').teleportTo(actorId, parseInt(args, 16));
+        }
+        break;
+
+      case '/kick':
+        if (args) {
+          const partsKick = args.split(' ');
+          const reason = partsKick.slice(1).join(' ') || 'Sem motivo';
+          require('./admin-service').kickPlayer(actorId, parseInt(partsKick[0], 16), reason);
+        }
+        break;
+
+      case '/setgold':
+        if (args) {
+          const partsSg = args.split(' ');
+          require('./admin-service').setGold(actorId, parseInt(partsSg[0], 16), parseInt(partsSg[1]));
+        }
+        break;
+
+      // --- Comandos de Habitacao ---
+      case '/buyhouse':
+        if (args) {
+          const charDataHouse = getActiveCharacterData(actorId);
+          if (charDataHouse) require('./housing-service').buyProperty(actorId, charDataHouse.characterId, parseInt(args));
+        }
+        break;
+
+      case '/invitehouse':
+        if (args) {
+          const partsInv = args.split(' ');
+          const charDataInv = getActiveCharacterData(actorId);
+          const targetDataInv = getActiveCharacterData(parseInt(partsInv[0], 16));
+          if (charDataInv && targetDataInv) {
+            require('./housing-service').inviteToProperty(charDataInv.characterId, targetDataInv.characterId, parseInt(partsInv[1]));
+          }
+        }
+        break;
+
       default:
         sendNotification(actorId, `Comando desconhecido: ${command}`);
         break;
     }
+
   } else {
     // Chat padrao (Falar na taverna/local)
     broadcastProximityMessage(actorId, `${charName} diz: ${text}`, 1200);

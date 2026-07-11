@@ -67,6 +67,50 @@ CREATE TABLE IF NOT EXISTS `character_inventory` (
   CONSTRAINT `fk_inventory_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- 5. Containers Persistentes (Baús controlados pelo servidor)
+CREATE TABLE IF NOT EXISTS `containers` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `object_id` VARCHAR(64) NOT NULL UNIQUE COMMENT 'formDesc do objeto no mundo (ex: 0x3003A:Skyrim.esm)',
+  `owner_character_id` INT DEFAULT NULL COMMENT 'Personagem dono do container',
+  `label` VARCHAR(128) DEFAULT NULL COMMENT 'Etiqueta customizada do baú',
+  `is_locked` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_container_owner` FOREIGN KEY (`owner_character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- 5.1. Inventário dos Containers
+CREATE TABLE IF NOT EXISTS `container_inventory` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `container_id` INT NOT NULL,
+  `base_id` INT NOT NULL COMMENT 'FormID nativo do Skyrim (Decimal)',
+  `count` INT NOT NULL DEFAULT 1,
+  CONSTRAINT `fk_container_inv` FOREIGN KEY (`container_id`) REFERENCES `containers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 6. Propriedades e Imóveis
+CREATE TABLE IF NOT EXISTS `properties` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `name` VARCHAR(128) NOT NULL COMMENT 'Nome do imóvel (ex: Casa em Whiterun 12)',
+  `owner_character_id` INT DEFAULT NULL,
+  `container_id` INT DEFAULT NULL COMMENT 'Container principal da propriedade',
+  `door_form_desc` VARCHAR(64) DEFAULT NULL COMMENT 'formDesc da porta de entrada',
+  `price_gold` INT NOT NULL DEFAULT 0 COMMENT 'Valor de aluguel/compra em Septims',
+  `is_for_sale` TINYINT(1) NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_property_owner` FOREIGN KEY (`owner_character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_property_container` FOREIGN KEY (`container_id`) REFERENCES `containers` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- 6.1. Acesso de Convidados a Propriedades
+CREATE TABLE IF NOT EXISTS `property_guests` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `property_id` INT NOT NULL,
+  `guest_character_id` INT NOT NULL,
+  `granted_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_guest_property` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_guest_character` FOREIGN KEY (`guest_character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- 5. Compras e Resgates da Loja de Apoiador
 CREATE TABLE IF NOT EXISTS `store_purchases` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
