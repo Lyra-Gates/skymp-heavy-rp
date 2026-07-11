@@ -9,14 +9,17 @@ const whitelist = require(path.join(gamemodeDir, 'whitelist'));
 const commands = require(path.join(gamemodeDir, 'commands'));
 const deathService = require(path.join(gamemodeDir, 'death-service'));
 const npcCleaner = require(path.join(gamemodeDir, 'npc-cleaner'));
+const justiceService = require(path.join(gamemodeDir, 'justice-service'));
 
 console.log("[phase1] SkyMP Heavy RP gamemode loaded");
 
-// Inicializa o Pool do Banco de Dados
+// Inicializa o Pool do Banco de Dados e Serviços
 try {
   db.init();
   deathService.initDeathService();
   npcCleaner.startWorldCleaner();
+  justiceService.startJusticeService();
+  justiceService.restoreActivePrisoners();
 } catch (err) {
   console.error("[phase1] Fatal: Could not initialize database or services:", err.message);
 }

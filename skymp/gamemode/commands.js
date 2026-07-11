@@ -243,6 +243,47 @@ function handleChatInput(actorId, text) {
         }
         break;
 
+      // --- Comandos de Justica ---
+      case '/restrain':
+        if (args) require('./justice-service').restrain(actorId, parseInt(args, 16));
+        break;
+
+      case '/unrestrain':
+        if (args) require('./justice-service').unrestrain(actorId, parseInt(args, 16));
+        break;
+
+      case '/arrest':
+        if (args) {
+          const partsArr = args.split(' ');
+          const targetAct = parseInt(partsArr[0], 16);
+          const sentence  = parseInt(partsArr[1]) || 10;
+          const crime     = partsArr.slice(2).join(' ') || 'Perturbacao da Ordem';
+          require('./justice-service').arrest(actorId, targetAct, sentence, crime);
+        }
+        break;
+
+      case '/release':
+        if (args) {
+          const tRelease = parseInt(args, 16);
+          const charRel  = getActiveCharacterData(tRelease);
+          if (charRel) require('./justice-service').releasePrisoner(tRelease, charRel.characterId, 'staff_release');
+        }
+        break;
+
+      case '/setbounty':
+        if (args) {
+          const partsBounty = args.split(' ');
+          const tBounty     = parseInt(partsBounty[0], 16);
+          const amount      = parseInt(partsBounty[1]) || 0;
+          const crime       = partsBounty.slice(2).join(' ') || 'Crime';
+          require('./justice-service').setBounty(actorId, tBounty, amount, crime);
+        }
+        break;
+
+      case '/criminal':
+        if (args) require('./justice-service').showCriminalRecord(actorId, parseInt(args, 16));
+        break;
+
       default:
         sendNotification(actorId, `Comando desconhecido: ${command}`);
         break;

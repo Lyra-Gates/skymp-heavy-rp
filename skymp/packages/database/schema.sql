@@ -131,3 +131,40 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `details` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+-- 7. Fichas Criminais (Criminal Record)
+CREATE TABLE IF NOT EXISTS `criminal_records` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id` INT NOT NULL,
+  `crime` VARCHAR(128) NOT NULL COMMENT 'Assassinato, Roubo, Agressao, Perturbacao...',
+  `bounty` INT NOT NULL DEFAULT 0 COMMENT 'Valor da recompensa em Septims',
+  `hold` VARCHAR(64) NOT NULL DEFAULT 'whiterun' COMMENT 'Hold onde o crime foi cometido',
+  `witness_character_id` INT DEFAULT NULL COMMENT 'Guardia ou testemunha que registrou',
+  `resolved` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '0=Ativo, 1=Pago/Cumprido',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_crime_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 8. Registro de Prisoes Ativas e Historico
+CREATE TABLE IF NOT EXISTS `prison_records` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id` INT NOT NULL,
+  `arrested_by_character_id` INT DEFAULT NULL COMMENT 'Guardia que prendeu',
+  `crime_summary` TEXT DEFAULT NULL,
+  `sentence_minutes` INT NOT NULL DEFAULT 10 COMMENT 'Tempo de pena em minutos in-game',
+  `time_served_minutes` INT NOT NULL DEFAULT 0,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT 'active, released, escaped',
+  `cell_id` VARCHAR(64) NOT NULL DEFAULT '0x162e2' COMMENT 'Celula da prisao',
+  `arrested_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `released_at` TIMESTAMP NULL DEFAULT NULL,
+  CONSTRAINT `fk_prison_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 8.1. Estado Atual de Algemas (Restraints)
+CREATE TABLE IF NOT EXISTS `character_restraints` (
+  `character_id` INT PRIMARY KEY,
+  `restrained_by_character_id` INT DEFAULT NULL,
+  `type` VARCHAR(32) NOT NULL DEFAULT 'handcuffs' COMMENT 'handcuffs, rope',
+  `applied_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_restraint_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
