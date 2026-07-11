@@ -6,12 +6,17 @@ const activeCharacters = new Map();
 
 function registerActiveCharacter(actorId, character, accountId, profileId) {
   activeCharacters.set(actorId, {
+    characterId: character.id,
     firstName: character.first_name,
     lastName: character.last_name,
     accountId: accountId,
     profileId: profileId
   });
   console.log(`[commands] Cached character name for actor ${actorId.toString(16)}: ${character.first_name} ${character.last_name}`);
+}
+
+function getActiveCharacterData(actorId) {
+  return activeCharacters.get(actorId) || null;
 }
 
 function removeActiveCharacter(actorId) {
@@ -135,6 +140,53 @@ function handleChatInput(actorId, text) {
         jobs.chopWood(actorId);
         break;
 
+      case '/sellwood':
+        const charDataForSell = getActiveCharacterData(actorId);
+        if (charDataForSell) {
+          const economy = require('./economy-service');
+          economy.sellWood(actorId, charDataForSell.characterId);
+        }
+        break;
+
+      case '/pay':
+        const charDataForPay = getActiveCharacterData(actorId);
+        if (charDataForPay) {
+          const partsPay = args.split(' ');
+          if (partsPay.length === 2) {
+            const economy = require('./economy-service');
+            economy.payPlayer(actorId, charDataForPay.characterId, partsPay[0], partsPay[1]);
+          } else {
+            sendNotification(actorId, 'Uso: /pay <id_jogador> <valor>');
+          }
+        }
+        break;
+
+      case '/balance':
+        const charDataForBal = getActiveCharacterData(actorId);
+        if (charDataForBal) {
+          const economy = require('./economy-service');
+          economy.getGold(charDataForBal.characterId).then(g => {
+            sendNotification(actorId, `Ouro: ${g} Septims`);
+          });
+        }
+        break;
+
+      case '/trade':
+        const charDataForTrade = getActiveCharacterData(actorId);
+        if (charDataForTrade && args) {
+          const trade = require('./trade-service');
+          trade.requestTrade(actorId, charDataForTrade.characterId, args);
+        }
+        break;
+
+      case '/tradeaccept':
+        require('./trade-service').acceptTrade(actorId);
+        break;
+        
+      case '/tradecancel':
+        require('./trade-service').cancelTrade(actorId);
+        break;
+
       default:
         sendNotification(actorId, `Comando desconhecido: ${command}`);
         break;
@@ -148,6 +200,7 @@ function handleChatInput(actorId, text) {
 module.exports = {
   registerActiveCharacter,
   removeActiveCharacter,
+  getActiveCharacterData,
   handleChatInput,
-  handleChatInput
+  broadcastProximityMessage
 };

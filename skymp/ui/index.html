@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>SkyMP Heavy RP - UI</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden; /* Evita barras de rolagem no jogo */
+      font-family: 'Arial', sans-serif;
+      background: transparent; /* UI do jogo tem fundo transparente */
+    }
+
+    #trade-overlay {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      height: 400px;
+      background: rgba(10, 10, 10, 0.9);
+      border: 2px solid #bba16b;
+      color: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0px 0px 20px rgba(0,0,0,0.8);
+    }
+
+    .trade-header {
+      text-align: center;
+      font-size: 24px;
+      border-bottom: 1px solid #555;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Estrutura do VOIP (Placeholder para a futura conexao WebRTC) -->
+  <div id="voip-container" style="display:none;"></div>
+
+  <!-- Estrutura da Troca (Trade) -->
+  <div id="trade-overlay">
+    <div class="trade-header">Comércio Seguro</div>
+    <div style="text-align: center;">
+      <p>Em breve: Interface de troca visual.</p>
+      <button onclick="closeTrade()">Cancelar</button>
+    </div>
+  </div>
+
+  <script>
+    // Se 'mp' nao existir (testando fora do SkyMP), mockamos
+    if (typeof mp === 'undefined') {
+      window.mp = {
+        trigger: function() { console.log('Mock trigger:', arguments); }
+      };
+    }
+
+    // Escutando eventos vindo do backend Node.js
+    if (typeof mp !== 'undefined' && mp.events) {
+      mp.events.add('showTradeUI', (data) => {
+        document.getElementById('trade-overlay').style.display = 'block';
+      });
+
+      mp.events.add('hideTradeUI', () => {
+        document.getElementById('trade-overlay').style.display = 'none';
+      });
+    }
+
+    function closeTrade() {
+      document.getElementById('trade-overlay').style.display = 'none';
+      // Manda pro servidor dizendo que cancelou
+      mp.trigger('cef::trade:cancel', {});
+    }
+  </script>
+</body>
+</html>

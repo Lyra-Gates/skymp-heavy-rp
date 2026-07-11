@@ -51,10 +51,20 @@ CREATE TABLE IF NOT EXISTS `characters` (
   `pos_z` FLOAT NOT NULL DEFAULT -189.0,
   `angle_z` FLOAT NOT NULL DEFAULT 180.0,
   `cell_id` VARCHAR(64) NOT NULL DEFAULT '0x162e2',
+  `gold` INT NOT NULL DEFAULT 0 COMMENT 'Economia in-game (Septims)',
   `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending, approved, rejected',
   `racemenu_presets` TEXT DEFAULT NULL COMMENT 'JSON string contendo presets de aparencia',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_character_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 4.1. Inventário Persistente do Personagem
+CREATE TABLE IF NOT EXISTS `character_inventory` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id` INT NOT NULL,
+  `base_id` INT NOT NULL COMMENT 'FormID nativo do Skyrim (Decimal)',
+  `count` INT NOT NULL DEFAULT 1,
+  CONSTRAINT `fk_inventory_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- 5. Compras e Resgates da Loja de Apoiador

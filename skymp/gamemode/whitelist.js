@@ -1,5 +1,6 @@
 const db = require('./database');
 const commands = require('./commands');
+const inventoryService = require('./inventory-service');
 
 
 async function checkWhitelist(userId, profileId, actorId) {
@@ -116,6 +117,10 @@ async function checkWhitelist(userId, profileId, actorId) {
         mp.set(actorId, 'browserVisible', true);
         // Exibe mensagem de boas-vindas no console do servidor
         console.log(`[whitelist] Spawn locData applied successfully for ${character.first_name} ${character.last_name}`);
+        
+        // Sincroniza o Inventário do Banco de Dados para o Cliente
+        inventoryService.syncInventoryToClient(actorId, character.id);
+        
       } catch (err) {
         console.error(`[whitelist] Failed to apply locationalData:`, err.message);
       }
