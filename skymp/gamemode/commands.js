@@ -130,6 +130,11 @@ function handleChatInput(actorId, text) {
         broadcastProximityMessage(actorId, `* ${charName} rolou um dado d${max} e tirou: ${rollResult}`, 1500);
         break;
 
+      case '/chopwood':
+        const jobs = require('./jobs-service');
+        jobs.chopWood(actorId);
+        break;
+
       default:
         sendNotification(actorId, `Comando desconhecido: ${command}`);
         break;

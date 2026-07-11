@@ -7,19 +7,43 @@ const gamemodeDir = path.resolve(process.cwd(), '../gamemode');
 const db = require(path.join(gamemodeDir, 'database'));
 const whitelist = require(path.join(gamemodeDir, 'whitelist'));
 const commands = require(path.join(gamemodeDir, 'commands'));
+const deathService = require(path.join(gamemodeDir, 'death-service'));
+const npcCleaner = require(path.join(gamemodeDir, 'npc-cleaner'));
 
 console.log("[phase1] SkyMP Heavy RP gamemode loaded");
 
 // Inicializa o Pool do Banco de Dados
 try {
   db.init();
+  deathService.initDeathService();
+  npcCleaner.startWorldCleaner();
 } catch (err) {
-  console.error("[phase1] Fatal: Could not initialize database:", err.message);
+  console.error("[phase1] Fatal: Could not initialize database or services:", err.message);
 }
 
 // Hook de Evento do Chat (CEF uiEvent)
 if (typeof mp !== "undefined") {
   console.log("[phase1] mp API available");
+
+  // Registra as propriedades da interface CEF/Browser para o SkyMP
+  mp.makeProperty('browserVisible', {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: 'ctx.sp.browser.setVisible(ctx.value);',
+    updateNeighbor: ''
+  });
+  mp.makeProperty('browserFocused', {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: 'ctx.sp.browser.setFocused(ctx.value);',
+    updateNeighbor: ''
+  });
+  mp.makeProperty('browserModal', {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: '',
+    updateNeighbor: ''
+  });
   
   mp.onUiEvent = (pcFormId, uiEvent) => {
     try {
