@@ -16,7 +16,8 @@ Leia nesta ordem:
 6. `docs/technical/SERVER_OPTIONS_SCHEMA.md`
 7. `docs/technical/CURRENT_SERVER_REFERENCE_STUDY.md`
 8. `docs/technical/HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md`
-9. `docs/rules/PUBLIC_RULES_LAUNCH_OUTLINE.md`
+9. `docs/technical/CURRENT_SERVER_FEATURE_MATRIX.md`
+10. `docs/rules/PUBLIC_RULES_LAUNCH_OUTLINE.md`
 
 ## Primeira Meta
 
@@ -43,15 +44,17 @@ Marco 0.1 - Teste de Conexao SkyMP
 
 ## Estado Atual
 
-O repositorio contem documentos de planejamento, regras, staff, arquitetura tecnica e scripts locais da Fase 0.
+O repositorio contem documentos de planejamento, regras, staff, arquitetura tecnica, scripts locais da Fase 0, gamemode minimo e prototipos iniciais.
 
-O boot local do servidor SkyMP esta confirmado (logs limpos, portas UDP 7777 e TCP 3000 ativas, gamemode basico carregado). A conexao do primeiro cliente, do segundo cliente, o spawn in-game, a sincronizacao e a persistencia ainda estao pendentes de validacao tecnica.
+O boot local do servidor SkyMP esta confirmado. A versao `SkyrimSE.exe 1.6.1170.0` foi verificada. O gamemode `skymp/gamemode/phase0-basic.js` carregou com API `mp` disponivel. O primeiro e o segundo cliente conectaram em laboratorio local com `offlineMode=true`, e o spawn seguro foi ajustado para interior.
+
+Ainda falta concluir a prova tecnica com dois clientes em ambientes separados: visibilidade, movimento, troca de celula, inventario, equipamento, morte/respawn controlado e persistencia apos restart.
 
 ## Configs Iniciais
 
 Templates seguros foram criados em `skymp/config/`.
 
-Arquivos reais como `server-settings.local.json`, builds SkyMP, `data/`, `world/`, masters do Skyrim e secrets nao devem ser versionados.
+Arquivos reais como `server-settings.local.json`, `database.local.json`, builds SkyMP, `data/`, `world/`, masters do Skyrim e secrets nao devem ser versionados.
 
 ## Scripts da Fase 0
 
