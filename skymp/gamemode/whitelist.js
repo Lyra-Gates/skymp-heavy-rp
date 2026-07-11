@@ -2,6 +2,7 @@ const db = require('./database');
 const commands = require('./commands');
 const inventoryService = require('./inventory-service');
 const adminService = require('./admin-service');
+const survivalService = require('./survival-service');
 
 
 async function checkWhitelist(userId, profileId, actorId) {
@@ -123,6 +124,8 @@ async function checkWhitelist(userId, profileId, actorId) {
         
         // Sincroniza o Inventário do Banco de Dados para o Cliente
         inventoryService.syncInventoryToClient(actorId, character.id);
+        // Carrega stats de sobrevivência
+        survivalService.loadCharacter(actorId, character.id);
         
       } catch (err) {
         console.error(`[whitelist] Failed to apply locationalData:`, err.message);

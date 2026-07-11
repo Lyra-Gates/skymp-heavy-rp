@@ -168,3 +168,105 @@ CREATE TABLE IF NOT EXISTS `character_restraints` (
   `applied_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_restraint_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════════════════════
+-- FASE BETA - Sobrevivência, Economia Regional, Crafting, Facções
+-- ═══════════════════════════════════════════════════
+
+-- 9. Status de Sobrevivência do Personagem
+CREATE TABLE IF NOT EXISTS `character_survival` (
+  `character_id` INT PRIMARY KEY,
+  `hunger`       FLOAT NOT NULL DEFAULT 100.0 COMMENT '0=Morrendo de fome, 100=Satisfeito',
+  `thirst`       FLOAT NOT NULL DEFAULT 100.0 COMMENT '0=Desidratado, 100=Hidratado',
+  `fatigue`      FLOAT NOT NULL DEFAULT 100.0 COMMENT '0=Exausto, 100=Descansado',
+  `updated_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_survival_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 10. Holds (Regiões) e sua Economia
+CREATE TABLE IF NOT EXISTS `holds` (
+  `id`           VARCHAR(32) PRIMARY KEY COMMENT 'whiterun, solitude, riften, windhelm, markarth, falkreath, morthal, dawnstar, winterhold',
+  `name`         VARCHAR(64) NOT NULL,
+  `tax_rate`     FLOAT NOT NULL DEFAULT 0.05 COMMENT 'Taxa sobre vendas (0.05 = 5%)',
+  `treasury`     INT NOT NULL DEFAULT 0 COMMENT 'Ouro acumulado em impostos',
+  `ruling_faction_id` INT DEFAULT NULL COMMENT 'Facção que controla o Hold'
+) ENGINE=InnoDB;
+
+-- 10.1. Preços de Mercado Regionais (Oferta & Demanda)
+CREATE TABLE IF NOT EXISTS `market_prices` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `hold_id`      VARCHAR(32) NOT NULL,
+  `base_id`      INT NOT NULL COMMENT 'FormID do item',
+  `buy_price`    INT NOT NULL DEFAULT 10 COMMENT 'Preco de compra do jogador',
+  `sell_price`   INT NOT NULL DEFAULT 7  COMMENT 'Preco de venda do jogador',
+  `stock`        INT NOT NULL DEFAULT 100 COMMENT 'Estoque disponivel (oferta)',
+  `updated_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY `uk_hold_item` (`hold_id`, `base_id`),
+  CONSTRAINT `fk_market_hold` FOREIGN KEY (`hold_id`) REFERENCES `holds` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 10.2. Rotas Comerciais entre Holds
+CREATE TABLE IF NOT EXISTS `trade_routes` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `from_hold`    VARCHAR(32) NOT NULL,
+  `to_hold`      VARCHAR(32) NOT NULL,
+  `bonus_pct`    FLOAT NOT NULL DEFAULT 0.15 COMMENT 'Bônus de lucro ao vender em outro Hold',
+  `is_active`    TINYINT(1) NOT NULL DEFAULT 1
+) ENGINE=InnoDB;
+
+-- 11. Receitas de Crafting
+CREATE TABLE IF NOT EXISTS `crafting_recipes` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `name`         VARCHAR(128) NOT NULL,
+  `station_type` VARCHAR(64)  NOT NULL COMMENT 'forge, cooking_pot, tanning_rack, alchemy_lab, enchanting_table',
+  `result_base_id` INT NOT NULL COMMENT 'FormID do item resultante',
+  `result_count`   INT NOT NULL DEFAULT 1,
+  `requires_perk`  VARCHAR(64) DEFAULT NULL COMMENT 'Nome do perk necessario',
+  `created_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 11.1. Ingredientes das Receitas
+CREATE TABLE IF NOT EXISTS `crafting_ingredients` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `recipe_id`    INT NOT NULL,
+  `base_id`      INT NOT NULL COMMENT 'FormID do ingrediente',
+  `count`        INT NOT NULL DEFAULT 1,
+  CONSTRAINT `fk_ingredient_recipe` FOREIGN KEY (`recipe_id`) REFERENCES `crafting_recipes` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 12. Facções e Territórios
+CREATE TABLE IF NOT EXISTS `factions` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `tag`          VARCHAR(16) NOT NULL UNIQUE COMMENT 'Ex: [COMP], [GUARDIA]',
+  `name`         VARCHAR(128) NOT NULL,
+  `description`  TEXT DEFAULT NULL,
+  `color_hex`    VARCHAR(7) NOT NULL DEFAULT '#ffffff',
+  `leader_character_id` INT DEFAULT NULL,
+  `treasury`     INT NOT NULL DEFAULT 0,
+  `created_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_faction_leader` FOREIGN KEY (`leader_character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- 12.1. Membros de Facções
+CREATE TABLE IF NOT EXISTS `faction_members` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `faction_id`   INT NOT NULL,
+  `character_id` INT NOT NULL,
+  `rank`         VARCHAR(64) NOT NULL DEFAULT 'recruit',
+  `joined_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uk_char_faction` (`character_id`, `faction_id`),
+  CONSTRAINT `fk_member_faction`   FOREIGN KEY (`faction_id`)   REFERENCES `factions`   (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_member_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ── Seed: Holds iniciais ─────────────────────────────────────────────────────
+INSERT IGNORE INTO `holds` (`id`, `name`, `tax_rate`) VALUES
+  ('whiterun',    'Planície de Whiterun', 0.05),
+  ('solitude',    'Alcoutim',             0.07),
+  ('riften',      'Baixadas de Riften',   0.06),
+  ('windhelm',    'Planície Pálida',      0.05),
+  ('markarth',    'Alcance',              0.08),
+  ('falkreath',   'Falkreath',            0.04),
+  ('morthal',     'Hjaalmarch',           0.04),
+  ('dawnstar',    'Planície Pálida',      0.05),
+  ('winterhold',  'Winterhold',           0.03);

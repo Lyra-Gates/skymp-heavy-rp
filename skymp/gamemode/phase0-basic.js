@@ -4,13 +4,18 @@ const path = require('path');
 // precisamos resolver o caminho original do gamemode de forma absoluta usando process.cwd().
 const gamemodeDir = path.resolve(process.cwd(), '../gamemode');
 
-const db = require(path.join(gamemodeDir, 'database'));
-const whitelist = require(path.join(gamemodeDir, 'whitelist'));
-const commands = require(path.join(gamemodeDir, 'commands'));
-const deathService = require(path.join(gamemodeDir, 'death-service'));
-const npcCleaner = require(path.join(gamemodeDir, 'npc-cleaner'));
+const db            = require(path.join(gamemodeDir, 'database'));
+const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
+const commands      = require(path.join(gamemodeDir, 'commands'));
+const deathService  = require(path.join(gamemodeDir, 'death-service'));
+const npcCleaner    = require(path.join(gamemodeDir, 'npc-cleaner'));
 const justiceService = require(path.join(gamemodeDir, 'justice-service'));
-const voipService = require(path.join(gamemodeDir, 'voip-service'));
+const voipService   = require(path.join(gamemodeDir, 'voip-service'));
+// Fase Beta
+const survivalService = require(path.join(gamemodeDir, 'survival-service'));
+const regionalEconomy = require(path.join(gamemodeDir, 'economy-regional'));
+const craftingService = require(path.join(gamemodeDir, 'crafting-service'));
+const factionService  = require(path.join(gamemodeDir, 'faction-service'));
 
 console.log("[phase1] SkyMP Heavy RP gamemode loaded");
 
@@ -22,6 +27,9 @@ try {
   justiceService.startJusticeService();
   justiceService.restoreActivePrisoners();
   voipService.startVoipServer(7778);
+  survivalService.startSurvivalService();
+  regionalEconomy.initRegionalEconomy();
+  factionService.initFactionService();
 } catch (err) {
   console.error("[phase1] Fatal: Could not initialize database or services:", err.message);
 }

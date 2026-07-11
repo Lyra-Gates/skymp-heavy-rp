@@ -284,6 +284,114 @@ function handleChatInput(actorId, text) {
         if (args) require('./justice-service').showCriminalRecord(actorId, parseInt(args, 16));
         break;
 
+      // ── Fase Beta: Sobrevivência ──────────────────────────────────────────
+      case '/survival':
+        const survChar = getActiveCharacterData(actorId);
+        if (survChar) require('./survival-service').showSurvival(actorId, survChar.characterId);
+        break;
+
+      case '/eat':
+        if (args) {
+          const eatChar = getActiveCharacterData(actorId);
+          if (eatChar) require('./survival-service').eatItem(actorId, eatChar.characterId, parseInt(args, 16));
+        }
+        break;
+
+      case '/drink':
+        if (args) {
+          const drinkChar = getActiveCharacterData(actorId);
+          if (drinkChar) require('./survival-service').drinkItem(actorId, drinkChar.characterId, parseInt(args, 16));
+        }
+        break;
+
+      case '/sleep':
+        const sleepChar = getActiveCharacterData(actorId);
+        if (sleepChar) require('./survival-service').sleep(actorId, sleepChar.characterId);
+        break;
+
+      // ── Fase Beta: Economia Regional ──────────────────────────────────────
+      case '/sell':
+        if (args) {
+          const sellChar = getActiveCharacterData(actorId);
+          const sellParts = args.split(' ');
+          if (sellChar) require('./economy-regional').sellToMarket(actorId, sellChar.characterId, parseInt(sellParts[0], 16), parseInt(sellParts[1]) || 1);
+        }
+        break;
+
+      case '/buy':
+        if (args) {
+          const buyChar = getActiveCharacterData(actorId);
+          const buyParts = args.split(' ');
+          if (buyChar) require('./economy-regional').buyFromMarket(actorId, buyChar.characterId, parseInt(buyParts[0], 16), parseInt(buyParts[1]) || 1);
+        }
+        break;
+
+      case '/market':
+        const mkChar = getActiveCharacterData(actorId);
+        if (mkChar) require('./economy-regional').showMarketInfo(actorId, mkChar.characterId);
+        break;
+
+      case '/settax':
+        if (args) {
+          const taxParts = args.split(' ');
+          require('./economy-regional').setTaxRate(actorId, taxParts[0], parseFloat(taxParts[1]) || 0.05);
+        }
+        break;
+
+      // ── Fase Beta: Crafting ───────────────────────────────────────────────
+      case '/craft':
+        if (args) {
+          const craftChar = getActiveCharacterData(actorId);
+          if (craftChar) require('./crafting-service').craftItem(actorId, craftChar.characterId, parseInt(args));
+        }
+        break;
+
+      case '/recipes':
+        if (args) require('./crafting-service').listRecipes(actorId, args.trim());
+        break;
+
+      // ── Fase Beta: Facções ────────────────────────────────────────────────
+      case '/factions':
+        require('./faction-service').listFactions(actorId);
+        break;
+
+      case '/factioninfo':
+        const fiChar = getActiveCharacterData(actorId);
+        if (fiChar) require('./faction-service').showMyFaction(actorId, fiChar.characterId);
+        break;
+
+      case '/fdonar':
+        if (args) {
+          const fdChar = getActiveCharacterData(actorId);
+          if (fdChar) require('./faction-service').donate(actorId, fdChar.characterId, parseInt(args));
+        }
+        break;
+
+      case '/createfaction':
+        if (args) {
+          const cfParts = args.split(' ');
+          require('./faction-service').createFaction(actorId, cfParts[0], cfParts.slice(1).join(' '));
+        }
+        break;
+
+      case '/addfmember':
+        if (args) {
+          const afParts = args.split(' ');
+          require('./faction-service').addMember(actorId, parseInt(afParts[0], 16), parseInt(afParts[1]), afParts[2] || 'recruit');
+        }
+        break;
+
+      case '/removefmember':
+        if (args) require('./faction-service').removeMember(actorId, parseInt(args, 16));
+        break;
+
+      case '/setfhold':
+        if (args) {
+          const sfhParts = args.split(' ');
+          require('./faction-service').setHoldControl(actorId, parseInt(sfhParts[0]), sfhParts[1]);
+        }
+        break;
+
       default:
         sendNotification(actorId, `Comando desconhecido: ${command}`);
         break;
