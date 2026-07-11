@@ -57,6 +57,7 @@ Repo: skyrim-multiplayer/skymp
 Workflow: PR Windows Flatrim (AE/SE)
 Run: 29137896242
 Artifact: server-dist
+Client Artifact: dist/client
 Head SHA: dbbc6b7e4bb33f79c45387a144eaa513aa88030c
 ```
 
@@ -83,11 +84,32 @@ Resultado:
 - UI resources ficaram ouvindo em `127.0.0.1:3000`.
 - O processo foi encerrado manualmente apos 12 segundos pelo script de teste.
 
-Pendencia:
+## Primeiro Cliente Local
 
-- Confirmar porta UDP principal durante teste com cliente.
-- Confirmar cliente conectado.
-- Confirmar versao exata do `SkyrimSE.exe`.
+Resultado:
+
+- Artifact `dist/client` foi baixado via GitHub Actions.
+- Arquivos do cliente foram instalados no Skyrim local por `scripts/phase0/Install-SkyMPClient.ps1`.
+- Arquivos sobrescritos foram salvos em `skymp/client-backups/`.
+- `skymp5-client-settings.txt` foi apontado para `127.0.0.1:7777`.
+- Servidor foi reinstalado com `scripts/phase0/Install-SkyMPServerArtifact.ps1 -OfflineMode`.
+- Cliente iniciou via `scripts/phase0/Start-SkyMPClient.ps1`.
+- Servidor registrou conexao local, criacao de personagem e login:
+  - `connect 1`
+  - `Creating character ff000000`
+  - `1 logged as 1`
+
+Observacao critica:
+
+- `offlineMode=true` foi usado somente para laboratorio local com `profileId`.
+- `offlineMode`, hot reload e admin por senha seguem proibidos em staging/producao.
+
+Pendencias:
+
+- Confirmar spawn visual na janela do Skyrim.
+- Confirmar segundo cliente conectado.
+- Confirmar sincronizacao basica entre dois clientes.
+- Confirmar versao exata do `SkyrimSE.exe` no documento final da fase.
 
 ## Proxima Acao Recomendada
 

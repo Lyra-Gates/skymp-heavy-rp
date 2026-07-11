@@ -1,7 +1,8 @@
 param(
   [string]$ArtifactPath = ".\skymp\artifacts\server-dist",
   [string]$ServerPath = ".\skymp\server",
-  [string]$GamemodePath = "..\gamemode\phase0-basic.js"
+  [string]$GamemodePath = "..\gamemode\phase0-basic.js",
+  [switch]$OfflineMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -43,7 +44,7 @@ $settings.loadOrder = @(
 $settings.databaseDriver = "file"
 $settings.databaseName = "..\world"
 $settings.gamemodePath = $GamemodePath
-$settings.offlineMode = $false
+$settings.offlineMode = [bool]$OfflineMode
 $settings.isPapyrusHotReloadEnabled = $false
 $settings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $serverSettings -Encoding ASCII
 
@@ -59,3 +60,4 @@ if (Test-Path -LiteralPath $artifactScripts) {
 
 Write-Host "Installed server artifact into $server"
 Write-Host "Review $serverSettings before starting."
+Write-Host "offlineMode=$($settings.offlineMode)"

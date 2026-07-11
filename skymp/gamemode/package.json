@@ -1,0 +1,17 @@
+{
+  "name": "gamemode",
+  "version": "1.0.0",
+  "description": "",
+  "main": "phase0-basic.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mysql2": "^3.22.6"
+  }
+}

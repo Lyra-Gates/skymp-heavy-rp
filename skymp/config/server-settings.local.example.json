@@ -22,9 +22,9 @@
   "gamemodePath": "gamemode/index.js",
   "startPoints": [
     {
-      "pos": [0, 0, 0],
-      "worldOrCell": "0x3c",
-      "angleZ": 0
+      "pos": [35, -165, -189],
+      "worldOrCell": "0x162e2",
+      "angleZ": 180
     }
   ],
   "isPapyrusHotReloadEnabled": false

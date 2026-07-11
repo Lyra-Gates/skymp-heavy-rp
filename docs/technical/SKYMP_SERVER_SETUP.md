@@ -177,3 +177,52 @@ Ao final da Fase 0, registrar:
 - Resultado dos testes.
 - Lista de crashes/dessync.
 - Decisao: continuar, corrigir ou trocar abordagem.
+
+## 10. Manual de Instalação do Cliente SkyMP (Fase 0)
+
+Para testadores ou desenvolvedores realizando a instalação manual do cliente SkyMP no ambiente local:
+
+### Requisitos Prévios
+- **Skyrim Special Edition/Anniversary Edition** instalado (Versão alvo recomendada: `1.6.1170.0`).
+- **SKSE64** instalado e funcionando para a versão correspondente do Skyrim.
+
+### Passo 1: Obter o Artefato do Cliente
+O artefato do cliente (`dist/client`) é compilado no GitHub Actions e contém a seguinte estrutura sob a pasta `Data/`:
+```text
+Data/
+  Interface/
+  Platform/
+    Plugins/
+      skymp5-client.js
+      skymp5-client-settings.txt
+  SKSE/
+  Scripts/
+```
+
+### Passo 2: Copiar os Arquivos
+1. Localize a pasta de instalação do seu Skyrim (ex: `D:\SteamLibrary\steamapps\common\Skyrim Special Edition`).
+2. Copie o conteúdo da pasta `Data` do artefato do cliente e mescle com a pasta `Data` do seu Skyrim.
+3. *Aviso*: Recomenda-se realizar o backup de qualquer arquivo existente em `Data/Platform/Plugins/` antes de sobrescrever.
+
+### Passo 3: Configurar Conexão do Cliente
+Edite ou crie o arquivo `Data/Platform/Plugins/skymp5-client-settings.txt` na pasta de instalação do Skyrim com o seguinte formato JSON:
+```json
+{
+  "gameData": {
+    "profileId": 1
+  },
+  "master": "",
+  "server-ip": "127.0.0.1",
+  "server-master-key": "local-dev-key",
+  "server-port": 7777
+}
+```
+- **profileId**: Identificador local para modo offline (usar valores distintos para o Cliente 1 e Cliente 2 nos testes).
+- **server-ip**: IP do servidor local (`127.0.0.1`).
+- **server-port**: Porta UDP do servidor (padrão `7777`).
+
+### Passo 4: Executar o Jogo
+1. Certifique-se de que o servidor local esteja rodando.
+2. Inicie o jogo executando o `skse64_loader.exe` na pasta raiz do Skyrim.
+3. O mod SkyrimPlatform irá carregar o plugin `skymp5-client.js` e iniciar a conexão automática com o servidor configurado.
+
