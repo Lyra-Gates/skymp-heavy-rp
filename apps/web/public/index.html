@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Staff Panel — SkyMP Heavy RP</title>
+  <meta name="description" content="Painel de administração do servidor SkyMP Heavy RP">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Login ──────────────────────────────────────────────────────────────── -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo">SKYMP</div>
+    <div class="subtitle">Heavy RP · Staff Panel</div>
+    <input type="password" id="pin-input" placeholder="••••" maxlength="8" autofocus>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">Entrar</button>
+    <p id="login-error" style="color:#e05252;margin-top:12px;font-size:13px;display:none">PIN inválido</p>
+  </div>
+</div>
+
+<!-- ── App ────────────────────────────────────────────────────────────────── -->
+<div id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">SKYMP<span>Staff Panel · v0.4 Beta</span></div>
+    </div>
+    <nav>
+      <div class="nav-item active" data-page="dashboard" onclick="navigate('dashboard', this)">
+        <span class="icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="whitelist" onclick="navigate('whitelist', this)">
+        <span class="icon">📋</span> Whitelist
+        <span class="badge" id="badge-pending" style="display:none">0</span>
+      </div>
+      <div class="nav-item" data-page="characters" onclick="navigate('characters', this)">
+        <span class="icon">🧙</span> Personagens
+      </div>
+      <div class="nav-item" data-page="economy" onclick="navigate('economy', this)">
+        <span class="icon">💰</span> Economia
+      </div>
+      <div class="nav-item" data-page="factions" onclick="navigate('factions', this)">
+        <span class="icon">⚔️</span> Facções
+      </div>
+      <div class="nav-item" data-page="criminal" onclick="navigate('criminal', this)">
+        <span class="icon">⚖️</span> Fichas Criminais
+      </div>
+      <div class="nav-item" data-page="prison" onclick="navigate('prison', this)">
+        <span class="icon">🔒</span> Presos
+      </div>
+      <div class="nav-item" data-page="audit" onclick="navigate('audit', this)">
+        <span class="icon">🗂️</span> Audit Log
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="nav-item" onclick="doLogout()">
+        <span class="icon">🚪</span> Sair
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div class="page-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <div class="server-status">
+          <div class="status-dot"></div>
+          <span id="server-time">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="content" id="content">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let currentPage = 'dashboard';
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const pin = document.getElementById('pin-input').value;
+  const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pin }), credentials:'include' });
+  if (r.ok) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    navigate('dashboard');
+    startClock();
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+document.getElementById('pin-input').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method:'POST', credentials:'include' });
+  location.reload();
+}
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function startClock() {
+  const el = document.getElementById('server-time');
+  const tick = () => el.textContent = new Date().toLocaleTimeString('pt-BR');
+  tick(); setInterval(tick, 1000);
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+const pageTitles = {
+  dashboard:'Dashboard', whitelist:'Whitelist', characters:'Personagens',
+  economy:'Economia Regional', factions:'Facções', criminal:'Fichas Criminais',
+  prison:'Presos Ativos', audit:'Audit Log'
+};
+
+function navigate(page, el) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else document.querySelector(`[data-page="${page}"]`)?.classList.add('active');
+  document.getElementById('topbar-title').textContent = pageTitles[page] || page;
+  renderPage(page);
+}
+
+async function renderPage(page) {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    switch(page) {
+      case 'dashboard':   await renderDashboard(el);  break;
+      case 'whitelist':   await renderWhitelist(el);  break;
+      case 'characters':  await renderCharacters(el); break;
+      case 'economy':     await renderEconomy(el);    break;
+      case 'factions':    await renderFactions(el);   break;
+      case 'criminal':    await renderCriminal(el);   break;
+      case 'prison':      await renderPrison(el);     break;
+      case 'audit':       await renderAudit(el);      break;
+    }
+  } catch(err) {
+    el.innerHTML = `<div class="empty">Erro ao carregar: ${err.message}</div>`;
+  }
+}
+
+// ── API Helper ─────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(path, { credentials:'include' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+async function apiPatch(path, body) {
+  const r = await fetch(path, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'include' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Pages ──────────────────────────────────────────────────────────────────
+async function renderDashboard(el) {
+  const d = await api('/api/dashboard');
+  if (d.pending > 0) {
+    const b = document.getElementById('badge-pending');
+    b.textContent = d.pending; b.style.display = '';
+  }
+  el.innerHTML = `
+    <p class="section-title" style="margin-bottom:16px">Resumo do Servidor</p>
+    <div class="cards-grid">
+      ${statCard('Contas', d.accounts, '👤')}
+      ${statCard('Personagens', d.characters, '🧙')}
+      ${statCard('Pendentes', d.pending, '📋', d.pending > 0 ? 'var(--warning)' : '')}
+      ${statCard('Ações Hoje', d.auditToday, '🗂️')}
+      ${statCard('Presos', d.prisoners, '🔒', d.prisoners > 0 ? 'var(--danger)' : '')}
+      ${statCard('Facções', d.factions, '⚔️')}
+    </div>
+    ${d.pending > 0 ? `<div class="card"><div class="card-header" style="color:var(--warning)">⚠️ ${d.pending} Aplicação(ões) Pendente(s)</div><div style="padding:16px"><button class="btn btn-primary" onclick="navigate('whitelist')">Revisar Agora</button></div></div>` : ''}
+  `;
+}
+
+function statCard(label, value, icon, color='') {
+  return `<div class="stat-card">
+    <div class="label">${label}</div>
+    <div class="value" style="${color?'color:'+color:''}">${value}</div>
+    <div class="icon-bg">${icon}</div>
+  </div>`;
+}
+
+async function renderWhitelist(el) {
+  const rows = await api('/api/whitelist');
+  const badge = document.getElementById('badge-pending');
+  const pending = rows.filter(r=>r.status==='pending').length;
+  if (pending > 0) { badge.textContent=pending; badge.style.display=''; }
+  else badge.style.display='none';
+
+  el.innerHTML = `<div class="card">
+    <div class="card-header">Aplicações de Whitelist <span style="color:var(--muted);font-weight:400">${rows.length} total</span></div>
+    <table>
+      <thead><tr><th>Discord</th><th>Personagem</th><th>Status</th><th>Data</th><th>Ações</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td>${r.discord_name || '—'}</td>
+        <td>${r.first_name ? r.first_name+' '+r.last_name : '—'}</td>
+        <td><span class="pill pill-${r.status}">${r.status}</span></td>
+        <td style="color:var(--muted)">${fmt(r.created_at)}</td>
+        <td style="display:flex;gap:6px;padding-top:8px">
+          ${r.status==='pending' ? `
+            <button class="btn btn-success btn-sm" onclick="reviewApp(${r.id},'approved')">✓ Aprovar</button>
+            <button class="btn btn-danger btn-sm"  onclick="reviewApp(${r.id},'rejected')">✕ Rejeitar</button>
+          ` : '—'}
+        </td>
+      </tr>`).join('')}
+      ${rows.length===0?'<tr><td colspan="5" class="empty">Nenhuma aplicação</td></tr>':''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function reviewApp(id, status) {
+  const notes = status==='rejected' ? prompt('Motivo da rejeição (opcional):') : null;
+  await apiPatch(`/api/whitelist/${id}`, { status, reviewer_notes: notes });
+  toast(status==='approved' ? '✓ Aprovado com sucesso!' : '✕ Rejeitado.', status==='approved'?'success':'error');
+  renderPage('whitelist');
+}
+
+async function renderCharacters(el) {
+  const rows = await api('/api/characters');
+  el.innerHTML = `<div class="card">
+    <div class="card-header">Personagens
+      <input class="search-input" placeholder="Buscar..." oninput="searchChars(this.value)">
+    </div>
+    <table id="chars-table">
+      <thead><tr><th>Nome IC</th><th>Discord</th><th>Status</th><th>Ouro</th><th>Criado em</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><strong>${r.first_name} ${r.last_name}</strong></td>
+        <td style="color:var(--muted)">${r.discord_name||'—'}</td>
+        <td><span class="pill pill-${r.status}">${r.status}</span></td>
+        <td>⚜ ${r.gold.toLocaleString()}</td>
+        <td style="color:var(--muted)">${fmt(r.created_at)}</td>
+      </tr>`).join('')}
+      ${rows.length===0?'<tr><td colspan="5" class="empty">Nenhum personagem</td></tr>':''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function searchChars(q) {
+  const rows = await api(`/api/characters?q=${encodeURIComponent(q)}`);
+  document.querySelector('#chars-table tbody').innerHTML = rows.map(r=>`<tr>
+    <td><strong>${r.first_name} ${r.last_name}</strong></td>
+    <td style="color:var(--muted)">${r.discord_name||'—'}</td>
+    <td><span class="pill pill-${r.status}">${r.status}</span></td>
+    <td>⚜ ${r.gold.toLocaleString()}</td>
+    <td style="color:var(--muted)">${fmt(r.created_at)}</td>
+  </tr>`).join('') || '<tr><td colspan="5" class="empty">Nenhum resultado</td></tr>';
+}
+
+async function renderEconomy(el) {
+  const [holds, top] = await Promise.all([api('/api/economy/holds'), api('/api/economy/top-gold')]);
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">Holds & Tesouros Regionais</div>
+      <table>
+        <thead><tr><th>Hold</th><th>Taxa</th><th>Tesouro</th><th>Facção Dominante</th></tr></thead>
+        <tbody>${holds.map(h=>`<tr>
+          <td><strong>${h.name}</strong></td>
+          <td>${(h.tax_rate*100).toFixed(1)}%</td>
+          <td>⚜ ${h.treasury.toLocaleString()}</td>
+          <td>${h.faction_tag ? `<span style="color:var(--accent)">${h.faction_tag}</span> ${h.faction_name}` : '—'}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header">🏆 Top 10 Ricos</div>
+      <table>
+        <thead><tr><th>#</th><th>Personagem</th><th>Discord</th><th>Ouro</th></tr></thead>
+        <tbody>${top.map((r,i)=>`<tr>
+          <td style="color:var(--muted)">${i+1}</td>
+          <td><strong>${r.first_name} ${r.last_name}</strong></td>
+          <td style="color:var(--muted)">${r.username||'—'}</td>
+          <td style="color:var(--accent);font-weight:600">⚜ ${r.gold.toLocaleString()}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function renderFactions(el) {
+  const rows = await api('/api/factions');
+  el.innerHTML = `<div class="card">
+    <div class="card-header">Facções Ativas</div>
+    <table>
+      <thead><tr><th>Tag</th><th>Nome</th><th>Membros</th><th>Tesouro</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><span style="color:${r.color_hex||'#bba16b'};font-weight:700;font-family:monospace">${r.tag}</span></td>
+        <td>${r.name}</td>
+        <td>${r.member_count}</td>
+        <td>⚜ ${r.treasury.toLocaleString()}</td>
+      </tr>`).join('')}
+      ${rows.length===0?'<tr><td colspan="4" class="empty">Nenhuma facção registrada</td></tr>':''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function renderCriminal(el) {
+  const rows = await api('/api/criminal');
+  el.innerHTML = `<div class="card">
+    <div class="card-header">Fichas Criminais</div>
+    <table>
+      <thead><tr><th>Personagem</th><th>Crime</th><th>Recompensa</th><th>Hold</th><th>Status</th><th>Data</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><strong>${r.first_name} ${r.last_name}</strong></td>
+        <td>${r.crime}</td>
+        <td style="color:var(--warning)">⚜ ${r.bounty}</td>
+        <td style="color:var(--muted)">${r.hold}</td>
+        <td><span class="pill ${r.resolved?'pill-released':'pill-active'}">${r.resolved?'Resolvido':'Ativo'}</span></td>
+        <td style="color:var(--muted)">${fmt(r.created_at)}</td>
+      </tr>`).join('')}
+      ${rows.length===0?'<tr><td colspan="6" class="empty">Nenhuma ficha criminal</td></tr>':''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function renderPrison(el) {
+  const rows = await api('/api/prison');
+  el.innerHTML = `<div class="card">
+    <div class="card-header">Presos Ativos <span style="color:var(--muted);font-weight:400">${rows.length} preso(s)</span></div>
+    <table>
+      <thead><tr><th>Personagem</th><th>Crime</th><th>Pena</th><th>Cumprido</th><th>Preso em</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><strong>${r.first_name} ${r.last_name}</strong></td>
+        <td>${r.crime_summary||'—'}</td>
+        <td>${r.sentence_minutes} min</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:80px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden">
+              <div style="height:100%;background:var(--accent);width:${Math.min(100,Math.round(r.time_served_minutes/r.sentence_minutes*100))}%"></div>
+            </div>
+            ${r.time_served_minutes}/${r.sentence_minutes} min
+          </div>
+        </td>
+        <td style="color:var(--muted)">${fmt(r.arrested_at)}</td>
+      </tr>`).join('')}
+      ${rows.length===0?'<tr><td colspan="5" class="empty">Nenhum preso ativo 🕊️</td></tr>':''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+async function renderAudit(el) {
+  const rows = await api('/api/audit');
+  const colorAction = a => {
+    if (a.includes('kick') || a.includes('ban') || a.includes('arrest')) return 'var(--danger)';
+    if (a.includes('approve') || a.includes('release')) return 'var(--success)';
+    if (a.includes('staff')) return 'var(--warning)';
+    return 'var(--info)';
+  };
+  el.innerHTML = `<div class="card">
+    <div class="card-header">Audit Log <span style="color:var(--muted);font-weight:400">${rows.length} registros</span></div>
+    <table>
+      <thead><tr><th>Ação</th><th>Por</th><th>Alvo</th><th>Detalhes</th><th>Data</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><span style="color:${colorAction(r.action)};font-family:monospace;font-size:12px">${r.action}</span></td>
+        <td>${r.actor_name||'—'}</td>
+        <td style="color:var(--muted)">${r.target_name||'—'}</td>
+        <td style="color:var(--muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.details||'—'}</td>
+        <td style="color:var(--muted);white-space:nowrap">${fmt(r.created_at)}</td>
+      </tr>`).join('')}
+      ${rows.length===0?'<tr><td colspan="5" class="empty">Nenhum registro</td></tr>':''}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ── Util ───────────────────────────────────────────────────────────────────
+function fmt(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+</script>
+</body>
+</html>

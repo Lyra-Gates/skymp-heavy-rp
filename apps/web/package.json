@@ -1,0 +1,17 @@
+{
+  "name": "skymp-staff-panel",
+  "version": "1.0.0",
+  "description": "Painel Web de Staff - SkyMP Heavy RP",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.22.6",
+    "dotenv": "^17.4.2",
+    "express-session": "^1.18.0",
+    "cors": "^2.8.5"
+  }
+}
