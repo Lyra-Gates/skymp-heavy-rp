@@ -1,0 +1,41 @@
+{
+  "environment": "production",
+  "rp": {
+    "heavyRpEnabled": true,
+    "requireApprovedCharacterForSpawn": true,
+    "allowRaceMenuBeforeApproval": false,
+    "defaultStartPointPolicy": "approved_character",
+    "permadeathEnabled": false
+  },
+  "chat": {
+    "localRange": 1400,
+    "whisperRange": 350,
+    "shoutRange": 3000,
+    "oocEnabled": true,
+    "oocRateLimitSeconds": 10,
+    "logAllChannels": true
+  },
+  "staff": {
+    "passwordAdminLoginEnabled": false,
+    "requireRolePermission": true,
+    "requireCommandReason": true,
+    "auditAllCommands": true,
+    "allowDestructiveCommandsInProduction": false
+  },
+  "spawn": {
+    "vanillaSpawnMode": "selective",
+    "playerRespawnSeconds": 300,
+    "npcRespawnSeconds": 3600,
+    "disableRespawnActorIds": []
+  },
+  "economy": {
+    "serverAuthoritativeCurrency": true,
+    "startingGold": 0,
+    "logAllTransactions": true
+  },
+  "debug": {
+    "enablePapyrusDebug": false,
+    "enableHotReload": false,
+    "enableDevTools": false
+  }
+}

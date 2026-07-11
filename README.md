@@ -10,9 +10,11 @@ Leia nesta ordem:
 
 1. `SKYMP_RP_DEVELOPMENT_PLAN.md`
 2. `docs/roadmap/PHASE_0_START.md`
-3. `docs/technical/SKYMP_SERVER_SETUP.md`
-4. `docs/technical/SERVER_OPTIONS_SCHEMA.md`
-5. `docs/rules/PUBLIC_RULES_LAUNCH_OUTLINE.md`
+3. `docs/roadmap/PHASE_0_TEST_LOG.md`
+4. `docs/technical/SKYMP_SERVER_SETUP.md`
+5. `docs/technical/PHASE_0_FILE_LAYOUT.md`
+6. `docs/technical/SERVER_OPTIONS_SCHEMA.md`
+7. `docs/rules/PUBLIC_RULES_LAUNCH_OUTLINE.md`
 
 ## Primeira Meta
 
@@ -42,3 +44,9 @@ Marco 0.1 - Teste de Conexao SkyMP
 O repositorio contem documentos de planejamento, regras, staff e arquitetura tecnica. Ainda nao contem codigo de servidor, painel, launcher ou gamemode.
 
 O proximo trabalho e executar a Fase 0 e registrar evidencias reais.
+
+## Configs Iniciais
+
+Templates seguros foram criados em `skymp/config/`.
+
+Arquivos reais como `server-settings.local.json`, builds SkyMP, `data/`, `world/`, masters do Skyrim e secrets nao devem ser versionados.

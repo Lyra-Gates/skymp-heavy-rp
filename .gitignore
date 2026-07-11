@@ -1,1 +1,12 @@
 references/
+skymp/server/
+skymp/data/
+skymp/world/
+skymp/*.log
+skymp/config/server-settings.local.json
+skymp/config/server-settings.staging.json
+skymp/config/server-settings.production.json
+skymp/config/secrets.*
+*.zip
+*.7z
+*.rar

@@ -1,0 +1,31 @@
+{
+  "name": "SkyMP Heavy RP - Local",
+  "masterKey": "local-dev-key",
+  "listenHost": "127.0.0.1",
+  "uiListenHost": "127.0.0.1",
+  "port": 7777,
+  "maxPlayers": 10,
+  "dataDir": "data",
+  "loadOrder": [
+    "Skyrim.esm",
+    "Update.esm",
+    "Dawnguard.esm",
+    "HearthFires.esm",
+    "Dragonborn.esm"
+  ],
+  "archives": [],
+  "lang": "portuguese",
+  "locale": "pt-BR",
+  "offlineMode": false,
+  "databaseDriver": "file",
+  "databaseName": "world",
+  "gamemodePath": "gamemode/index.js",
+  "startPoints": [
+    {
+      "pos": [0, 0, 0],
+      "worldOrCell": "0x3c",
+      "angleZ": 0
+    }
+  ],
+  "isPapyrusHotReloadEnabled": false
+}

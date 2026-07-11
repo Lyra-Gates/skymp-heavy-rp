@@ -23,6 +23,8 @@ Ao final da Fase 0, precisamos responder:
 
 ## 3. Preparacao Local
 
+Antes de copiar builds ou masters do Skyrim, leia `docs/technical/PHASE_0_FILE_LAYOUT.md`.
+
 ### Ferramentas
 
 - Git.
@@ -88,6 +90,8 @@ Comecar com:
 - `maxPlayers=10` para laboratorio.
 - `isPapyrusHotReloadEnabled=false`, salvo teste tecnico local.
 - `startPoints` controlado.
+
+Use `skymp/config/server-settings.local.example.json` como base. Copie para um arquivo local nao versionado antes de inserir chaves reais.
 
 ### Passo 4 - Testar Servidor Local
 
@@ -161,6 +165,8 @@ Resultado real:
 Gravidade:
 Bloqueia progresso? sim/nao
 ```
+
+Use tambem `docs/roadmap/PHASE_0_TEST_LOG.md` como registro principal da rodada de testes.
 
 ## 5. Decisoes ao Final
 

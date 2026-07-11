@@ -1,0 +1,31 @@
+{
+  "name": "SkyMP Heavy RP - Staging",
+  "masterKey": "replace-with-staging-master-key",
+  "listenHost": "0.0.0.0",
+  "uiListenHost": "0.0.0.0",
+  "port": 7777,
+  "maxPlayers": 20,
+  "dataDir": "data",
+  "loadOrder": [
+    "Skyrim.esm",
+    "Update.esm",
+    "Dawnguard.esm",
+    "HearthFires.esm",
+    "Dragonborn.esm"
+  ],
+  "archives": [],
+  "lang": "portuguese",
+  "locale": "pt-BR",
+  "offlineMode": false,
+  "databaseDriver": "file",
+  "databaseName": "world",
+  "gamemodePath": "gamemode/index.js",
+  "startPoints": [
+    {
+      "pos": [0, 0, 0],
+      "worldOrCell": "0x3c",
+      "angleZ": 0
+    }
+  ],
+  "isPapyrusHotReloadEnabled": false
+}
