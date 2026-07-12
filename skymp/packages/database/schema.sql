@@ -59,6 +59,19 @@ CREATE TABLE IF NOT EXISTS `characters` (
 ) ENGINE=InnoDB;
 
 -- 4.1. Inventário Persistente do Personagem
+CREATE TABLE IF NOT EXISTS `character_known_identities` (
+  `observer_character_id` INT NOT NULL,
+  `target_character_id` INT NOT NULL,
+  `display_name` VARCHAR(64) NOT NULL,
+  `source` VARCHAR(32) NOT NULL DEFAULT 'introduced' COMMENT 'introduced, alias, staff, disguise',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`observer_character_id`, `target_character_id`),
+  CONSTRAINT `fk_known_observer` FOREIGN KEY (`observer_character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_known_target` FOREIGN KEY (`target_character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 4.2. Inventario Persistente do Personagem
 CREATE TABLE IF NOT EXISTS `character_inventory` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `character_id` INT NOT NULL,

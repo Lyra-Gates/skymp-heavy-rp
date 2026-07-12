@@ -1,4 +1,5 @@
 const db = require('./database');
+const identity = require('./identity-service');
 const { createRpChatService } = require('./rp-chat-service');
 
 // Cache em memoria dos personagens ativos no servidor
@@ -14,6 +15,7 @@ function registerActiveCharacter(actorId, character, accountId, profileId) {
     profileId: profileId
   });
   console.log(`[commands] Cached character name for actor ${actorId.toString(16)}: ${character.first_name} ${character.last_name}`);
+  identity.loadKnownIdentities(character.id);
 }
 
 function getActiveCharacterData(actorId) {
@@ -24,6 +26,7 @@ function removeActiveCharacter(actorId) {
   if (activeCharacters.has(actorId)) {
     const char = activeCharacters.get(actorId);
     console.log(`[commands] Removed cached character for actor ${actorId.toString(16)}: ${char.firstName} ${char.lastName}`);
+    identity.forgetKnownIdentities(char.characterId);
     activeCharacters.delete(actorId);
   }
 }
@@ -34,6 +37,12 @@ function getCharacterName(actorId) {
     return `${char.firstName} ${char.lastName}`;
   }
   return `Player_${actorId.toString(16)}`;
+}
+
+function getDisplayNameForObserver(sourceActorId, observerActorId) {
+  const sourceCharacter = getActiveCharacterData(sourceActorId);
+  const observerCharacter = getActiveCharacterData(observerActorId);
+  return identity.getDisplayName(observerCharacter, sourceCharacter);
 }
 
 async function logRpChatEvent(event) {
@@ -67,11 +76,16 @@ function sendNotification(actorId, message) {
 }
 
 // Transmite a mensagem para o autor e vizinhos dentro de um raio de proximidade (padrao: 1500 unidades Skyrim ~ 20 metros)
+function renderMessageForRecipient(message, recipientActorId) {
+  return typeof message === 'function' ? message(recipientActorId) : message;
+}
+
 function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
-  console.log(`[chat-log] Broadcast: "${message}"`);
+  const logMessage = typeof message === 'function' ? message(sourceActorId) : message;
+  console.log(`[chat-log] Broadcast: "${logMessage}"`);
   
   // 1. Mostrar para o proprio autor
-  sendNotification(sourceActorId, message);
+  sendNotification(sourceActorId, renderMessageForRecipient(message, sourceActorId));
 
   if (typeof mp === 'undefined') return;
 
@@ -102,7 +116,7 @@ function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
           const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
           
           if (distance <= radius) {
-            sendNotification(neighborId, message);
+            sendNotification(neighborId, renderMessageForRecipient(message, neighborId));
           }
         }
       }
@@ -114,11 +128,83 @@ function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
 
 const rpChat = createRpChatService({
   getCharacterName,
+  getDisplayName: getDisplayNameForObserver,
   getCharacterData: getActiveCharacterData,
   sendNotification,
   broadcastProximityMessage,
   logEvent: logRpChatEvent
 });
+
+function parseActorId(raw) {
+  if (!raw) return NaN;
+  const normalized = raw.toLowerCase().startsWith('0x') ? raw.slice(2) : raw;
+  return Number.parseInt(normalized, 16);
+}
+
+async function handleIntroduceCommand(actorId, args) {
+  const targetActorId = parseActorId(args);
+  const sourceCharacter = getActiveCharacterData(actorId);
+  const targetCharacter = getActiveCharacterData(targetActorId);
+
+  if (!sourceCharacter) {
+    sendNotification(actorId, 'Seu personagem ainda nao esta carregado.');
+    return;
+  }
+  if (!targetCharacter || targetActorId === actorId) {
+    sendNotification(actorId, 'Uso correto: /apresentar <actorId>');
+    return;
+  }
+
+  const realName = identity.getCharacterFullName(sourceCharacter);
+  await identity.upsertKnownIdentity(
+    targetCharacter.characterId,
+    sourceCharacter.characterId,
+    realName,
+    'introduced'
+  );
+  await identity.auditIdentityEvent(
+    sourceCharacter.accountId,
+    targetCharacter.accountId,
+    'identity:introduce',
+    `sourceCharacterId=${sourceCharacter.characterId} targetCharacterId=${targetCharacter.characterId}`
+  );
+
+  sendNotification(actorId, `Voce se apresentou para ${getDisplayNameForObserver(targetActorId, actorId)}.`);
+  sendNotification(targetActorId, `${realName} se apresentou a voce.`);
+  broadcastProximityMessage(
+    actorId,
+    (observerActorId) => `* ${getDisplayNameForObserver(actorId, observerActorId)} se apresenta.`,
+    450
+  );
+}
+
+async function handleAliasCommand(actorId, args) {
+  const parts = args.split(' ');
+  const targetActorId = parseActorId(parts[0]);
+  const alias = identity.sanitizeDisplayName(parts.slice(1).join(' '));
+  const sourceCharacter = getActiveCharacterData(actorId);
+  const targetCharacter = getActiveCharacterData(targetActorId);
+
+  if (!sourceCharacter || !targetCharacter || targetActorId === actorId || !alias) {
+    sendNotification(actorId, 'Uso correto: /apelido <actorId> <nome conhecido>');
+    return;
+  }
+
+  await identity.upsertKnownIdentity(
+    sourceCharacter.characterId,
+    targetCharacter.characterId,
+    alias,
+    'alias'
+  );
+  await identity.auditIdentityEvent(
+    sourceCharacter.accountId,
+    targetCharacter.accountId,
+    'identity:alias',
+    `observerCharacterId=${sourceCharacter.characterId} targetCharacterId=${targetCharacter.characterId} alias=${alias}`
+  );
+
+  sendNotification(actorId, `Voce passara a reconhecer essa pessoa como: ${alias}.`);
+}
 
 // Tratamento de mensagens digitadas no chat
 function handleChatInput(actorId, text) {
@@ -135,6 +221,22 @@ function handleChatInput(actorId, text) {
     const args = parts.slice(1).join(' ');
 
     switch (command) {
+      case '/apresentar':
+      case '/introduce':
+        handleIntroduceCommand(actorId, args).catch((err) => {
+          console.error('[identity] Failed to introduce character:', err.message);
+          sendNotification(actorId, 'Nao foi possivel registrar a apresentacao.');
+        });
+        break;
+
+      case '/apelido':
+      case '/alias':
+        handleAliasCommand(actorId, args).catch((err) => {
+          console.error('[identity] Failed to set alias:', err.message);
+          sendNotification(actorId, 'Nao foi possivel registrar o apelido.');
+        });
+        break;
+
       case '/chopwood':
         const jobs = require('./jobs-service');
         jobs.chopWood(actorId);

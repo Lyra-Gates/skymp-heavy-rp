@@ -85,8 +85,9 @@ Use este arquivo para registrar evidencias reais dos testes SkyMP.
 
 - Resultado esperado: mensagens por proximidade.
 - Resultado real: prototipo server-side implementado para comandos RP locais, com parser, alcance por tipo de fala, anti-spam simples, logs e fallback para console. Ainda nao foi validado em jogo com dois clientes.
-- Comandos cobertos: `/me`, `/do`, `/ooc`, `/b`, `/s`, `/sussurrar`, `/g`, `/gritar`, `/roll`, `/try`, `/report` e chat local padrao.
-- Evidencia local: `npm test` em `skymp/gamemode` cobre parser, alcance, rolagem, report e anti-spam.
+- Comandos cobertos: `/me`, `/do`, `/ooc`, `/b`, `/s`, `/sussurrar`, `/g`, `/gritar`, `/roll`, `/try`, `/report`, `/apresentar`, `/apelido` e chat local padrao.
+- Evidencia local: `npm test` em `skymp/gamemode` cobre parser, alcance, rolagem, report, anti-spam e resolucao de nome desconhecido/conhecido.
+- Identidade social: `character_known_identities` aplicada no banco local com `node skymp/gamemode/setup-db.js`.
 - Status: implementado em laboratorio; pendente validacao funcional em jogo.
 
 ## Teste 0.8 - Boot Fase 0 Limpo

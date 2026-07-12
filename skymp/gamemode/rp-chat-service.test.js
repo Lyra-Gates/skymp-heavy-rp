@@ -1,5 +1,6 @@
 const assert = require('assert');
 const { createRpChatService, RANGES } = require('./rp-chat-service');
+const identity = require('./identity-service');
 
 function createHarness() {
   const broadcasts = [];
@@ -12,9 +13,23 @@ function createHarness() {
     now: () => nowValue,
     random: () => randomValue,
     getCharacterName: () => 'Aela Nord',
+    getDisplayName: (actorId, observerActorId) => {
+      if (observerActorId === actorId) return 'Aela Nord';
+      if (observerActorId === 0xaa) return 'Guerreira Conhecida';
+      return 'Desconhecido';
+    },
     getCharacterData: () => ({ characterId: 7, accountId: 3 }),
     sendNotification: (actorId, message) => notifications.push({ actorId, message }),
-    broadcastProximityMessage: (actorId, message, radius) => broadcasts.push({ actorId, message, radius }),
+    broadcastProximityMessage: (actorId, message, radius) => {
+      const render = typeof message === 'function' ? message : () => message;
+      broadcasts.push({
+        actorId,
+        message: render(actorId),
+        knownObserverMessage: render(0xaa),
+        unknownObserverMessage: render(0xbb),
+        radius
+      });
+    },
     logEvent: (event) => logs.push(event)
   });
 
@@ -34,6 +49,8 @@ function createHarness() {
   assert.deepStrictEqual(h.broadcasts[0], {
     actorId: 0xff,
     message: '* Aela Nord observa a porta',
+    knownObserverMessage: '* Guerreira Conhecida observa a porta',
+    unknownObserverMessage: '* Desconhecido observa a porta',
     radius: RANGES.emote
   });
   assert.strictEqual(h.logs[0].type, 'me');
@@ -44,8 +61,10 @@ function createHarness() {
   h.service.handleChatInput(0xff, '/s cuidado');
   h.service.handleChatInput(0xff, '/g guardas!');
   assert.strictEqual(h.broadcasts[0].message, 'Aela Nord sussurra: cuidado');
+  assert.strictEqual(h.broadcasts[0].unknownObserverMessage, 'Desconhecido sussurra: cuidado');
   assert.strictEqual(h.broadcasts[0].radius, RANGES.whisper);
   assert.strictEqual(h.broadcasts[1].message, 'Aela Nord grita: guardas!');
+  assert.strictEqual(h.broadcasts[1].knownObserverMessage, 'Guerreira Conhecida grita: guardas!');
   assert.strictEqual(h.broadcasts[1].radius, RANGES.shout);
 }
 
@@ -81,6 +100,15 @@ function createHarness() {
 {
   const h = createHarness();
   assert.strictEqual(h.service.handleChatInput(0xff, '/kick ff motivo'), false);
+}
+
+{
+  const observer = { characterId: 10, firstName: 'Jon', lastName: 'Battleborn' };
+  const target = { characterId: 20, firstName: 'Jarl', lastName: 'Balgruuf' };
+  assert.strictEqual(identity.getDisplayName(observer, target), 'Desconhecido');
+  identity.cacheKnownIdentity(10, 20, 'Jarl Balgruuf', 'introduced');
+  assert.strictEqual(identity.getDisplayName(observer, target), 'Jarl Balgruuf');
+  assert.strictEqual(identity.getDisplayName(target, target), 'Jarl Balgruuf');
 }
 
 console.log('rp-chat-service tests passed');

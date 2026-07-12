@@ -35,7 +35,10 @@ function createRpChatService(options) {
       .slice(0, limits.maxLength);
   }
 
-  function getCharacterName(actorId) {
+  function getCharacterName(actorId, observerActorId) {
+    if (observerActorId && options.getDisplayName) {
+      return options.getDisplayName(actorId, observerActorId);
+    }
     return options.getCharacterName(actorId);
   }
 
@@ -47,8 +50,8 @@ function createRpChatService(options) {
     options.sendNotification(actorId, message);
   }
 
-  function broadcast(actorId, message, radius) {
-    options.broadcastProximityMessage(actorId, message, radius);
+  function broadcast(actorId, messageOrFactory, radius) {
+    options.broadcastProximityMessage(actorId, messageOrFactory, radius);
   }
 
   function logEvent(actorId, type, message, radius) {
@@ -122,9 +125,9 @@ function createRpChatService(options) {
     }
 
     const result = Math.floor(random() * max) + 1;
-    const message = `* ${getCharacterName(actorId)} rolou um dado d${max} e tirou: ${result}`;
+    const message = (observerActorId) => `* ${getCharacterName(actorId, observerActorId)} rolou um dado d${max} e tirou: ${result}`;
     broadcast(actorId, message, RANGES.emote);
-    logEvent(actorId, 'roll', message, RANGES.emote);
+    logEvent(actorId, 'roll', message(actorId), RANGES.emote);
     return true;
   }
 
@@ -132,9 +135,9 @@ function createRpChatService(options) {
     if (!requireArgs(actorId, args, '/try <acao>')) return true;
     const success = random() >= 0.5;
     const result = success ? 'conseguiu' : 'falhou';
-    const message = `* ${getCharacterName(actorId)} tenta ${args} e ${result}.`;
+    const message = (observerActorId) => `* ${getCharacterName(actorId, observerActorId)} tenta ${args} e ${result}.`;
     broadcast(actorId, message, RANGES.emote);
-    logEvent(actorId, 'try', message, RANGES.emote);
+    logEvent(actorId, 'try', message(actorId), RANGES.emote);
     return true;
   }
 
@@ -145,7 +148,7 @@ function createRpChatService(options) {
       return true;
     }
 
-    const charName = getCharacterName(actorId);
+    const charName = getCharacterName(actorId, actorId);
     const message = `[REPORT] ${charName}: ${args}`;
     sendNotification(actorId, 'Report enviado para a staff.');
     console.log(`[rp-chat] ${message}`);
@@ -165,7 +168,6 @@ function createRpChatService(options) {
 
     const command = parsed.command;
     const args = parsed.args || '';
-    const charName = getCharacterName(actorId);
 
     const rpCommands = new Set([
       'say', '/me', '/do', '/ooc', '/b', '/s', '/sussurrar', '/g', '/gritar',
@@ -183,47 +185,47 @@ function createRpChatService(options) {
 
     switch (command) {
       case 'say': {
-        const message = `${charName} diz: ${args}`;
+        const message = (observerActorId) => `${getCharacterName(actorId, observerActorId)} diz: ${args}`;
         broadcast(actorId, message, RANGES.say);
-        logEvent(actorId, 'say', message, RANGES.say);
+        logEvent(actorId, 'say', message(actorId), RANGES.say);
         return true;
       }
       case '/me': {
         if (!requireArgs(actorId, args, '/me <acao>')) return true;
-        const message = `* ${charName} ${args}`;
+        const message = (observerActorId) => `* ${getCharacterName(actorId, observerActorId)} ${args}`;
         broadcast(actorId, message, RANGES.emote);
-        logEvent(actorId, 'me', message, RANGES.emote);
+        logEvent(actorId, 'me', message(actorId), RANGES.emote);
         return true;
       }
       case '/do': {
         if (!requireArgs(actorId, args, '/do <descricao>')) return true;
-        const message = `* ${args} (( ${charName} ))`;
+        const message = (observerActorId) => `* ${args} (( ${getCharacterName(actorId, observerActorId)} ))`;
         broadcast(actorId, message, RANGES.emote);
-        logEvent(actorId, 'do', message, RANGES.emote);
+        logEvent(actorId, 'do', message(actorId), RANGES.emote);
         return true;
       }
       case '/ooc':
       case '/b': {
         if (!requireArgs(actorId, args, `${command} <mensagem>`)) return true;
-        const message = `(( OOC: ${charName}: ${args} ))`;
+        const message = (observerActorId) => `(( OOC: ${getCharacterName(actorId, observerActorId)}: ${args} ))`;
         broadcast(actorId, message, RANGES.ooc);
-        logEvent(actorId, 'ooc', message, RANGES.ooc);
+        logEvent(actorId, 'ooc', message(actorId), RANGES.ooc);
         return true;
       }
       case '/s':
       case '/sussurrar': {
         if (!requireArgs(actorId, args, `${command} <mensagem>`)) return true;
-        const message = `${charName} sussurra: ${args}`;
+        const message = (observerActorId) => `${getCharacterName(actorId, observerActorId)} sussurra: ${args}`;
         broadcast(actorId, message, RANGES.whisper);
-        logEvent(actorId, 'whisper', message, RANGES.whisper);
+        logEvent(actorId, 'whisper', message(actorId), RANGES.whisper);
         return true;
       }
       case '/g':
       case '/gritar': {
         if (!requireArgs(actorId, args, `${command} <mensagem>`)) return true;
-        const message = `${charName} grita: ${args}`;
+        const message = (observerActorId) => `${getCharacterName(actorId, observerActorId)} grita: ${args}`;
         broadcast(actorId, message, RANGES.shout);
-        logEvent(actorId, 'shout', message, RANGES.shout);
+        logEvent(actorId, 'shout', message(actorId), RANGES.shout);
         return true;
       }
       case '/roll':

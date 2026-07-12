@@ -97,8 +97,16 @@ Escopo:
 - Spawn controlado por personagem, nao por `profileId`.
 - Nome IC persistente.
 - Posicao persistente.
+- Nametag social: personagem desconhecido aparece como `Desconhecido` ate apresentacao ou apelido.
 
-Decisao: ADOTAR na Fase 1.
+Status tecnico:
+
+- Base de identidade social implementada em `skymp/gamemode/identity-service.js`.
+- Persistencia em `character_known_identities`.
+- Chat local ja resolve nome por observador.
+- Pendente: nametag visual e teste em jogo com dois clientes.
+
+Decisao: ADOTAR na Fase 1, em paralelo ao chat local.
 
 ### 4. Consequencia Inicial de Morte/Ferimento
 
