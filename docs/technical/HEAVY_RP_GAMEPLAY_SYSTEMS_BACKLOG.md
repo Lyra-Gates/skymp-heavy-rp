@@ -63,6 +63,7 @@ Ideia:
 - Cada cidade/hold tem um mural IC.
 - Jogadores podem publicar anuncios de compra, venda, servico, expedicao, escolta, recrutamento e eventos.
 - Staff pode fixar, remover ou arquivar anuncios.
+- Inspirado pela enfase publica do Keizaal Online em eventos comunitarios, economia entre jogadores e mundo player-driven. Nao copiar implementacao; adaptar como sistema simples e auditavel.
 
 Escopo inicial:
 
@@ -70,6 +71,7 @@ Escopo inicial:
 - Listar anuncios por cidade.
 - Sem pagamento automatico no MVP.
 - Sem economia complexa.
+- Sem trade automatico no MVP; o mural gera encontro RP, nao substitui o trade seguro.
 
 Server-authoritative:
 
