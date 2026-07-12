@@ -4,6 +4,8 @@ const session = require('express-session');
 const mysql   = require('mysql2/promise');
 const path    = require('path');
 const cors    = require('cors');
+const passport = require('passport');
+const DiscordStrategy = require('passport-discord').Strategy;
 
 const app  = express();
 const PORT = process.env.PANEL_PORT || 3001;
@@ -43,30 +45,98 @@ app.use(session({
   cookie: { secure: false, maxAge: 8 * 60 * 60 * 1000 } // 8h
 }));
 
-// ── Auth simples (PIN de staff — será substituído por OAuth Discord) ────────
-const STAFF_PIN = requireEnv('STAFF_PIN');
+// ── Auth via Discord OAuth ───────────────────────────────────────────────────
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+passport.use(new DiscordStrategy({
+    clientID: process.env.DISCORD_CLIENT_ID || 'dummy_client_id',
+    clientSecret: process.env.DISCORD_CLIENT_SECRET || 'dummy_secret',
+    callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:3001/api/auth/discord/callback',
+    scope: ['identify']
+}, async (accessToken, refreshToken, profile, done) => {
+    try {
+        let [rows] = await db('SELECT account_id FROM discord_identities WHERE discord_id = ?', [profile.id]);
+        let accountId;
+        if (rows.length === 0) {
+            const [accRes] = await pool.execute('INSERT INTO accounts (status) VALUES (?)', ['active']);
+            accountId = accRes.insertId;
+            await pool.execute('INSERT INTO discord_identities (discord_id, account_id, username, avatar) VALUES (?, ?, ?, ?)', [profile.id, accountId, profile.username, profile.avatar || '']);
+        } else {
+            accountId = rows[0].account_id;
+            await pool.execute('UPDATE discord_identities SET username = ?, avatar = ? WHERE discord_id = ?', [profile.username, profile.avatar || '', profile.id]);
+        }
+        
+        return done(null, { id: profile.id, username: profile.username, avatar: profile.avatar, accountId });
+    } catch(err) {
+        return done(err, null);
+    }
+}));
 
 function requireAuth(req, res, next) {
-  if (req.session?.auth) return next();
+  if (req.isAuthenticated && req.isAuthenticated()) return next();
   res.status(401).json({ error: 'Não autenticado' });
 }
 
-app.post('/api/auth/login', (req, res) => {
-  const { pin } = req.body;
-  if (pin === STAFF_PIN) {
-    req.session.auth = true;
-    res.json({ ok: true });
-  } else {
-    res.status(401).json({ error: 'PIN inválido' });
-  }
+function requireStaff(req, res, next) {
+  if (!req.isAuthenticated || !req.isAuthenticated()) return res.status(401).json({ error: 'Não autenticado' });
+  // TODO: Integrar verificação real de cargos staff via DB ou Discord
+  return next(); 
+}
+
+app.get('/api/auth/discord', passport.authenticate('discord'));
+app.get('/api/auth/discord/callback', passport.authenticate('discord', {
+    failureRedirect: '/?error=auth_failed'
+}), (req, res) => {
+    res.redirect('/');
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
+  req.logout((err) => {
+    if(err) return res.status(500).json({ error: err.message });
+    req.session.destroy(() => res.json({ ok: true }));
+  });
+});
+
+// Rotas do Jogador Público
+app.get('/api/me', requireAuth, async (req, res) => {
+    try {
+        const [appRows] = await db('SELECT * FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
+        const application = appRows.length > 0 ? appRows[0] : null;
+        res.json({
+            user: req.user,
+            application
+        });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/apply', requireAuth, async (req, res) => {
+    const { first_name, last_name, biography } = req.body;
+    try {
+        const [existing] = await db('SELECT status FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
+        if (existing.length > 0 && (existing[0].status === 'pending' || existing[0].status === 'approved')) {
+            return res.status(400).json({ error: 'Você já possui uma aplicação pendente ou aprovada.' });
+        }
+
+        const [charRes] = await pool.execute(
+            'INSERT INTO characters (account_id, first_name, last_name, biography, status) VALUES (?, ?, ?, ?, ?)',
+            [req.user.accountId, first_name, last_name, biography, 'pending']
+        );
+
+        await pool.execute(
+            'INSERT INTO whitelist_applications (account_id, status) VALUES (?, ?)',
+            [req.user.accountId, 'pending']
+        );
+
+        res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── API: Dashboard ─────────────────────────────────────────────────────────
-app.get('/api/dashboard', requireAuth, async (req, res) => {
+app.get('/api/dashboard', requireStaff, async (req, res) => {
   try {
     const [accounts]    = await pool.execute('SELECT COUNT(*) as c FROM accounts');
     const [chars]       = await pool.execute('SELECT COUNT(*) as c FROM characters');
@@ -86,7 +156,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 });
 
 // ── API: Whitelist ─────────────────────────────────────────────────────────
-app.get('/api/whitelist', requireAuth, async (req, res) => {
+app.get('/api/whitelist', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT wa.id, wa.status, wa.created_at, wa.reviewer_notes,
@@ -103,7 +173,7 @@ app.get('/api/whitelist', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.patch('/api/whitelist/:id', requireAuth, async (req, res) => {
+app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
   const { status, reviewer_notes } = req.body;
   const validStatuses = ['approved', 'rejected', 'pending'];
   if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Status inválido' });
@@ -112,6 +182,15 @@ app.patch('/api/whitelist/:id', requireAuth, async (req, res) => {
       'UPDATE whitelist_applications SET status=?, reviewer_notes=?, reviewed_at=NOW() WHERE id=?',
       [status, reviewer_notes || null, req.params.id]
     );
+    
+    // Buscar o discord_id relacionado para notificar o bot
+    const [idRows] = await db(
+      `SELECT d.discord_id FROM discord_identities d
+       INNER JOIN accounts a ON a.id = d.account_id
+       INNER JOIN whitelist_applications wa ON wa.account_id = a.id
+       WHERE wa.id=?`, [req.params.id]
+    );
+
     // Se aprovado, aprova também o personagem
     if (status === 'approved') {
       await db(
@@ -122,12 +201,26 @@ app.patch('/api/whitelist/:id', requireAuth, async (req, res) => {
          WHERE wa.id=?`, [req.params.id]
       );
     }
+    
+    // Sincronizar com o Bot do Discord
+    if (idRows.length > 0) {
+        try {
+            await fetch('http://localhost:3002/api/sync-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ discord_id: idRows[0].discord_id, status })
+            });
+        } catch (e) {
+            console.error('[web] Falha ao notificar o Bot do Discord:', e.message);
+        }
+    }
+
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── API: Personagens ───────────────────────────────────────────────────────
-app.get('/api/characters', requireAuth, async (req, res) => {
+app.get('/api/characters', requireStaff, async (req, res) => {
   try {
     const search = req.query.q ? `%${req.query.q}%` : '%';
     const rows = await db(
@@ -145,7 +238,7 @@ app.get('/api/characters', requireAuth, async (req, res) => {
 });
 
 // ── API: Audit Logs ────────────────────────────────────────────────────────
-app.get('/api/audit', requireAuth, async (req, res) => {
+app.get('/api/audit', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT al.id, al.action, al.details, al.created_at,
@@ -162,7 +255,7 @@ app.get('/api/audit', requireAuth, async (req, res) => {
 });
 
 // ── API: Economia / Holds ──────────────────────────────────────────────────
-app.get('/api/economy/holds', requireAuth, async (req, res) => {
+app.get('/api/economy/holds', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT h.id, h.name, h.tax_rate, h.treasury,
@@ -175,7 +268,7 @@ app.get('/api/economy/holds', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/economy/top-gold', requireAuth, async (req, res) => {
+app.get('/api/economy/top-gold', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT c.first_name, c.last_name, c.gold, d.username
@@ -189,7 +282,7 @@ app.get('/api/economy/top-gold', requireAuth, async (req, res) => {
 });
 
 // ── API: Fichas Criminais ──────────────────────────────────────────────────
-app.get('/api/criminal', requireAuth, async (req, res) => {
+app.get('/api/criminal', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT cr.id, cr.crime, cr.bounty, cr.hold, cr.resolved, cr.created_at,
@@ -203,7 +296,7 @@ app.get('/api/criminal', requireAuth, async (req, res) => {
 });
 
 // ── API: Facções ───────────────────────────────────────────────────────────
-app.get('/api/factions', requireAuth, async (req, res) => {
+app.get('/api/factions', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT f.id, f.tag, f.name, f.treasury, f.color_hex, f.created_at,
@@ -217,7 +310,7 @@ app.get('/api/factions', requireAuth, async (req, res) => {
 });
 
 // ── API: Presos Ativos ─────────────────────────────────────────────────────
-app.get('/api/prison', requireAuth, async (req, res) => {
+app.get('/api/prison', requireStaff, async (req, res) => {
   try {
     const rows = await db(
       `SELECT pr.id, pr.sentence_minutes, pr.time_served_minutes, pr.crime_summary,
@@ -230,6 +323,21 @@ app.get('/api/prison', requireAuth, async (req, res) => {
     );
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── API: Launcher Manifesto ──────────────────────────────────────────────────
+app.get('/api/launcher/manifest', (req, res) => {
+    // Retorna o manifesto contendo a versão mínima requerida do cliente e arquivos
+    res.json({
+        version: "1.0.0-beta",
+        files: [
+            {
+                path: "Data/SkyMP.esp",
+                hash: "dummy_hash_for_testing",
+                url: "http://localhost:3001/download/SkyMP.esp" // Fake url for testing
+            }
+        ]
+    });
 });
 
 // ── Catch-all: SPA ─────────────────────────────────────────────────────────

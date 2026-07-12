@@ -163,6 +163,41 @@ function setCharacterHold(characterId, holdId) {
 }
 
 /**
+ * Lord: /holdwithdraw [amount] - Saca impostos da cidade para o cofre da facção.
+ */
+async function withdrawHoldTreasury(actorId, characterId, amount) {
+  const holdId = characterHold.get(characterId) || 'whiterun';
+  const hold = holdCache[holdId];
+  if (!hold) return;
+
+  if (!hold.ruling_faction_id) {
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Esta cidade não tem um lorde.']);
+    return;
+  }
+
+  const factionService = require('./faction-service');
+  const factionInfo = factionService.getMemberFactionInfo(characterId);
+  
+  if (!factionInfo || factionInfo.factionId !== hold.ruling_faction_id || factionInfo.rank !== 'leader') {
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Apenas o Lorde desta cidade pode sacar os impostos.']);
+    return;
+  }
+
+  if (amount <= 0 || hold.treasury < amount) {
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Valor inválido. Tesouro local: ${hold.treasury}g.`]);
+    return;
+  }
+
+  await db.query('UPDATE holds SET treasury = treasury - ? WHERE id = ?', [amount, holdId]);
+  await db.query('UPDATE factions SET treasury = treasury + ? WHERE id = ?', [amount, factionInfo.factionId]);
+  
+  await loadCache();
+  
+  if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você transferiu ${amount}g da cidade para o cofre da facção.`]);
+  console.log(`[economy-regional] Lord ${characterId} withdrew ${amount}g from ${holdId} to faction ${factionInfo.factionId}.`);
+}
+
+/**
  * Staff: /settax [holdId] [rate] — Define imposto de um Hold.
  */
 async function setTaxRate(actorId, holdId, rate) {
@@ -180,5 +215,6 @@ module.exports = {
   buyFromMarket,
   showMarketInfo,
   setCharacterHold,
+  withdrawHoldTreasury,
   setTaxRate
 };

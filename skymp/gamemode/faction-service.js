@@ -45,6 +45,13 @@ function getFactionTag(characterId) {
   return f ? f.tag : null;
 }
 
+/**
+ * Retorna os dados completos do membro no cache.
+ */
+function getMemberFactionInfo(characterId) {
+  return memberCache.get(characterId) || null;
+}
+
 // ── Comandos de Jogador ───────────────────────────────────────────────────────
 
 /**
@@ -92,6 +99,37 @@ async function donate(actorId, characterId, amount) {
   await db.query('UPDATE factions SET treasury = treasury + ? WHERE id = ?', [amount, f.factionId]);
   if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você doou ${amount}g ao tesouro de ${f.name}.`]);
   commands.broadcastProximityMessage(actorId, `* Deposita algumas moedas na caixa da guilda.`, 400);
+}
+
+/**
+ * /fwithdraw [valor] — Saca ouro do tesouro da facção.
+ */
+async function withdrawFaction(actorId, characterId, amount) {
+  const f = memberCache.get(characterId);
+  if (!f) {
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você não pertence a nenhuma facção.']);
+    return;
+  }
+  if (f.rank !== 'leader') {
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Apenas líderes podem sacar do tesouro.']);
+    return;
+  }
+  if (amount <= 0) return;
+
+  const res = await db.query('SELECT treasury FROM factions WHERE id = ?', [f.factionId]);
+  const currentTreasury = res[0].treasury;
+  
+  if (currentTreasury < amount) {
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`O tesouro não possui essa quantia (Atual: ${currentTreasury}g).`]);
+    return;
+  }
+
+  const economy = require('./economy-service');
+  await db.query('UPDATE factions SET treasury = treasury - ? WHERE id = ?', [amount, f.factionId]);
+  await economy.addGold(characterId, amount);
+
+  if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você sacou ${amount}g do tesouro de ${f.name}.`]);
+  console.log(`[faction] Leader ${characterId} withdrew ${amount}g from faction ${f.factionId}.`);
 }
 
 // ── Comandos de Staff ──────────────────────────────────────────────────────────
@@ -172,9 +210,11 @@ async function setHoldControl(actorId, factionId, holdId) {
 module.exports = {
   initFactionService,
   getFactionTag,
+  getMemberFactionInfo,
   listFactions,
   showMyFaction,
   donate,
+  withdrawFaction,
   createFaction,
   addMember,
   removeMember,

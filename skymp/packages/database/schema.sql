@@ -270,3 +270,74 @@ INSERT IGNORE INTO `holds` (`id`, `name`, `tax_rate`) VALUES
   ('morthal',     'Hjaalmarch',           0.04),
   ('dawnstar',    'Planície Pálida',      0.05),
   ('winterhold',  'Winterhold',           0.03);
+
+-- ═══════════════════════════════════════════════════
+-- SISTEMAS ESTACIONADOS — Cavalos, Disfarces, Magia, Doenças
+-- ═══════════════════════════════════════════════════
+
+-- 13. Cavalos Persistentes
+CREATE TABLE IF NOT EXISTS `horses` (
+  `id`             INT AUTO_INCREMENT PRIMARY KEY,
+  `name`           VARCHAR(64)  NOT NULL DEFAULT 'Cavalo',
+  `base_id`        INT          NOT NULL COMMENT 'FormID da raça (ex: 0x00067C43)',
+  `owner_character_id` INT DEFAULT NULL,
+  `health`         FLOAT NOT NULL DEFAULT 500.0,
+  `speed_bonus`    FLOAT NOT NULL DEFAULT 0.0  COMMENT 'Bônus de velocidade treinada',
+  `last_pos_x`     FLOAT DEFAULT NULL,
+  `last_pos_y`     FLOAT DEFAULT NULL,
+  `last_pos_z`     FLOAT DEFAULT NULL,
+  `last_cell`      VARCHAR(64) DEFAULT NULL,
+  `for_sale`       TINYINT(1) NOT NULL DEFAULT 0,
+  `sale_price`     INT NOT NULL DEFAULT 0,
+  `created_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_horse_owner` FOREIGN KEY (`owner_character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- 14. Disfarces e Identidades Falsas
+CREATE TABLE IF NOT EXISTS `disguises` (
+  `id`             INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id`   INT NOT NULL,
+  `fake_name`      VARCHAR(128) NOT NULL,
+  `fake_faction_id` INT DEFAULT NULL  COMMENT 'Facção fingida',
+  `is_active`      TINYINT(1) NOT NULL DEFAULT 0,
+  `detection_roll` INT NOT NULL DEFAULT 15  COMMENT 'DC de Percepção para detectar (1-20)',
+  `created_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uk_char_disguise` (`character_id`),
+  CONSTRAINT `fk_disguise_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 15. Licenças de Magia (Spells Aprovados para RP)
+CREATE TABLE IF NOT EXISTS `magic_licenses` (
+  `id`             INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id`   INT NOT NULL,
+  `spell_name`     VARCHAR(128) NOT NULL,
+  `spell_base_id`  INT NOT NULL  COMMENT 'FormID do feitiço',
+  `school`         VARCHAR(32) NOT NULL DEFAULT 'alteration' COMMENT 'alteration, conjuration, destruction, illusion, restoration',
+  `level`          VARCHAR(16) NOT NULL DEFAULT 'novice' COMMENT 'novice, apprentice, adept, expert, master',
+  `granted_by_character_id` INT DEFAULT NULL,
+  `narrative_justification` TEXT DEFAULT NULL,
+  `granted_at`     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_magic_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 15.1. Usos de Magia Não Autorizada (para audit)
+CREATE TABLE IF NOT EXISTS `magic_violations` (
+  `id`             INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id`   INT NOT NULL,
+  `spell_base_id`  INT NOT NULL,
+  `location`       VARCHAR(64) DEFAULT NULL,
+  `detected_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_violation_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 16. Doenças Persistentes
+CREATE TABLE IF NOT EXISTS `character_diseases` (
+  `id`             INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id`   INT NOT NULL,
+  `disease`        VARCHAR(64)  NOT NULL COMMENT 'rockjoint, ataxia, brain_rot, witbane, rattles, vampirism_stage1',
+  `severity`       INT NOT NULL DEFAULT 1  COMMENT '1=Leve, 2=Moderada, 3=Grave',
+  `contracted_at`  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `cured_at`       TIMESTAMP NULL DEFAULT NULL,
+  `is_active`      TINYINT(1) NOT NULL DEFAULT 1,
+  CONSTRAINT `fk_disease_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;

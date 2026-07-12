@@ -1,72 +1,27 @@
-# SkyMP Heavy RP
+# SkyMP Heavy RP Ecosystem
 
-Projeto de planejamento e implementacao de um servidor publico Heavy RP de Skyrim usando SkyMP.
+Bem-vindo ao repositório principal do servidor SkyMP Heavy RP. 
+Este projeto é uma plataforma multijogador de *Roleplay Estrito* para Skyrim, focada em estabilidade, autoridade do servidor, e imersão sem comprometer a sincronização de rede.
 
-## Comece Aqui
+## Documentação Oficial do Projeto
 
-O projeto deve comecar pela Fase 0: validar SkyMP tecnicamente antes de construir sistemas de RP complexos.
+A documentação do projeto está dividida em diretórios para fácil manutenção técnica e legal. Por favor, leia os seguintes documentos antes de propor alterações na *Load Order* ou nos módulos Node.js:
 
-Leia nesta ordem:
+1. **[Arquitetura do Sistema (ARCHITECTURE.md)](docs/ARCHITECTURE.md):** Contém a explicação de como o Banco de Dados, o Bot do Discord, o Painel Web, o Launcher e o Gamemode nativo conversam entre si.
+2. **[Diretrizes de Modding (MODDING_GUIDELINES.md)](docs/MODDING_GUIDELINES.md):** A nossa Bíblia de arquitetura de mods. Explica as regras de ouro, as fases de lançamento (0A, 0B, 1, Alfa, Beta) e a Lista Negra de mods proibidos (como JK's Skyrim ou Survival Scripts no cliente).
+3. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
 
-1. `SKYMP_RP_DEVELOPMENT_PLAN.md`
-2. `docs/roadmap/PHASE_0_START.md`
-3. `docs/roadmap/PHASE_0_TEST_LOG.md`
-4. `docs/technical/SKYMP_SERVER_SETUP.md`
-5. `docs/technical/PHASE_0_FILE_LAYOUT.md`
-6. `docs/technical/SERVER_OPTIONS_SCHEMA.md`
-7. `docs/technical/CURRENT_SERVER_REFERENCE_STUDY.md`
-8. `docs/technical/HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md`
-9. `docs/technical/CURRENT_SERVER_FEATURE_MATRIX.md`
-10. `docs/rules/PUBLIC_RULES_LAUNCH_OUTLINE.md`
+## Como Executar o Servidor (Desenvolvimento)
 
-## Primeira Meta
+Para facilitar a vida dos desenvolvedores, criamos um script de orquestração automatizado que inicia todas as dependências em terminais paralelos.
 
-```text
-Marco 0.1 - Teste de Conexao SkyMP
-- Servidor SkyMP rodando localmente
-- Dois clientes conectados
-- Versao do Skyrim documentada
-- Portas documentadas
-- Driver de persistencia escolhido para MVP
-- Crash/dessync documentados
-- Decisao: continuar, corrigir ou trocar abordagem
-```
+1. Inicie o seu servidor local de banco de dados (MariaDB/MySQL).
+2. Navegue até a pasta `scripts/phase0/`.
+3. Execute o script `Start-AllServices.ps1` com o PowerShell.
 
-## Decisao Tecnica Inicial
+Isso irá despachar simultaneamente:
+- O Painel Web do Staff (`apps/web`)
+- O Bot de Autenticação do Discord (`apps/bot-discord`)
+- O Gamemode SkyMP Nativo (`skymp/gamemode`)
 
-- SkyMP atual como base tecnica.
-- Red House Public apenas como laboratorio de referencia.
-- Estado nativo SkyMP separado da plataforma RP.
-- PostgreSQL para whitelist, staff, logs, economia RP e painel.
-- MongoDB avaliado para persistencia nativa SkyMP em producao.
-- Vanilla spawn seletivo no MVP.
-- Admin por senha, hot reload e `offlineMode` proibidos em producao.
-
-## Estado Atual
-
-O repositorio contem documentos de planejamento, regras, staff, arquitetura tecnica, scripts locais da Fase 0, gamemode minimo e prototipos iniciais.
-
-O boot local do servidor SkyMP esta confirmado. A versao `SkyrimSE.exe 1.6.1170.0` foi verificada. O gamemode `skymp/gamemode/phase0-basic.js` carregou com API `mp` disponivel. O primeiro e o segundo cliente conectaram em laboratorio local com `offlineMode=true`, e o spawn seguro foi ajustado para interior.
-
-Ainda falta concluir a prova tecnica com dois clientes em ambientes separados: visibilidade, movimento, troca de celula, inventario, equipamento, morte/respawn controlado e persistencia apos restart.
-
-## Configs Iniciais
-
-Templates seguros foram criados em `skymp/config/`.
-
-Arquivos reais como `server-settings.local.json`, `database.local.json`, builds SkyMP, `data/`, `world/`, masters do Skyrim e secrets nao devem ser versionados.
-
-## Scripts da Fase 0
-
-```powershell
-.\scripts\phase0\Initialize-LocalConfig.ps1
-.\scripts\phase0\Prepare-SkyMPDataDir.ps1
-.\scripts\phase0\Install-SkyMPServerArtifact.ps1
-.\scripts\phase0\Start-Phase0Server.ps1 -Seconds 12
-.\scripts\phase0\Install-SkyMPClient.ps1
-.\scripts\phase0\Start-SkyMPClient.ps1
-```
-
-O segundo comando roda em modo seco por padrao. Use `-CopyMasters` apenas quando for preparar a pasta local real do servidor.
-
-Para teste local com `profileId`, reinstale o artefato do servidor com `-OfflineMode`. Isso e apenas para Fase 0 local, nao para staging/producao.
+*(Para testar como jogador, basta rodar o aplicativo de interface do Launcher na pasta `apps/launcher`).*

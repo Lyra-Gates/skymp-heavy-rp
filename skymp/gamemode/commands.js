@@ -140,6 +140,14 @@ function handleChatInput(actorId, text) {
         jobs.chopWood(actorId);
         break;
 
+      case '/mineore':
+        require('./jobs-service').mineOre(actorId);
+        break;
+
+      case '/fish':
+        require('./jobs-service').catchFish(actorId);
+        break;
+
       case '/sellwood':
         const charDataForSell = getActiveCharacterData(actorId);
         if (charDataForSell) {
@@ -331,6 +339,13 @@ function handleChatInput(actorId, text) {
         if (mkChar) require('./economy-regional').showMarketInfo(actorId, mkChar.characterId);
         break;
 
+      case '/holdwithdraw':
+        if (args) {
+          const hwChar = getActiveCharacterData(actorId);
+          if (hwChar) require('./economy-regional').withdrawHoldTreasury(actorId, hwChar.characterId, parseInt(args));
+        }
+        break;
+
       case '/settax':
         if (args) {
           const taxParts = args.split(' ');
@@ -340,6 +355,8 @@ function handleChatInput(actorId, text) {
 
       // ── Fase Beta: Crafting ───────────────────────────────────────────────
       case '/craft':
+      case '/forge':
+      case '/smelt':
         if (args) {
           const craftChar = getActiveCharacterData(actorId);
           if (craftChar) require('./crafting-service').craftItem(actorId, craftChar.characterId, parseInt(args));
@@ -364,6 +381,13 @@ function handleChatInput(actorId, text) {
         if (args) {
           const fdChar = getActiveCharacterData(actorId);
           if (fdChar) require('./faction-service').donate(actorId, fdChar.characterId, parseInt(args));
+        }
+        break;
+
+      case '/fwithdraw':
+        if (args) {
+          const fwChar = getActiveCharacterData(actorId);
+          if (fwChar) require('./faction-service').withdrawFaction(actorId, fwChar.characterId, parseInt(args));
         }
         break;
 

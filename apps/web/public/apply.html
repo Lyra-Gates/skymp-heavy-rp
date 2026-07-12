@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyMP Heavy RP - Aplicação de Whitelist</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #ffffff;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background-color: #2a2a2a;
+            color: #fff;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 150px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .discord-btn {
+            background-color: #5865F2;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-decoration: none;
+        }
+        .discord-btn:hover {
+            background-color: #4752C4;
+        }
+        #application-status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status-pending { background-color: #ff9800; color: #fff; }
+        .status-approved { background-color: #4CAF50; color: #fff; }
+        .status-rejected { background-color: #f44336; color: #fff; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Aplicação de Whitelist</h1>
+    
+    <div id="auth-section">
+        <p>Para enviar ou verificar sua whitelist, faça login com o Discord.</p>
+        <a href="/api/auth/discord" class="discord-btn" style="color:white; padding:12px; border-radius:4px; text-align:center;">Login com Discord</a>
+    </div>
+
+    <div id="status-section" class="hidden">
+        <h2>Seu Status: <span id="status-text">Carregando...</span></h2>
+        <div id="application-status"></div>
+        <button id="logout-btn" style="background-color:#d32f2f; margin-top:15px;">Sair</button>
+    </div>
+
+    <div id="form-section" class="hidden">
+        <p>Preencha os dados do seu personagem abaixo. Lembre-se das regras de Heavy RP.</p>
+        <form id="apply-form">
+            <div class="form-group">
+                <label for="first_name">Nome do Personagem</label>
+                <input type="text" id="first_name" name="first_name" required placeholder="Ex: Ralof">
+            </div>
+            
+            <div class="form-group">
+                <label for="last_name">Sobrenome / Apelido</label>
+                <input type="text" id="last_name" name="last_name" required placeholder="Ex: de Riverwood">
+            </div>
+
+            <div class="form-group">
+                <label for="biography">Biografia e Motivções</label>
+                <textarea id="biography" name="biography" required placeholder="Conte a história do seu personagem, seus objetivos e fraquezas..."></textarea>
+            </div>
+
+            <button type="submit">Enviar Aplicação</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    async function checkStatus() {
+        try {
+            const response = await fetch('/api/me');
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('auth-section').classList.add('hidden');
+                
+                if (data.application) {
+                    document.getElementById('status-section').classList.remove('hidden');
+                    const statusText = document.getElementById('status-text');
+                    const statusBox = document.getElementById('application-status');
+                    
+                    statusText.textContent = data.application.status.toUpperCase();
+                    statusBox.style.display = 'block';
+                    
+                    if(data.application.status === 'pending') {
+                        statusBox.className = 'status-pending';
+                        statusBox.textContent = 'Sua aplicação está sendo analisada pela staff. Aguarde.';
+                    } else if (data.application.status === 'approved') {
+                        statusBox.className = 'status-approved';
+                        statusBox.textContent = 'Parabéns! Sua whitelist foi aprovada.';
+                    } else if (data.application.status === 'rejected') {
+                        statusBox.className = 'status-rejected';
+                        statusBox.textContent = 'Sua aplicação foi rejeitada. Verifique seu Discord para notas da staff.';
+                    }
+                } else {
+                    document.getElementById('form-section').classList.remove('hidden');
+                    document.getElementById('status-section').classList.remove('hidden');
+                    document.getElementById('status-section').querySelector('h2').style.display = 'none';
+                    document.getElementById('logout-btn').style.display = 'block';
+                }
+            } else {
+                // Não logado
+                document.getElementById('auth-section').classList.remove('hidden');
+            }
+        } catch (error) {
+            console.error('Erro ao buscar status:', error);
+        }
+    }
+
+    document.getElementById('apply-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const first_name = document.getElementById('first_name').value;
+        const last_name = document.getElementById('last_name').value;
+        const biography = document.getElementById('biography').value;
+
+        try {
+            const res = await fetch('/api/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ first_name, last_name, biography })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                alert('Aplicação enviada com sucesso!');
+                location.reload();
+            } else {
+                alert('Erro: ' + result.error);
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Erro de conexão.');
+        }
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        location.reload();
+    });
+
+    checkStatus();
+</script>
+
+</body>
+</html>
