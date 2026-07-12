@@ -84,8 +84,10 @@ Use este arquivo para registrar evidencias reais dos testes SkyMP.
 ## Teste 0.7 - Chat Local
 
 - Resultado esperado: mensagens por proximidade.
-- Resultado real: nao testado; pertence ao prototipo da Fase 1.
-- Status: pendente.
+- Resultado real: prototipo server-side implementado para comandos RP locais, com parser, alcance por tipo de fala, anti-spam simples, logs e fallback para console. Ainda nao foi validado em jogo com dois clientes.
+- Comandos cobertos: `/me`, `/do`, `/ooc`, `/b`, `/s`, `/sussurrar`, `/g`, `/gritar`, `/roll`, `/try`, `/report` e chat local padrao.
+- Evidencia local: `npm test` em `skymp/gamemode` cobre parser, alcance, rolagem, report e anti-spam.
+- Status: implementado em laboratorio; pendente validacao funcional em jogo.
 
 ## Teste 0.8 - Boot Fase 0 Limpo
 

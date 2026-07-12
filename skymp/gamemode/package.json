@@ -4,7 +4,7 @@
   "description": "",
   "main": "phase0-basic.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node rp-chat-service.test.js"
   },
   "keywords": [],
   "author": "",

@@ -54,7 +54,15 @@ Regras tecnicas:
 - Logs para OOC, report e comandos staff.
 - Anti-spam simples.
 
-Decisao: ADOTAR como primeiro sistema RP.
+Status tecnico:
+
+- Prototipo implementado em `skymp/gamemode/rp-chat-service.js`.
+- Integrado ao handler CEF `cef::chat:send` via `skymp/gamemode/commands.js`.
+- Comandos cobertos: `/me`, `/do`, `/ooc`, `/b`, `/s`, `/sussurrar`, `/g`, `/gritar`, `/roll`, `/try`, `/report`, `/rphelp` e chat local padrao.
+- Teste unitario local: `npm test` em `skymp/gamemode`.
+- Pendente: validar visualmente em jogo com dois clientes e registrar alcance/celula no log da Fase 0.
+
+Decisao: ADOTADO como primeiro sistema RP, ainda sem promover para alfa.
 
 ### 2. Mural de Anuncios por Cidade
 

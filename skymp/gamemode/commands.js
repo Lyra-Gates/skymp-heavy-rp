@@ -1,4 +1,5 @@
-const whitelist = require('./whitelist');
+const db = require('./database');
+const { createRpChatService } = require('./rp-chat-service');
 
 // Cache em memoria dos personagens ativos no servidor
 // Chave: actorId (number), Valor: { firstName, lastName, accountId, profileId }
@@ -35,6 +36,25 @@ function getCharacterName(actorId) {
   return `Player_${actorId.toString(16)}`;
 }
 
+async function logRpChatEvent(event) {
+  const details = JSON.stringify({
+    type: event.type,
+    actorId: `0x${event.actorId.toString(16)}`,
+    characterId: event.characterId || null,
+    message: event.message,
+    radius: event.radius
+  });
+
+  try {
+    await db.query(
+      'INSERT INTO audit_logs (action, actor_account_id, target_account_id, details) VALUES (?, ?, ?, ?)',
+      [`rp_chat:${event.type}`, event.accountId || null, null, details]
+    );
+  } catch (err) {
+    console.log(`[rp-chat-log] ${details}`);
+  }
+}
+
 // Envia uma notificacao vanilla do Skyrim na tela do jogador
 function sendNotification(actorId, message) {
   if (typeof mp === 'undefined') return;
@@ -62,11 +82,17 @@ function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
     if (!sourceLoc || !sourceLoc.pos) return;
     
     const sourcePos = sourceLoc.pos;
+    const sourceCell = sourceLoc.cellOrWorldSpaceId || sourceLoc.cellId || sourceLoc.worldOrCell;
 
     for (const neighborId of neighbors) {
       if (mp.get(neighborId, 'type') === 'MpActor' && neighborId !== sourceActorId) {
         const neighborLoc = mp.get(neighborId, 'locationalData');
         if (neighborLoc && neighborLoc.pos) {
+          const neighborCell = neighborLoc.cellOrWorldSpaceId || neighborLoc.cellId || neighborLoc.worldOrCell;
+          if (sourceCell && neighborCell && sourceCell !== neighborCell) {
+            continue;
+          }
+
           const neighborPos = neighborLoc.pos;
           
           // Distancia Euclidiana 3D
@@ -86,11 +112,21 @@ function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
   }
 }
 
+const rpChat = createRpChatService({
+  getCharacterName,
+  getCharacterData: getActiveCharacterData,
+  sendNotification,
+  broadcastProximityMessage,
+  logEvent: logRpChatEvent
+});
+
 // Tratamento de mensagens digitadas no chat
 function handleChatInput(actorId, text) {
   if (!text || typeof text !== 'string') return;
-  
-  const charName = getCharacterName(actorId);
+
+  if (rpChat.handleChatInput(actorId, text)) {
+    return;
+  }
 
   // Se comecar com "/", trata-se de um comando
   if (text.startsWith('/')) {
@@ -99,42 +135,6 @@ function handleChatInput(actorId, text) {
     const args = parts.slice(1).join(' ');
 
     switch (command) {
-      case '/me':
-        if (!args) {
-          sendNotification(actorId, 'Uso correto: /me <acao>');
-          return;
-        }
-        broadcastProximityMessage(actorId, `* ${charName} ${args}`, 1500);
-        break;
-
-      case '/do':
-        if (!args) {
-          sendNotification(actorId, 'Uso correto: /do <descricao>');
-          return;
-        }
-        broadcastProximityMessage(actorId, `* ${args} (( ${charName} ))`, 1500);
-        break;
-
-      case '/ooc':
-        if (!args) {
-          sendNotification(actorId, 'Uso correto: /ooc <mensagem>');
-          return;
-        }
-        broadcastProximityMessage(actorId, `(( OOC: ${charName}: ${args} ))`, 2000);
-        break;
-
-      case '/roll':
-        let max = 20;
-        if (args) {
-          const parsed = parseInt(args);
-          if (!isNaN(parsed) && parsed > 0) {
-            max = parsed;
-          }
-        }
-        const rollResult = Math.floor(Math.random() * max) + 1;
-        broadcastProximityMessage(actorId, `* ${charName} rolou um dado d${max} e tirou: ${rollResult}`, 1500);
-        break;
-
       case '/chopwood':
         const jobs = require('./jobs-service');
         jobs.chopWood(actorId);
@@ -423,6 +423,7 @@ function handleChatInput(actorId, text) {
 
   } else {
     // Chat padrao (Falar na taverna/local)
+    const charName = getCharacterName(actorId);
     broadcastProximityMessage(actorId, `${charName} diz: ${text}`, 1200);
   }
 }
