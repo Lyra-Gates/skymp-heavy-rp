@@ -75,7 +75,7 @@ Campos minimos a revisar:
   "offlineMode": false,
   "databaseDriver": "file",
   "databaseName": "world",
-  "gamemodePath": "gamemode/index.js",
+  "gamemodePath": "gamemode/phase0-basic.js",
   "startPoints": [
     {
       "pos": [0, 0, 0],
@@ -128,13 +128,37 @@ Campos minimos a revisar:
 - Porta comum: `1234`.
 - Proibido em producao.
 
+## 7. Flags do Gamemode
+
+O gamemode `phase0-basic.js` deve iniciar com foco em rede, spawn, movimento e persistencia basica.
+
+Servicos avancados ficam desligados por padrao e so devem ser ligados quando o schema e o teste correspondente estiverem prontos:
+
+```env
+ENABLE_NPC_CLEANER=false
+ENABLE_DEATH_SERVICE=false
+ENABLE_JUSTICE_SERVICE=false
+ENABLE_VOIP_SERVICE=false
+ENABLE_SURVIVAL_SERVICE=false
+ENABLE_REGIONAL_ECONOMY=false
+ENABLE_FACTION_SERVICE=false
+```
+
+Para laboratorio local com `offlineMode=true`, auto-whitelist de `profileId` 1/2 so pode ser usada com:
+
+```env
+ALLOW_LOCAL_AUTOWHITELIST=true
+```
+
+Em producao, `NODE_ENV=production` deve impedir auto-whitelist mesmo que a flag seja configurada por engano.
+
 ### Chromium DevTools
 
 - Uso: debug local do browser embutido.
 - Porta comum: `9000`.
 - Proibido em producao.
 
-## 7. Testes Minimos da Fase 0
+## 8. Testes Minimos da Fase 0
 
 - Servidor inicia sem erro.
 - Servidor aparece no destino esperado.
@@ -149,7 +173,7 @@ Campos minimos a revisar:
 - Restart do servidor preserva estado esperado.
 - Logs registram conexao, spawn e disconnect.
 
-## 8. Bloqueios de Producao
+## 9. Bloqueios de Producao
 
 Producao nao pode abrir enquanto qualquer item abaixo estiver ativo:
 
@@ -164,7 +188,7 @@ Producao nao pode abrir enquanto qualquer item abaixo estiver ativo:
 - Modlist sem controle de versao.
 - Spawn sem checar personagem aprovado.
 
-## 9. Evidencia Esperada
+## 10. Evidencia Esperada
 
 Ao final da Fase 0, registrar:
 
@@ -178,7 +202,7 @@ Ao final da Fase 0, registrar:
 - Lista de crashes/dessync.
 - Decisao: continuar, corrigir ou trocar abordagem.
 
-## 10. Manual de Instalação do Cliente SkyMP (Fase 0)
+## 11. Manual de Instalação do Cliente SkyMP (Fase 0)
 
 Para testadores ou desenvolvedores realizando a instalação manual do cliente SkyMP no ambiente local:
 
@@ -225,4 +249,3 @@ Edite ou crie o arquivo `Data/Platform/Plugins/skymp5-client-settings.txt` na pa
 1. Certifique-se de que o servidor local esteja rodando.
 2. Inicie o jogo executando o `skse64_loader.exe` na pasta raiz do Skyrim.
 3. O mod SkyrimPlatform irá carregar o plugin `skymp5-client.js` e iniciar a conexão automática com o servidor configurado.
-

@@ -1,8 +1,9 @@
-require('dotenv').config({ path: '../../skymp/gamemode/.env' });
+const path    = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../skymp/gamemode/.env') });
 const express = require('express');
 const session = require('express-session');
 const mysql   = require('mysql2/promise');
-const path    = require('path');
 const cors    = require('cors');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;

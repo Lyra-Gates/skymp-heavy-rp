@@ -87,6 +87,24 @@ Use este arquivo para registrar evidencias reais dos testes SkyMP.
 - Resultado real: nao testado; pertence ao prototipo da Fase 1.
 - Status: pendente.
 
+## Teste 0.8 - Boot Fase 0 Limpo
+
+- Data: 2026-07-12
+- Resultado esperado: servidor inicia por 15 segundos, abre portas principais e nao gera erro critico de schema ou servicos avancados.
+- Resultado real: servidor ficou vivo apos 15 segundos.
+- Portas observadas:
+  - TCP `127.0.0.1:3000`
+  - UDP `127.0.0.1:7777`
+- Logs relevantes:
+  - `Gamemode path is "D:\Documents\New project\skymp\gamemode\phase0-basic.js"`
+  - `[phase0] SkyMP Heavy RP gamemode loaded`
+  - `[database] MySQL connection pool initialized successfully`
+  - `[phase0] Database pool initialized`
+  - `[phase0] mp API available`
+  - `Server resources folder is listening on 3000`
+- Observacao: servicos avancados de RP ficam desligados por padrao na Fase 0 para evitar dependencias prematuras de schema, VOIP, economia regional, faccoes, justica e death polling customizado.
+- Status: aprovado para boot tecnico local.
+
 ## Testes Ainda Obrigatorios Para Fechar Fase 0
 
 - Dois clientes em maquinas/ambientes separados.
@@ -109,6 +127,18 @@ Resultado real: personagem spawnou no ar e morreu por queda.
 Gravidade: media.
 Solucao: alterar spawn inicial para celula interior segura.
 Bloqueia progresso? nao, mitigado por configuracao.
+```
+
+```text
+ID: BUG-002
+Data: 2026-07-12
+Ambiente: Local
+Passos: Rodar boot rapido com gamemode carregando servicos avancados por padrao.
+Resultado esperado: Fase 0 iniciar limpa para teste de rede/spawn.
+Resultado real: unhandledRejection por tabelas ausentes como holds, faction_members e prison_records; death polling tambem gerava erro de propriedade/metodo.
+Gravidade: alta para Fase 0.
+Solucao: desligar servicos avancados por padrao e habilitar somente por flags explicitas no ambiente.
+Bloqueia progresso? mitigado; proximo bloqueio e validacao com dois clientes reais.
 ```
 
 ## Decisao Atual da Fase 0

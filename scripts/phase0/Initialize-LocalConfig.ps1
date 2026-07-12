@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 
-$configDir = Join-Path (Resolve-Path ".") "skymp\config"
+$rootDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$configDir = Join-Path $rootDir "skymp\config"
 
 $copies = @(
   @{

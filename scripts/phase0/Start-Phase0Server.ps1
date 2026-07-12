@@ -4,7 +4,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$server = Join-Path (Resolve-Path ".") "skymp\server"
+$rootDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$server = Join-Path $rootDir "skymp\server"
 $entry = Join-Path $server "dist_back\skymp5-server.js"
 
 if (-not (Test-Path -LiteralPath $entry)) {

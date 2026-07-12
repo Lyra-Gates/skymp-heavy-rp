@@ -19,7 +19,7 @@
   "offlineMode": false,
   "databaseDriver": "file",
   "databaseName": "world",
-  "gamemodePath": "gamemode/index.js",
+  "gamemodePath": "gamemode/phase0-basic.js",
   "startPoints": [
     {
       "pos": [35, -165, -189],
