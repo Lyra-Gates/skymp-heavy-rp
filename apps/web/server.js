@@ -9,6 +9,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 
 const app  = express();
 const PORT = process.env.PANEL_PORT || 3001;
+const INTERNAL_API_SECRET = requireEnv('INTERNAL_API_SECRET');
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -53,9 +54,9 @@ passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
 passport.use(new DiscordStrategy({
-    clientID: process.env.DISCORD_CLIENT_ID || 'dummy_client_id',
-    clientSecret: process.env.DISCORD_CLIENT_SECRET || 'dummy_secret',
-    callbackURL: process.env.DISCORD_CALLBACK_URL || 'http://localhost:3001/api/auth/discord/callback',
+    clientID: requireEnv('DISCORD_CLIENT_ID'),
+    clientSecret: requireEnv('DISCORD_CLIENT_SECRET'),
+    callbackURL: process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/api/auth/discord/callback`,
     scope: ['identify']
 }, async (accessToken, refreshToken, profile, done) => {
     try {
@@ -81,10 +82,17 @@ function requireAuth(req, res, next) {
   res.status(401).json({ error: 'Não autenticado' });
 }
 
-function requireStaff(req, res, next) {
-  if (!req.isAuthenticated || !req.isAuthenticated()) return res.status(401).json({ error: 'Não autenticado' });
-  // TODO: Integrar verificação real de cargos staff via DB ou Discord
-  return next(); 
+async function requireStaff(req, res, next) {
+  if (!req.isAuthenticated || !req.isAuthenticated()) return res.status(401).json({ error: 'Nao autenticado' });
+  try {
+    const [rows] = await pool.execute('SELECT vip_level FROM accounts WHERE id = ? LIMIT 1', [req.user.accountId]);
+    const vipLevel = rows.length > 0 ? Number(rows[0].vip_level) : 0;
+    if (vipLevel < 10) return res.status(403).json({ error: 'Acesso staff negado' });
+    req.staff = { vipLevel };
+    return next();
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 }
 
 app.get('/api/auth/discord', passport.authenticate('discord'));
@@ -207,7 +215,10 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
         try {
             await fetch('http://localhost:3002/api/sync-role', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Internal-Secret': INTERNAL_API_SECRET
+                },
                 body: JSON.stringify({ discord_id: idRows[0].discord_id, status })
             });
         } catch (e) {

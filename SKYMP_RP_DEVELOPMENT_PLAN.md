@@ -1,5 +1,7 @@
 # Servidor SkyMP Heavy RP Publico - Plano de Desenvolvimento
 
+> **Status Atual (Auditoria Recente):** A Fase 0 esta parcialmente validada em laboratorio local: boot, primeiro cliente, segundo perfil por log, spawn inicial e persistencia basica possuem evidencia. Antes de Alfa, ainda faltam dois ambientes reais, validacao visual de movimento, mudanca de celula, inventario/equipamento, morte/respawn controlado e persistencia apos restart.
+
 ## 1. Visao
 
 Criar um servidor publico de Skyrim Heavy RP usando SkyMP, com whitelist rigida, personagens persistentes, economia controlada, ferramentas de staff e modlist estavel gerenciada por launcher ou instalador guiado.

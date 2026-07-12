@@ -9,6 +9,20 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 
 const GUILD_ID = process.env.GUILD_ID;
 const WHITELIST_ROLE_ID = process.env.WHITELIST_ROLE_ID;
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
+
+function requireEnv(name) {
+    const value = process.env[name];
+    if (!value) {
+        throw new Error(`${name} must be set`);
+    }
+    return value;
+}
+
+requireEnv('DISCORD_BOT_TOKEN');
+requireEnv('GUILD_ID');
+requireEnv('WHITELIST_ROLE_ID');
+requireEnv('INTERNAL_API_SECRET');
 
 client.once('ready', () => {
     console.log(`[discord-bot] Bot logado como ${client.user.tag}`);
@@ -17,8 +31,12 @@ client.once('ready', () => {
 // Endpoint para receber webhook do Painel Web
 app.post('/api/sync-role', async (req, res) => {
     const { discord_id, status } = req.body;
+    if (req.get('X-Internal-Secret') !== INTERNAL_API_SECRET) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
     
     if (!discord_id) return res.status(400).json({ error: 'Missing discord_id' });
+    if (!['approved', 'rejected', 'pending'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
     if (!GUILD_ID || !WHITELIST_ROLE_ID) return res.status(500).json({ error: 'GUILD_ID or WHITELIST_ROLE_ID not configured' });
     
     try {
@@ -33,7 +51,7 @@ app.post('/api/sync-role', async (req, res) => {
         if (status === 'approved') {
             await member.roles.add(WHITELIST_ROLE_ID);
             console.log(`[discord-bot] Cargo adicionado para ${discord_id}`);
-        } else if (status === 'rejected') {
+        } else if (status === 'rejected' || status === 'pending') {
             await member.roles.remove(WHITELIST_ROLE_ID);
             console.log(`[discord-bot] Cargo removido para ${discord_id}`);
         }

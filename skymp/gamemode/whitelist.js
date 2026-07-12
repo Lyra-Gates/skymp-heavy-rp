@@ -4,6 +4,11 @@ const inventoryService = require('./inventory-service');
 const adminService = require('./admin-service');
 const survivalService = require('./survival-service');
 
+function allowLocalAutoWhitelist(profileId) {
+  if (process.env.NODE_ENV === 'production') return false;
+  if (process.env.ALLOW_LOCAL_AUTOWHITELIST !== 'true') return false;
+  return profileId === 1 || profileId === 2;
+}
 
 async function checkWhitelist(userId, profileId, actorId) {
   try {
@@ -20,8 +25,13 @@ async function checkWhitelist(userId, profileId, actorId) {
 
     let account = null;
     if (accountRows.length === 0) {
+      if (!allowLocalAutoWhitelist(profileId)) {
+        console.log(`[whitelist] Account not found for profileId: ${profileId}. Kicking user ${userId}...`);
+        if (typeof mp !== 'undefined') mp.kick(userId);
+        return false;
+      }
       console.log(`[whitelist] Account not found for profileId: ${profileId}. Auto-registering local account...`);
-      // Auto-registrar para facilitar o teste local
+      // Only allowed for explicit local laboratory testing.
       const insertAcc = await db.query(`INSERT INTO accounts (status) VALUES ('active')`);
       const accountId = insertAcc.insertId;
       await db.query(
@@ -47,8 +57,7 @@ async function checkWhitelist(userId, profileId, actorId) {
     );
 
     if (wlRows.length === 0) {
-      // Auto-aprovar apenas o profileId 2 para passar nos testes locais iniciais
-      if (profileId === 2 || profileId === 1) {
+      if (allowLocalAutoWhitelist(profileId)) {
         console.log(`[whitelist] Auto-approving whitelist application for profileId ${profileId}...`);
         await db.query(
           `INSERT INTO whitelist_applications (account_id, status, reviewer_notes) VALUES (?, 'approved', 'Auto-approved for local test')`,
@@ -69,8 +78,7 @@ async function checkWhitelist(userId, profileId, actorId) {
 
     let character = null;
     if (charRows.length === 0) {
-      // Auto-criar personagem aprovado apenas para profileId 2 e 1
-      if (profileId === 2 || profileId === 1) {
+      if (allowLocalAutoWhitelist(profileId)) {
         const firstName = profileId === 2 ? 'Jarl' : 'Jon';
         const lastName = profileId === 2 ? 'Balgruuf' : 'Battleborn';
         console.log(`[whitelist] Auto-creating approved character: ${firstName} ${lastName}...`);

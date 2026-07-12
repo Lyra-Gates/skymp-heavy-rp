@@ -11,6 +11,12 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 2. **[Diretrizes de Modding (MODDING_GUIDELINES.md)](docs/MODDING_GUIDELINES.md):** A nossa Bíblia de arquitetura de mods. Explica as regras de ouro, as fases de lançamento (0A, 0B, 1, Alfa, Beta) e a Lista Negra de mods proibidos (como JK's Skyrim ou Survival Scripts no cliente).
 3. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
 
+## Status Atual do Projeto (Auditoria Recente)
+
+- **Fase 0 parcialmente validada**: O boot local, conexão de cliente, spawn inicial, segundo perfil por log e persistência básica foram testados em laboratório. A validação visual com dois ambientes, mudança de célula, inventário/equipamento e persistência pós-restart ainda seguem pendentes.
+- **Integração CEF / VOIP em protótipo**: Chat local e backend VOIP existem no gamemode, mas ainda precisam de validação funcional em sessão real antes de serem tratados como operacionais para alfa.
+- **TODOs Pendentes**: A configuração dos FormIDs reais dos plugins (ex: `ITEM_FISHING_ROD`) no sistema de empregos.
+
 ## Como Executar o Servidor (Desenvolvimento)
 
 Para facilitar a vida dos desenvolvedores, criamos um script de orquestração automatizado que inicia todas as dependências em terminais paralelos.

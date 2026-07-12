@@ -1,4 +1,6 @@
 references/
+node_modules/
+apps/*/node_modules/
 skymp/server/
 skymp/artifacts/
 skymp/client-backups/
