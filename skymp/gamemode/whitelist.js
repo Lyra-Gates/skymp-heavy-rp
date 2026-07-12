@@ -2,7 +2,10 @@ const db = require('./database');
 const commands = require('./commands');
 const inventoryService = require('./inventory-service');
 const adminService = require('./admin-service');
-const survivalService = require('./survival-service');
+const characterState = require('./core/character-state');
+// NOTA: survival-service NÃO é importado aqui.
+// Módulos PARKED são inicializados exclusivamente pelo module-registry
+// quando ENABLE_SURVIVAL_SERVICE=true. Não carregar módulos PARKED no boot.
 
 function allowLocalAutoWhitelist(profileId) {
   if (process.env.NODE_ENV === 'production') return false;
@@ -31,7 +34,7 @@ async function checkWhitelist(userId, profileId, actorId) {
         return false;
       }
       console.log(`[whitelist] Account not found for profileId: ${profileId}. Auto-registering local account...`);
-      // Only allowed for explicit local laboratory testing.
+      // Apenas para laboratório local. NUNCA em produção.
       const insertAcc = await db.query(`INSERT INTO accounts (status) VALUES ('active')`);
       const accountId = insertAcc.insertId;
       await db.query(
@@ -106,18 +109,21 @@ async function checkWhitelist(userId, profileId, actorId) {
       character = charRows[0];
     }
 
-    console.log(`[whitelist] Whitelist check passed! Welcome, ${character.first_name} ${character.last_name} (VIP Level: ${account.vip_level})`);
+    console.log(`[whitelist] Whitelist check passed! Welcome, ${character.first_name} ${character.last_name}`);
     
-    // Registrar na memoria cache de comandos
+    // Registrar na memória cache de comandos
     commands.registerActiveCharacter(actorId, character, account.id, profileId);
-    // Registrar role de staff (se vip_level >= 10)
-    adminService.registerStaffRole(actorId, account.vip_level);
+
+    // Registrar cargo de staff (carregado de staff_roles, não de vip_level)
+    await adminService.registerStaffRole(actorId, account.id);
     
+    // Inicializar máquina de estados (carrega IMPRISONED/RESTRAINED do banco)
+    await characterState.initialize(character.id);
+
     // 5. Atualizar posição do jogador in-game a partir do banco de dados
     if (typeof mp !== 'undefined' && actorId) {
       console.log(`[whitelist] Moving actor ${actorId.toString(16)} to db location: pos=[${character.pos_x}, ${character.pos_y}, ${character.pos_z}] cell=${character.cell_id}`);
       
-      // No SkyMP, as propriedades de locationalData contêm a posição e célula do ator
       const locData = {
         pos: [character.pos_x, character.pos_y, character.pos_z],
         rot: [0, 0, character.angle_z],
@@ -127,13 +133,10 @@ async function checkWhitelist(userId, profileId, actorId) {
       try {
         mp.set(actorId, 'locationalData', locData);
         mp.set(actorId, 'browserVisible', true);
-        // Exibe mensagem de boas-vindas no console do servidor
         console.log(`[whitelist] Spawn locData applied successfully for ${character.first_name} ${character.last_name}`);
         
-        // Sincroniza o Inventário do Banco de Dados para o Cliente
-        inventoryService.syncInventoryToClient(actorId, character.id);
-        // Carrega stats de sobrevivência
-        survivalService.loadCharacter(actorId, character.id);
+        // Sincroniza o Inventário do Banco de Dados para o Cliente (com reconciliação)
+        await inventoryService.syncInventoryToClient(actorId, character.id);
         
       } catch (err) {
         console.error(`[whitelist] Failed to apply locationalData:`, err.message);

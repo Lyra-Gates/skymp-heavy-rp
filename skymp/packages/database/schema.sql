@@ -15,13 +15,15 @@ CREATE TABLE IF NOT EXISTS `accounts` (
 ) ENGINE=InnoDB;
 
 -- 2. Identidades do Discord (Login via Discord OAuth)
+-- NOTA: access_token e refresh_token nao sao armazenados. O fluxo OAuth sempre e
+-- redirecionado para o Discord ao expirar a sessao web. Nunca persistir tokens OAuth
+-- em texto simples. Se necessario no futuro, usar AES-256-GCM com chave fora do banco.
 CREATE TABLE IF NOT EXISTS `discord_identities` (
   `discord_id` VARCHAR(64) PRIMARY KEY,
   `account_id` INT NOT NULL,
   `username` VARCHAR(128) NOT NULL,
   `avatar` VARCHAR(256) DEFAULT NULL,
-  `access_token` VARCHAR(256) DEFAULT NULL,
-  `refresh_token` VARCHAR(256) DEFAULT NULL,
+  `last_login_at` TIMESTAMP NULL DEFAULT NULL COMMENT 'Ultimo login via Discord OAuth',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_discord_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -273,16 +275,85 @@ CREATE TABLE IF NOT EXISTS `faction_members` (
 ) ENGINE=InnoDB;
 
 -- ── Seed: Holds iniciais ─────────────────────────────────────────────────────
+-- Mapeamento correto: ID = slug do hold, name = nome do hold (nao da cidade)
+-- Cidade principal → Hold: Whiterun→Whiterun Hold, Solitude→Haafingar,
+-- Riften→The Rift, Windhelm→Eastmarch, Markarth→The Reach,
+-- Falkreath→Falkreath Hold, Morthal→Hjaalmarch, Dawnstar→The Pale, Winterhold→Winterhold
 INSERT IGNORE INTO `holds` (`id`, `name`, `tax_rate`) VALUES
-  ('whiterun',    'Planície de Whiterun', 0.05),
-  ('solitude',    'Alcoutim',             0.07),
-  ('riften',      'Baixadas de Riften',   0.06),
-  ('windhelm',    'Planície Pálida',      0.05),
-  ('markarth',    'Alcance',              0.08),
-  ('falkreath',   'Falkreath',            0.04),
+  ('whiterun',    'Whiterun Hold',        0.05),
+  ('solitude',    'Haafingar',            0.07),
+  ('riften',      'The Rift',             0.06),
+  ('windhelm',    'Eastmarch',            0.05),
+  ('markarth',    'The Reach',            0.08),
+  ('falkreath',   'Falkreath Hold',       0.04),
   ('morthal',     'Hjaalmarch',           0.04),
-  ('dawnstar',    'Planície Pálida',      0.05),
+  ('dawnstar',    'The Pale',             0.05),
   ('winterhold',  'Winterhold',           0.03);
+
+-- ═══════════════════════════════════════════════════
+-- AUTORIDADE ADMINISTRATIVA — Staff separado de VIP/Apoiador
+-- ═══════════════════════════════════════════════════
+
+-- A. Papéis de Staff (separados do vip_level)
+-- vip_level na tabela accounts e APENAS para monetizacao (0-3).
+-- Poder administrativo NUNCA deriva de vip_level.
+CREATE TABLE IF NOT EXISTS `staff_roles` (
+  `id`                    INT AUTO_INCREMENT PRIMARY KEY,
+  `account_id`            INT NOT NULL UNIQUE,
+  `role`                  VARCHAR(32) NOT NULL COMMENT 'moderator, admin, owner',
+  `granted_by_account_id` INT DEFAULT NULL COMMENT 'Quem concedeu o cargo',
+  `notes`                 VARCHAR(256) DEFAULT NULL,
+  `granted_at`            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_staff_account`  FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_staff_grantor` FOREIGN KEY (`granted_by_account_id`) REFERENCES `accounts` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- B. Permissoes granulares por cargo (para controle futuro fino)
+CREATE TABLE IF NOT EXISTS `staff_permissions` (
+  `id`            INT AUTO_INCREMENT PRIMARY KEY,
+  `staff_role_id` INT NOT NULL,
+  `permission`    VARCHAR(64) NOT NULL COMMENT 'kick, ban, teleport, add_item, set_gold, view_audit, manage_whitelist',
+  UNIQUE KEY `uk_role_perm` (`staff_role_id`, `permission`),
+  CONSTRAINT `fk_perm_role` FOREIGN KEY (`staff_role_id`) REFERENCES `staff_roles` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ── Seed: Permissões padrão por cargo ────────────────────────────────────────
+-- Inseridas depois que os registros de staff_roles existirem (via aplicação).
+-- Referência: moderator=[kick,teleport,view_audit], admin=[+ban,add_item,set_gold], owner=[todos]
+
+-- ═══════════════════════════════════════════════════
+-- LEDGER FINANCEIRO — Transações auditáveis de inventário e ouro
+-- ═══════════════════════════════════════════════════
+
+-- C. Ledger de Inventário
+-- Toda mudança de item passa por aqui. Nunca modificar character_inventory diretamente.
+CREATE TABLE IF NOT EXISTS `inventory_transactions` (
+  `transaction_id`   CHAR(36)     NOT NULL PRIMARY KEY COMMENT 'UUID v4',
+  `character_id`     INT          NOT NULL,
+  `base_id`          INT          NOT NULL COMMENT 'FormID nativo do Skyrim',
+  `delta`            INT          NOT NULL COMMENT 'Positivo = ganhou, Negativo = perdeu',
+  `reason`           VARCHAR(64)  NOT NULL COMMENT 'woodcutting, admin_give, trade, craft, loot...',
+  `module`           VARCHAR(32)  NOT NULL COMMENT 'Modulo que originou a transacao',
+  `idempotency_key`  VARCHAR(128) DEFAULT NULL UNIQUE COMMENT 'Previne duplicatas em retries',
+  `status`           VARCHAR(16)  NOT NULL DEFAULT 'committed' COMMENT 'committed, rolled_back',
+  `created_at`       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_inv_tx_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
+  INDEX `idx_inv_tx_char_date` (`character_id`, `created_at`)
+) ENGINE=InnoDB;
+
+-- D. Ledger de Ouro
+CREATE TABLE IF NOT EXISTS `gold_transactions` (
+  `transaction_id`   CHAR(36)     NOT NULL PRIMARY KEY COMMENT 'UUID v4',
+  `character_id`     INT          NOT NULL,
+  `delta`            INT          NOT NULL COMMENT 'Positivo = ganhou, Negativo = perdeu',
+  `reason`           VARCHAR(64)  NOT NULL,
+  `module`           VARCHAR(32)  NOT NULL,
+  `idempotency_key`  VARCHAR(128) DEFAULT NULL UNIQUE,
+  `status`           VARCHAR(16)  NOT NULL DEFAULT 'committed',
+  `created_at`       TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_gold_tx_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
+  INDEX `idx_gold_tx_char_date` (`character_id`, `created_at`)
+) ENGINE=InnoDB;
 
 -- ═══════════════════════════════════════════════════
 -- SISTEMAS ESTACIONADOS — Cavalos, Disfarces, Magia, Doenças

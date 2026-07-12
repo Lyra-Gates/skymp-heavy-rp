@@ -1,9 +1,12 @@
 const db = require('./database');
 const identity = require('./identity-service');
 const { createRpChatService } = require('./rp-chat-service');
+const commandRegistry = require('./core/command-registry');
+const characterState = require('./core/character-state');
+const inventoryService = require('./inventory-service');
 
 // Cache em memoria dos personagens ativos no servidor
-// Chave: actorId (number), Valor: { firstName, lastName, accountId, profileId }
+// Chave: actorId (number), Valor: { characterId, firstName, lastName, accountId, profileId }
 const activeCharacters = new Map();
 
 function registerActiveCharacter(actorId, character, accountId, profileId) {
@@ -27,6 +30,8 @@ function removeActiveCharacter(actorId) {
     const char = activeCharacters.get(actorId);
     console.log(`[commands] Removed cached character for actor ${actorId.toString(16)}: ${char.firstName} ${char.lastName}`);
     identity.forgetKnownIdentities(char.characterId);
+    characterState.cleanup(char.characterId);
+    inventoryService.clearSyncCache(char.characterId);
     activeCharacters.delete(actorId);
   }
 }
@@ -64,18 +69,19 @@ async function logRpChatEvent(event) {
   }
 }
 
-// Envia uma notificacao vanilla do Skyrim na tela do jogador
+// Envia uma notificação vanilla do Skyrim na tela do jogador
+// NOTA: actorDesc é construído mas a chamada atual usa notification global.
+// TODO: Fase 1 — redirecionar para o ator específico via SkyMP quando a API suportar.
 function sendNotification(actorId, message) {
   if (typeof mp === 'undefined') return;
   try {
-    const actorDesc = { type: 'form', desc: mp.getDescFromId(actorId) };
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, [message]);
   } catch (err) {
     console.error(`[commands] Failed to send notification to actor ${actorId.toString(16)}:`, err.message);
   }
 }
 
-// Transmite a mensagem para o autor e vizinhos dentro de um raio de proximidade (padrao: 1500 unidades Skyrim ~ 20 metros)
+// Transmite a mensagem para o autor e vizinhos dentro de um raio de proximidade
 function renderMessageForRecipient(message, recipientActorId) {
   return typeof message === 'function' ? message(recipientActorId) : message;
 }
@@ -84,7 +90,7 @@ function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
   const logMessage = typeof message === 'function' ? message(sourceActorId) : message;
   console.log(`[chat-log] Broadcast: "${logMessage}"`);
   
-  // 1. Mostrar para o proprio autor
+  // 1. Mostrar para o próprio autor
   sendNotification(sourceActorId, renderMessageForRecipient(message, sourceActorId));
 
   if (typeof mp === 'undefined') return;
@@ -109,7 +115,7 @@ function broadcastProximityMessage(sourceActorId, message, radius = 1500) {
 
           const neighborPos = neighborLoc.pos;
           
-          // Distancia Euclidiana 3D
+          // Distância Euclidiana 3D
           const dx = sourcePos[0] - neighborPos[0];
           const dy = sourcePos[1] - neighborPos[1];
           const dz = sourcePos[2] - neighborPos[2];
@@ -140,6 +146,10 @@ function parseActorId(raw) {
   const normalized = raw.toLowerCase().startsWith('0x') ? raw.slice(2) : raw;
   return Number.parseInt(normalized, 16);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Comandos CORE (sempre ativos, independente de módulos)
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function handleIntroduceCommand(actorId, args) {
   const targetActorId = parseActorId(args);
@@ -206,334 +216,104 @@ async function handleAliasCommand(actorId, args) {
   sendNotification(actorId, `Voce passara a reconhecer essa pessoa como: ${alias}.`);
 }
 
-// Tratamento de mensagens digitadas no chat
+// Comandos de Staff (CORE — disponíveis independente de módulos)
+function registerCoreCommands() {
+  commandRegistry.register(['/apresentar', '/introduce'], (actorId, args) => {
+    handleIntroduceCommand(actorId, args).catch(err => {
+      console.error('[identity] Failed to introduce character:', err.message);
+      sendNotification(actorId, 'Nao foi possivel registrar a apresentacao.');
+    });
+  }, { module: 'identity', phase: 'core', description: 'Apresenta seu personagem a outro', usage: '/apresentar <actorId>' });
+
+  commandRegistry.register(['/apelido', '/alias'], (actorId, args) => {
+    handleAliasCommand(actorId, args).catch(err => {
+      console.error('[identity] Failed to set alias:', err.message);
+      sendNotification(actorId, 'Nao foi possivel registrar o apelido.');
+    });
+  }, { module: 'identity', phase: 'core', description: 'Define como você reconhece outra pessoa', usage: '/apelido <actorId> <nome>' });
+
+  commandRegistry.register('/anim', (actorId, args) => {
+    if (args) {
+      const parts = args.split(' ');
+      const adminService = require('./admin-service');
+      adminService.playAnimation(actorId, parseInt(parts[0], 16), parts[1] || 'IdleStop');
+    }
+  }, { module: 'admin', phase: 'core', description: '[Staff] Reproduz animação em ator', usage: '/anim <actorId> <animName>' });
+
+  commandRegistry.register('/additem', (actorId, args) => {
+    if (args) {
+      const parts = args.split(' ');
+      require('./admin-service').giveItemAdmin(actorId, parseInt(parts[0], 16), parseInt(parts[1], 16), parseInt(parts[2]) || 1);
+    }
+  }, { module: 'admin', phase: 'core', description: '[Staff] Entrega item a jogador', usage: '/additem <actorId> <baseId> <count>' });
+
+  commandRegistry.register('/tp', (actorId, args) => {
+    if (args) require('./admin-service').teleportTo(actorId, parseInt(args, 16));
+  }, { module: 'admin', phase: 'core', description: '[Staff] Teleporta para jogador', usage: '/tp <actorId>' });
+
+  commandRegistry.register('/kick', (actorId, args) => {
+    if (args) {
+      const parts = args.split(' ');
+      const reason = parts.slice(1).join(' ') || 'Sem motivo';
+      require('./admin-service').kickPlayer(actorId, parseInt(parts[0], 16), reason);
+    }
+  }, { module: 'admin', phase: 'core', description: '[Staff] Expulsa jogador', usage: '/kick <actorId> <motivo>' });
+
+  commandRegistry.register('/setgold', (actorId, args) => {
+    if (args) {
+      const parts = args.split(' ');
+      require('./admin-service').setGold(actorId, parseInt(parts[0], 16), parseInt(parts[1]));
+    }
+  }, { module: 'admin', phase: 'core', description: '[Staff] Define ouro de jogador', usage: '/setgold <actorId> <valor>' });
+
+  // /status — diagnóstico de estado do personagem (staff)
+  commandRegistry.register('/status', (actorId, args) => {
+    const charData = getActiveCharacterData(actorId);
+    if (!charData) return;
+    const state = characterState.get(charData.characterId);
+    const meta = characterState.getMetadata(charData.characterId);
+    sendNotification(actorId, `[Staff] Estado: ${state} | ${JSON.stringify(meta)}`);
+  }, { module: 'admin', phase: 'core', description: '[Staff] Exibe estado atual do personagem', usage: '/status' });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Handler principal de input do chat
+// ─────────────────────────────────────────────────────────────────────────────
+
 function handleChatInput(actorId, text) {
   if (!text || typeof text !== 'string') return;
 
+  // 1. Tentar o rp-chat-service (comandos /falar, /me, /do, etc.)
   if (rpChat.handleChatInput(actorId, text)) {
     return;
   }
 
-  // Se comecar com "/", trata-se de um comando
+  // 2. Tentar o command-registry (comandos de módulos)
   if (text.startsWith('/')) {
     const parts = text.split(' ');
     const command = parts[0].toLowerCase();
     const args = parts.slice(1).join(' ');
 
-    switch (command) {
-      case '/apresentar':
-      case '/introduce':
-        handleIntroduceCommand(actorId, args).catch((err) => {
-          console.error('[identity] Failed to introduce character:', err.message);
-          sendNotification(actorId, 'Nao foi possivel registrar a apresentacao.');
-        });
-        break;
-
-      case '/apelido':
-      case '/alias':
-        handleAliasCommand(actorId, args).catch((err) => {
-          console.error('[identity] Failed to set alias:', err.message);
-          sendNotification(actorId, 'Nao foi possivel registrar o apelido.');
-        });
-        break;
-
-      case '/chopwood':
-        const jobs = require('./jobs-service');
-        jobs.chopWood(actorId);
-        break;
-
-      case '/mineore':
-        require('./jobs-service').mineOre(actorId);
-        break;
-
-      case '/fish':
-        require('./jobs-service').catchFish(actorId);
-        break;
-
-      case '/sellwood':
-        const charDataForSell = getActiveCharacterData(actorId);
-        if (charDataForSell) {
-          const economy = require('./economy-service');
-          economy.sellWood(actorId, charDataForSell.characterId);
-        }
-        break;
-
-      case '/pay':
-        const charDataForPay = getActiveCharacterData(actorId);
-        if (charDataForPay) {
-          const partsPay = args.split(' ');
-          if (partsPay.length === 2) {
-            const economy = require('./economy-service');
-            economy.payPlayer(actorId, charDataForPay.characterId, partsPay[0], partsPay[1]);
-          } else {
-            sendNotification(actorId, 'Uso: /pay <id_jogador> <valor>');
-          }
-        }
-        break;
-
-      case '/balance':
-        const charDataForBal = getActiveCharacterData(actorId);
-        if (charDataForBal) {
-          const economy = require('./economy-service');
-          economy.getGold(charDataForBal.characterId).then(g => {
-            sendNotification(actorId, `Ouro: ${g} Septims`);
-          });
-        }
-        break;
-
-      case '/trade':
-        const charDataForTrade = getActiveCharacterData(actorId);
-        if (charDataForTrade && args) {
-          const trade = require('./trade-service');
-          trade.requestTrade(actorId, charDataForTrade.characterId, args);
-        }
-        break;
-
-      case '/tradeaccept':
-        require('./trade-service').acceptTrade(actorId);
-        break;
-        
-      case '/tradecancel':
-        require('./trade-service').cancelTrade(actorId);
-        break;
-
-      // --- Comandos de Staff ---
-      case '/anim':
-        if (args) {
-          const partsAnim = args.split(' ');
-          const admin = require('./admin-service');
-          admin.playAnimation(actorId, parseInt(partsAnim[0], 16), partsAnim[1] || 'IdleStop');
-        }
-        break;
-
-      case '/additem':
-        if (args) {
-          const partsAdd = args.split(' ');
-          require('./admin-service').giveItemAdmin(actorId, parseInt(partsAdd[0], 16), parseInt(partsAdd[1], 16), parseInt(partsAdd[2]) || 1);
-        }
-        break;
-
-      case '/tp':
-        if (args) {
-          require('./admin-service').teleportTo(actorId, parseInt(args, 16));
-        }
-        break;
-
-      case '/kick':
-        if (args) {
-          const partsKick = args.split(' ');
-          const reason = partsKick.slice(1).join(' ') || 'Sem motivo';
-          require('./admin-service').kickPlayer(actorId, parseInt(partsKick[0], 16), reason);
-        }
-        break;
-
-      case '/setgold':
-        if (args) {
-          const partsSg = args.split(' ');
-          require('./admin-service').setGold(actorId, parseInt(partsSg[0], 16), parseInt(partsSg[1]));
-        }
-        break;
-
-      // --- Comandos de Habitacao ---
-      case '/buyhouse':
-        if (args) {
-          const charDataHouse = getActiveCharacterData(actorId);
-          if (charDataHouse) require('./housing-service').buyProperty(actorId, charDataHouse.characterId, parseInt(args));
-        }
-        break;
-
-      case '/invitehouse':
-        if (args) {
-          const partsInv = args.split(' ');
-          const charDataInv = getActiveCharacterData(actorId);
-          const targetDataInv = getActiveCharacterData(parseInt(partsInv[0], 16));
-          if (charDataInv && targetDataInv) {
-            require('./housing-service').inviteToProperty(charDataInv.characterId, targetDataInv.characterId, parseInt(partsInv[1]));
-          }
-        }
-        break;
-
-      // --- Comandos de Justica ---
-      case '/restrain':
-        if (args) require('./justice-service').restrain(actorId, parseInt(args, 16));
-        break;
-
-      case '/unrestrain':
-        if (args) require('./justice-service').unrestrain(actorId, parseInt(args, 16));
-        break;
-
-      case '/arrest':
-        if (args) {
-          const partsArr = args.split(' ');
-          const targetAct = parseInt(partsArr[0], 16);
-          const sentence  = parseInt(partsArr[1]) || 10;
-          const crime     = partsArr.slice(2).join(' ') || 'Perturbacao da Ordem';
-          require('./justice-service').arrest(actorId, targetAct, sentence, crime);
-        }
-        break;
-
-      case '/release':
-        if (args) {
-          const tRelease = parseInt(args, 16);
-          const charRel  = getActiveCharacterData(tRelease);
-          if (charRel) require('./justice-service').releasePrisoner(tRelease, charRel.characterId, 'staff_release');
-        }
-        break;
-
-      case '/setbounty':
-        if (args) {
-          const partsBounty = args.split(' ');
-          const tBounty     = parseInt(partsBounty[0], 16);
-          const amount      = parseInt(partsBounty[1]) || 0;
-          const crime       = partsBounty.slice(2).join(' ') || 'Crime';
-          require('./justice-service').setBounty(actorId, tBounty, amount, crime);
-        }
-        break;
-
-      case '/criminal':
-        if (args) require('./justice-service').showCriminalRecord(actorId, parseInt(args, 16));
-        break;
-
-      // ── Fase Beta: Sobrevivência ──────────────────────────────────────────
-      case '/survival':
-        const survChar = getActiveCharacterData(actorId);
-        if (survChar) require('./survival-service').showSurvival(actorId, survChar.characterId);
-        break;
-
-      case '/eat':
-        if (args) {
-          const eatChar = getActiveCharacterData(actorId);
-          if (eatChar) require('./survival-service').eatItem(actorId, eatChar.characterId, parseInt(args, 16));
-        }
-        break;
-
-      case '/drink':
-        if (args) {
-          const drinkChar = getActiveCharacterData(actorId);
-          if (drinkChar) require('./survival-service').drinkItem(actorId, drinkChar.characterId, parseInt(args, 16));
-        }
-        break;
-
-      case '/sleep':
-        const sleepChar = getActiveCharacterData(actorId);
-        if (sleepChar) require('./survival-service').sleep(actorId, sleepChar.characterId);
-        break;
-
-      // ── Fase Beta: Economia Regional ──────────────────────────────────────
-      case '/sell':
-        if (args) {
-          const sellChar = getActiveCharacterData(actorId);
-          const sellParts = args.split(' ');
-          if (sellChar) require('./economy-regional').sellToMarket(actorId, sellChar.characterId, parseInt(sellParts[0], 16), parseInt(sellParts[1]) || 1);
-        }
-        break;
-
-      case '/buy':
-        if (args) {
-          const buyChar = getActiveCharacterData(actorId);
-          const buyParts = args.split(' ');
-          if (buyChar) require('./economy-regional').buyFromMarket(actorId, buyChar.characterId, parseInt(buyParts[0], 16), parseInt(buyParts[1]) || 1);
-        }
-        break;
-
-      case '/market':
-        const mkChar = getActiveCharacterData(actorId);
-        if (mkChar) require('./economy-regional').showMarketInfo(actorId, mkChar.characterId);
-        break;
-
-      case '/holdwithdraw':
-        if (args) {
-          const hwChar = getActiveCharacterData(actorId);
-          if (hwChar) require('./economy-regional').withdrawHoldTreasury(actorId, hwChar.characterId, parseInt(args));
-        }
-        break;
-
-      case '/settax':
-        if (args) {
-          const taxParts = args.split(' ');
-          require('./economy-regional').setTaxRate(actorId, taxParts[0], parseFloat(taxParts[1]) || 0.05);
-        }
-        break;
-
-      // ── Fase Beta: Crafting ───────────────────────────────────────────────
-      case '/craft':
-      case '/forge':
-      case '/smelt':
-        if (args) {
-          const craftChar = getActiveCharacterData(actorId);
-          if (craftChar) require('./crafting-service').craftItem(actorId, craftChar.characterId, parseInt(args));
-        }
-        break;
-
-      case '/recipes':
-        if (args) require('./crafting-service').listRecipes(actorId, args.trim());
-        break;
-
-      // ── Fase Beta: Facções ────────────────────────────────────────────────
-      case '/factions':
-        require('./faction-service').listFactions(actorId);
-        break;
-
-      case '/factioninfo':
-        const fiChar = getActiveCharacterData(actorId);
-        if (fiChar) require('./faction-service').showMyFaction(actorId, fiChar.characterId);
-        break;
-
-      case '/fdonar':
-        if (args) {
-          const fdChar = getActiveCharacterData(actorId);
-          if (fdChar) require('./faction-service').donate(actorId, fdChar.characterId, parseInt(args));
-        }
-        break;
-
-      case '/fwithdraw':
-        if (args) {
-          const fwChar = getActiveCharacterData(actorId);
-          if (fwChar) require('./faction-service').withdrawFaction(actorId, fwChar.characterId, parseInt(args));
-        }
-        break;
-
-      case '/createfaction':
-        if (args) {
-          const cfParts = args.split(' ');
-          require('./faction-service').createFaction(actorId, cfParts[0], cfParts.slice(1).join(' '));
-        }
-        break;
-
-      case '/addfmember':
-        if (args) {
-          const afParts = args.split(' ');
-          require('./faction-service').addMember(actorId, parseInt(afParts[0], 16), parseInt(afParts[1]), afParts[2] || 'recruit');
-        }
-        break;
-
-      case '/removefmember':
-        if (args) require('./faction-service').removeMember(actorId, parseInt(args, 16));
-        break;
-
-      case '/setfhold':
-        if (args) {
-          const sfhParts = args.split(' ');
-          require('./faction-service').setHoldControl(actorId, parseInt(sfhParts[0]), sfhParts[1]);
-        }
-        break;
-
-      default:
-        sendNotification(actorId, `Comando desconhecido: ${command}`);
-        break;
+    const handled = commandRegistry.dispatch(actorId, command, args);
+    if (!handled) {
+      sendNotification(actorId, `Comando desconhecido: ${command}`);
     }
-
-  } else {
-    // Chat padrao (Falar na taverna/local)
-    const charName = getCharacterName(actorId);
-    broadcastProximityMessage(actorId, `${charName} diz: ${text}`, 1200);
+    return;
   }
+
+  // 3. Chat padrão (falar no local)
+  const charName = getCharacterName(actorId);
+  broadcastProximityMessage(actorId, `${charName} diz: ${text}`, 1200);
 }
+
+// Registrar comandos CORE ao carregar o módulo
+registerCoreCommands();
 
 module.exports = {
   registerActiveCharacter,
   removeActiveCharacter,
   getActiveCharacterData,
   handleChatInput,
-  broadcastProximityMessage
+  broadcastProximityMessage,
+  sendNotification
 };

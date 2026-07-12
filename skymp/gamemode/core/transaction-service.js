@@ -1,0 +1,325 @@
+/**
+ * core/transaction-service.js
+ *
+ * Serviço de transações atômicas para inventário e ouro.
+ * TODA mudança de item ou ouro de personagem DEVE passar por aqui.
+ *
+ * Garante:
+ * - Consistência: BD e cliente sempre em sincronia dentro de uma transação
+ * - Atomicidade: BEGIN/COMMIT/ROLLBACK via mysql2
+ * - Auditoria: ledger em inventory_transactions e gold_transactions
+ * - Idempotência: idempotency_key previne duplicatas em retries
+ */
+
+const db = require('../database');
+const crypto = require('crypto');
+
+/**
+ * Gera um UUID v4 simples usando o módulo nativo crypto.
+ */
+function uuid() {
+  return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+}
+
+/**
+ * Registra uma transação de item no ledger.
+ * @param {object} conn - Conexão com transação ativa
+ * @param {object} opts
+ * @param {number} opts.characterId
+ * @param {number} opts.baseId
+ * @param {number} opts.delta - positivo = ganhou, negativo = perdeu
+ * @param {string} opts.reason
+ * @param {string} opts.module
+ * @param {string|null} opts.idempotencyKey
+ */
+async function _recordInventoryLedger(conn, opts) {
+  const txId = uuid();
+  await conn.query(
+    `INSERT INTO inventory_transactions
+      (transaction_id, character_id, base_id, delta, reason, module, idempotency_key, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'committed')`,
+    [txId, opts.characterId, opts.baseId, opts.delta, opts.reason, opts.module, opts.idempotencyKey || null]
+  );
+  return txId;
+}
+
+/**
+ * Registra uma transação de ouro no ledger.
+ */
+async function _recordGoldLedger(conn, opts) {
+  const txId = uuid();
+  await conn.query(
+    `INSERT INTO gold_transactions
+      (transaction_id, character_id, delta, reason, module, idempotency_key, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'committed')`,
+    [txId, opts.characterId, opts.delta, opts.reason, opts.module, opts.idempotencyKey || null]
+  );
+  return txId;
+}
+
+/**
+ * Atualiza character_inventory dentro de uma transação ativa.
+ * Não cria nem destrói a transação, apenas executa queries.
+ */
+async function _applyInventoryDelta(conn, characterId, baseId, delta) {
+  if (delta > 0) {
+    // Adiciona itens
+    const [rows] = await conn.query(
+      'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ?',
+      [characterId, baseId]
+    );
+    if (rows.length > 0) {
+      await conn.query(
+        'UPDATE character_inventory SET count = count + ? WHERE character_id = ? AND base_id = ?',
+        [delta, characterId, baseId]
+      );
+    } else {
+      await conn.query(
+        'INSERT INTO character_inventory (character_id, base_id, count) VALUES (?, ?, ?)',
+        [characterId, baseId, delta]
+      );
+    }
+  } else {
+    // Remove itens (delta é negativo)
+    const [rows] = await conn.query(
+      'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ?',
+      [characterId, baseId]
+    );
+    if (rows.length === 0) throw new Error(`Personagem ${characterId} não possui item 0x${baseId.toString(16)}`);
+    const currentCount = rows[0].count;
+    const remove = Math.abs(delta);
+    if (currentCount < remove) throw new Error(`Estoque insuficiente: tem ${currentCount}, precisa ${remove}`);
+    const newCount = currentCount - remove;
+    if (newCount <= 0) {
+      await conn.query('DELETE FROM character_inventory WHERE character_id = ? AND base_id = ?', [characterId, baseId]);
+    } else {
+      await conn.query('UPDATE character_inventory SET count = ? WHERE character_id = ? AND base_id = ?', [newCount, characterId, baseId]);
+    }
+  }
+}
+
+/**
+ * Atualiza o ouro do personagem dentro de uma transação ativa.
+ */
+async function _applyGoldDelta(conn, characterId, delta) {
+  if (delta < 0) {
+    const [rows] = await conn.query('SELECT gold FROM characters WHERE id = ?', [characterId]);
+    if (rows.length === 0) throw new Error(`Personagem ${characterId} não encontrado`);
+    if (rows[0].gold + delta < 0) throw new Error(`Ouro insuficiente: tem ${rows[0].gold}, precisa ${Math.abs(delta)}`);
+  }
+  await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [delta, characterId]);
+}
+
+/**
+ * Aplica a mudança no cliente SkyMP (sem transação BD, apenas side-effect).
+ * Chamado APÓS o COMMIT para garantir que o BD é a fonte de verdade.
+ * Em caso de falha, o item está no BD mas não no cliente → será corrigido na reconciliação.
+ */
+function _applyToClient(actorId, baseId, delta) {
+  if (typeof mp === 'undefined') return;
+  try {
+    if (delta > 0) {
+      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorId, [baseId, delta, true]);
+    } else {
+      mp.callPapyrusFunction('method', 'ObjectReference', 'RemoveItem', actorId, [baseId, Math.abs(delta), true, null]);
+    }
+  } catch (err) {
+    // Log sem throw: BD já está correto. Reconciliação cuidará do cliente na próxima reconexão.
+    console.error(`[transaction] Aviso: falha ao aplicar item 0x${baseId.toString(16)} no cliente ${actorId ? actorId.toString(16) : '?'}:`, err.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API Pública
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Concede um item ao personagem (BD + cliente + ledger).
+ *
+ * @param {object} opts
+ * @param {number} opts.actorId      - Actor SkyMP (para aplicar no cliente)
+ * @param {number} opts.characterId  - ID do personagem no banco
+ * @param {number} opts.baseId       - FormID nativo do Skyrim
+ * @param {number} opts.count        - Quantidade a conceder (positivo)
+ * @param {string} opts.reason       - Motivo (ex: 'admin_give', 'woodcutting')
+ * @param {string} opts.module       - Módulo de origem (ex: 'admin', 'jobs')
+ * @param {string} [opts.idempotencyKey] - Chave única para prevenir duplicatas
+ * @returns {Promise<boolean>}
+ */
+async function giveItem(opts) {
+  const { actorId, characterId, baseId, count, reason, module: mod, idempotencyKey } = opts;
+  if (count <= 0) throw new Error('count deve ser positivo');
+
+  // Verificação de idempotência antes da transação
+  if (idempotencyKey) {
+    const existing = await db.query(
+      'SELECT transaction_id FROM inventory_transactions WHERE idempotency_key = ?',
+      [idempotencyKey]
+    );
+    if (existing.length > 0) {
+      console.log(`[transaction] giveItem idempotent skip: key=${idempotencyKey}`);
+      return true;
+    }
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await _applyInventoryDelta(conn, characterId, baseId, count);
+    await _recordInventoryLedger(conn, { characterId, baseId, delta: count, reason, module: mod, idempotencyKey });
+    await conn.commit();
+    _applyToClient(actorId, baseId, count);
+    console.log(`[transaction] giveItem: char=${characterId} item=0x${baseId.toString(16)} x${count} (${reason})`);
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    console.error(`[transaction] giveItem falhou: char=${characterId} item=0x${baseId.toString(16)}:`, err.message);
+    return false;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Remove um item do personagem (BD + cliente + ledger).
+ *
+ * @param {object} opts
+ * @param {number} opts.actorId
+ * @param {number} opts.characterId
+ * @param {number} opts.baseId
+ * @param {number} opts.count
+ * @param {string} opts.reason
+ * @param {string} opts.module
+ * @param {string} [opts.idempotencyKey]
+ * @returns {Promise<boolean>}
+ */
+async function removeItem(opts) {
+  const { actorId, characterId, baseId, count, reason, module: mod, idempotencyKey } = opts;
+  if (count <= 0) throw new Error('count deve ser positivo');
+
+  if (idempotencyKey) {
+    const existing = await db.query(
+      'SELECT transaction_id FROM inventory_transactions WHERE idempotency_key = ?',
+      [idempotencyKey]
+    );
+    if (existing.length > 0) {
+      console.log(`[transaction] removeItem idempotent skip: key=${idempotencyKey}`);
+      return true;
+    }
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await _applyInventoryDelta(conn, characterId, baseId, -count);
+    await _recordInventoryLedger(conn, { characterId, baseId, delta: -count, reason, module: mod, idempotencyKey });
+    await conn.commit();
+    _applyToClient(actorId, baseId, -count);
+    console.log(`[transaction] removeItem: char=${characterId} item=0x${baseId.toString(16)} x${count} (${reason})`);
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    console.error(`[transaction] removeItem falhou: char=${characterId} item=0x${baseId.toString(16)}:`, err.message);
+    return false;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Transferência atômica de item + ouro entre dois personagens (para trade).
+ * Executa tudo em uma única transação: BD é a fonte de verdade.
+ *
+ * @param {object} opts
+ * @param {number} opts.fromActorId
+ * @param {number} opts.fromCharacterId
+ * @param {number} opts.toActorId
+ * @param {number} opts.toCharacterId
+ * @param {number} opts.baseId         - Item a transferir (0 se só ouro)
+ * @param {number} opts.itemCount      - Quantidade do item
+ * @param {number} opts.goldAmount     - Ouro a transferir (0 se só item)
+ * @param {string} opts.reason
+ * @param {string} opts.module
+ * @param {string} [opts.idempotencyKey]
+ * @returns {Promise<boolean>}
+ */
+async function transfer(opts) {
+  const {
+    fromActorId, fromCharacterId,
+    toActorId, toCharacterId,
+    baseId, itemCount = 0,
+    goldAmount = 0,
+    reason, module: mod, idempotencyKey
+  } = opts;
+
+  if (idempotencyKey) {
+    const existing = await db.query(
+      'SELECT transaction_id FROM inventory_transactions WHERE idempotency_key = ? UNION SELECT transaction_id FROM gold_transactions WHERE idempotency_key = ?',
+      [idempotencyKey, idempotencyKey]
+    );
+    if (existing.length > 0) {
+      console.log(`[transaction] transfer idempotent skip: key=${idempotencyKey}`);
+      return true;
+    }
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    if (itemCount > 0 && baseId > 0) {
+      await _applyInventoryDelta(conn, fromCharacterId, baseId, -itemCount);
+      await _applyInventoryDelta(conn, toCharacterId, baseId, itemCount);
+      const itemKey = idempotencyKey ? `${idempotencyKey}_item` : null;
+      await _recordInventoryLedger(conn, { characterId: fromCharacterId, baseId, delta: -itemCount, reason, module: mod, idempotencyKey: itemKey ? `${itemKey}_from` : null });
+      await _recordInventoryLedger(conn, { characterId: toCharacterId, baseId, delta: itemCount, reason, module: mod, idempotencyKey: itemKey ? `${itemKey}_to` : null });
+    }
+
+    if (goldAmount > 0) {
+      await _applyGoldDelta(conn, fromCharacterId, -goldAmount);
+      await _applyGoldDelta(conn, toCharacterId, goldAmount);
+      const goldKey = idempotencyKey ? `${idempotencyKey}_gold` : null;
+      await _recordGoldLedger(conn, { characterId: fromCharacterId, delta: -goldAmount, reason, module: mod, idempotencyKey: goldKey ? `${goldKey}_from` : null });
+      await _recordGoldLedger(conn, { characterId: toCharacterId, delta: goldAmount, reason, module: mod, idempotencyKey: goldKey ? `${goldKey}_to` : null });
+    }
+
+    await conn.commit();
+
+    // Aplicar no cliente após COMMIT
+    if (itemCount > 0 && baseId > 0) {
+      _applyToClient(fromActorId, baseId, -itemCount);
+      _applyToClient(toActorId, baseId, itemCount);
+    }
+
+    console.log(`[transaction] transfer: char=${fromCharacterId}→${toCharacterId} item=0x${(baseId||0).toString(16)} x${itemCount} gold=${goldAmount} (${reason})`);
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    console.error(`[transaction] transfer falhou:`, err.message);
+    return false;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Verifica se o personagem possui quantidade suficiente de item.
+ * Usa o banco como fonte de verdade (não o inventário do cliente).
+ */
+async function hasItem(characterId, baseId, minCount = 1) {
+  const rows = await db.query(
+    'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ?',
+    [characterId, baseId]
+  );
+  return rows.length > 0 && rows[0].count >= minCount;
+}
+
+/**
+ * Retorna o ouro atual do personagem.
+ */
+async function getGold(characterId) {
+  const rows = await db.query('SELECT gold FROM characters WHERE id = ?', [characterId]);
+  return rows.length > 0 ? rows[0].gold : 0;
+}
+
+module.exports = { giveItem, removeItem, transfer, hasItem, getGold };
