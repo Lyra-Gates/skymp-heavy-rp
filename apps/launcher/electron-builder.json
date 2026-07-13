@@ -1,0 +1,24 @@
+{
+  "appId": "com.skymprp.launcher",
+  "productName": "Skyrim Heavy RP Launcher",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*"
+  ],
+  "extraMetadata": {
+    "main": "dist-electron/main.js"
+  },
+  "win": {
+    "target": "nsis",
+    "icon": "public/logo.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "shortcutName": "Skyrim Heavy RP"
+  }
+}

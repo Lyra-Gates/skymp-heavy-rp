@@ -25,6 +25,15 @@ function getActiveCharacterData(actorId) {
   return activeCharacters.get(actorId) || null;
 }
 
+function getActiveActorByCharacterId(characterId) {
+  for (const [actorId, character] of activeCharacters.entries()) {
+    if (character.characterId === characterId) {
+      return actorId;
+    }
+  }
+  return null;
+}
+
 function removeActiveCharacter(actorId) {
   if (activeCharacters.has(actorId)) {
     const char = activeCharacters.get(actorId);
@@ -313,6 +322,7 @@ module.exports = {
   registerActiveCharacter,
   removeActiveCharacter,
   getActiveCharacterData,
+  getActiveActorByCharacterId,
   handleChatInput,
   broadcastProximityMessage,
   sendNotification

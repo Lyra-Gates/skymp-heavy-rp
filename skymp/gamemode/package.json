@@ -4,7 +4,8 @@
   "description": "",
   "main": "phase0-basic.js",
   "scripts": {
-    "test": "node --test rp-chat-service.test.js core/transaction-service.test.js core/action-policy.test.js",
+    "test": "node --test rp-chat-service.test.js governance-service.test.js market-stalls-service.test.js core/transaction-service.test.js core/action-policy.test.js",
+    "test:systems": "node scripts/verify-governance-market-stalls.js",
     "test:chat": "node rp-chat-service.test.js",
     "test:core": "node --test core/transaction-service.test.js core/action-policy.test.js"
   },

@@ -1,18 +1,36 @@
 {
-  "name": "launcher",
-  "version": "1.0.0",
-  "description": "",
-  "main": "main.js",
+  "name": "launcher-temp",
+  "private": true,
+  "version": "0.0.0",
+  "main": "dist-electron/main.js",
+  "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && electron-builder",
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "oxlint",
+    "preview": "vite preview"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "dependencies": {
+    "lucide-react": "^1.24.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.1"
+  },
   "devDependencies": {
-    "axios": "^1.18.1",
-    "electron": "^43.1.0"
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^10.0.3",
+    "cross-env": "^10.1.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1",
+    "vite-plugin-electron": "^1.1.0",
+    "vite-plugin-electron-renderer": "^1.0.0",
+    "wait-on": "^9.0.10"
   }
 }

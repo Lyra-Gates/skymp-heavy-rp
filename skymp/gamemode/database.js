@@ -42,8 +42,16 @@ async function query(sql, params) {
   return rows;
 }
 
+async function getConnection() {
+  if (!pool) {
+    init();
+  }
+  return pool.getConnection();
+}
+
 module.exports = {
   init,
   query,
+  getConnection,
   getPool: () => pool
 };

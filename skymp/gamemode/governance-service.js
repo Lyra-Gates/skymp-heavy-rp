@@ -1,0 +1,1173 @@
+/**
+ * governance-service.js
+ *
+ * Sistema IC de governo, faccoes, cidades e guarda.
+ *
+ * Principios:
+ * - O client apenas pede uma acao. Toda permissao, distancia, estado e pena
+ *   sao calculados no servidor.
+ * - Staff pode operar o sistema para administracao, mas guardas IC usam cargos
+ *   e permissoes de cidade/reino/faccao.
+ * - Todas as acoes fortes geram audit_logs e registros de dominio.
+ */
+
+const db = require('./database');
+const admin = require('./admin-service');
+const commands = require('./commands');
+const economy = require('./economy-service');
+const inventory = require('./inventory-service');
+const characterState = require('./core/character-state');
+const actionPolicy = require('./core/action-policy');
+
+const { STATES } = characterState;
+
+const MODULE = 'governance';
+const DEFAULT_RANGE = 450;
+const SEARCH_RANGE = 350;
+const ESCORT_RANGE = 650;
+
+const SCOPE = Object.freeze({
+  REALM: 'realm',
+  CITY: 'city',
+  FACTION: 'faction'
+});
+
+const PERMISSIONS = Object.freeze({
+  MANAGE_REALM: 'manage_realm',
+  MANAGE_CITY: 'manage_city',
+  MANAGE_FACTION: 'manage_faction',
+  MANAGE_RANKS: 'manage_ranks',
+  INVITE_MEMBER: 'invite_member',
+  REMOVE_MEMBER: 'remove_member',
+  PROMOTE_MEMBER: 'promote_member',
+  MANAGE_TREASURY: 'manage_treasury',
+  MANAGE_TAXES: 'manage_taxes',
+  MANAGE_SHOPS: 'manage_shops',
+  MANAGE_EVENTS: 'manage_events',
+  GUARD_DUTY: 'guard_duty',
+  GUARD_SEARCH: 'guard_search',
+  GUARD_DETAIN: 'guard_detain',
+  GUARD_ARREST: 'guard_arrest',
+  GUARD_FINE: 'guard_fine',
+  GUARD_WARRANT: 'guard_warrant',
+  GUARD_CONFISCATE: 'guard_confiscate',
+  GUARD_RELEASE: 'guard_release',
+  VIEW_RECORDS: 'view_records',
+  STALL_INSPECT: 'stall_inspect',
+  STALL_SUSPEND: 'stall_suspend',
+  STALL_CONFISCATE: 'stall_confiscate',
+  STALL_ISSUE_LICENSE: 'stall_issue_license',
+  STALL_COLLECT_TAX: 'stall_collect_tax'
+});
+
+const DEFAULT_ROLES = [
+  {
+    name: 'leader',
+    label: 'Lider',
+    weight: 100,
+    permissions: Object.values(PERMISSIONS)
+  },
+  {
+    name: 'officer',
+    label: 'Oficial',
+    weight: 70,
+    permissions: [
+      PERMISSIONS.INVITE_MEMBER,
+      PERMISSIONS.REMOVE_MEMBER,
+      PERMISSIONS.PROMOTE_MEMBER,
+      PERMISSIONS.MANAGE_TREASURY,
+      PERMISSIONS.GUARD_DUTY,
+      PERMISSIONS.GUARD_SEARCH,
+      PERMISSIONS.GUARD_DETAIN,
+      PERMISSIONS.GUARD_ARREST,
+      PERMISSIONS.GUARD_FINE,
+      PERMISSIONS.GUARD_WARRANT,
+      PERMISSIONS.GUARD_CONFISCATE,
+      PERMISSIONS.GUARD_RELEASE,
+      PERMISSIONS.VIEW_RECORDS,
+      PERMISSIONS.STALL_INSPECT,
+      PERMISSIONS.STALL_SUSPEND,
+      PERMISSIONS.STALL_CONFISCATE,
+      PERMISSIONS.STALL_ISSUE_LICENSE,
+      PERMISSIONS.STALL_COLLECT_TAX
+    ]
+  },
+  {
+    name: 'guard',
+    label: 'Guarda',
+    weight: 50,
+    permissions: [
+      PERMISSIONS.GUARD_DUTY,
+      PERMISSIONS.GUARD_SEARCH,
+      PERMISSIONS.GUARD_DETAIN,
+      PERMISSIONS.GUARD_ARREST,
+      PERMISSIONS.GUARD_FINE,
+      PERMISSIONS.GUARD_CONFISCATE,
+      PERMISSIONS.VIEW_RECORDS,
+      PERMISSIONS.STALL_INSPECT,
+      PERMISSIONS.STALL_SUSPEND,
+      PERMISSIONS.STALL_CONFISCATE
+    ]
+  },
+  {
+    name: 'member',
+    label: 'Membro',
+    weight: 10,
+    permissions: []
+  }
+];
+
+let initialized = false;
+let sentenceTimer = null;
+
+function notify(actorId, message) {
+  commands.sendNotification(actorId, message);
+}
+
+function sendBrowserModal(actorId, type, data) {
+  if (typeof mp === 'undefined') return;
+  try {
+    mp.set(actorId, 'browserModal', {
+      type,
+      data,
+      sentAt: Date.now()
+    });
+  } catch (err) {
+    console.error('[governance] Failed to send browser modal payload:', err.message);
+  }
+}
+
+function getCharacter(actorId) {
+  return commands.getActiveCharacterData(actorId);
+}
+
+function parseActorId(raw) {
+  if (!raw) return NaN;
+  const clean = String(raw).toLowerCase().startsWith('0x') ? String(raw).slice(2) : String(raw);
+  return Number.parseInt(clean, 16);
+}
+
+function parsePositiveInt(raw, fallback = 0) {
+  const value = Number.parseInt(raw, 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function safeJson(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '{}';
+  }
+}
+
+function getLoc(actorId) {
+  if (typeof mp === 'undefined') return null;
+  return mp.get(actorId, 'locationalData') || mp.get(actorId, 'pos') || null;
+}
+
+function getCell(loc) {
+  if (!loc) return null;
+  return loc.cellOrWorldDesc || loc.cellOrWorldSpaceId || loc.cellId || loc.worldOrCell || loc.worldOrCellDesc || null;
+}
+
+function getPos(loc) {
+  if (!loc) return null;
+  return loc.pos || (Array.isArray(loc) ? loc : null);
+}
+
+function distanceBetween(a, b) {
+  const la = getLoc(a);
+  const lb = getLoc(b);
+  if (!la || !lb) return null;
+
+  const ca = getCell(la);
+  const cb = getCell(lb);
+  if (ca && cb && ca !== cb) return Infinity;
+
+  const pa = getPos(la);
+  const pb = getPos(lb);
+  if (!pa || !pb) return null;
+
+  const dx = pa[0] - pb[0];
+  const dy = pa[1] - pb[1];
+  const dz = pa[2] - pb[2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+function assertRange(sourceActorId, targetActorId, maxRange = DEFAULT_RANGE) {
+  if (typeof mp === 'undefined') return { ok: true };
+  const distance = distanceBetween(sourceActorId, targetActorId);
+  if (distance === null) return { ok: false, reason: 'Nao foi possivel validar proximidade.' };
+  if (distance > maxRange) return { ok: false, reason: 'Alvo fora de alcance.' };
+  return { ok: true };
+}
+
+async function audit(actorActorId, targetActorId, action, details) {
+  const actor = getCharacter(actorActorId);
+  const target = targetActorId ? getCharacter(targetActorId) : null;
+  await admin.auditLog(actor?.accountId || null, target?.accountId || null, `${MODULE}:${action}`, details || null);
+}
+
+function isStaffGovernor(actorId) {
+  return admin.hasPermission(actorId, 'manage_staff');
+}
+
+async function ensureDefaultRoles(scopeType, scopeId) {
+  for (const role of DEFAULT_ROLES) {
+    const result = await db.query(
+      `INSERT IGNORE INTO governance_roles (scope_type, scope_id, name, label, weight)
+       VALUES (?, ?, ?, ?, ?)`,
+      [scopeType, String(scopeId), role.name, role.label, role.weight]
+    );
+
+    let roleId = result.insertId;
+    if (!roleId) {
+      const rows = await db.query(
+        'SELECT id FROM governance_roles WHERE scope_type = ? AND scope_id = ? AND name = ?',
+        [scopeType, String(scopeId), role.name]
+      );
+      roleId = rows[0]?.id;
+    }
+
+    if (!roleId) continue;
+    for (const permission of role.permissions) {
+      await db.query(
+        'INSERT IGNORE INTO governance_role_permissions (role_id, permission) VALUES (?, ?)',
+        [roleId, permission]
+      );
+    }
+  }
+}
+
+async function getRole(scopeType, scopeId, roleName) {
+  const rows = await db.query(
+    'SELECT * FROM governance_roles WHERE scope_type = ? AND scope_id = ? AND name = ? LIMIT 1',
+    [scopeType, String(scopeId), roleName]
+  );
+  return rows[0] || null;
+}
+
+async function ensureDefaultRolesForExistingScopes() {
+  const realms = await db.query('SELECT id FROM realms').catch(() => []);
+  for (const realm of realms) {
+    await ensureDefaultRoles(SCOPE.REALM, realm.id);
+  }
+
+  const cities = await db.query('SELECT id FROM cities').catch(() => []);
+  for (const city of cities) {
+    await ensureDefaultRoles(SCOPE.CITY, city.id);
+  }
+
+  const factions = await db.query('SELECT id FROM factions').catch(() => []);
+  for (const faction of factions) {
+    await ensureDefaultRoles(SCOPE.FACTION, faction.id);
+  }
+}
+
+async function getMembership(characterId, scopeType, scopeId) {
+  const rows = await db.query(
+    `SELECT gm.*, gr.name AS role_name, gr.weight
+     FROM governance_memberships gm
+     INNER JOIN governance_roles gr ON gr.id = gm.role_id
+     WHERE gm.character_id = ? AND gm.scope_type = ? AND gm.scope_id = ? AND gm.status = 'active'
+     LIMIT 1`,
+    [characterId, scopeType, String(scopeId)]
+  );
+  return rows[0] || null;
+}
+
+async function getDutyMembership(characterId) {
+  const rows = await db.query(
+    `SELECT gm.*, gr.name AS role_name, gr.weight
+     FROM governance_memberships gm
+     INNER JOIN governance_roles gr ON gr.id = gm.role_id
+     INNER JOIN governance_role_permissions grp ON grp.role_id = gr.id
+     WHERE gm.character_id = ?
+       AND gm.status = 'active'
+       AND gm.on_duty = 1
+       AND grp.permission = ?
+     ORDER BY gr.weight DESC
+     LIMIT 1`,
+    [characterId, PERMISSIONS.GUARD_DUTY]
+  );
+  return rows[0] || null;
+}
+
+async function hasPermission(actorId, permission, context = {}) {
+  if (isStaffGovernor(actorId)) {
+    return { allowed: true, source: 'staff' };
+  }
+
+  const actor = getCharacter(actorId);
+  if (!actor) return { allowed: false, reason: 'Personagem nao carregado.' };
+
+  const params = [actor.characterId, permission];
+  let scopeFilter = '';
+  if (context.scopeType && context.scopeId) {
+    scopeFilter = 'AND gm.scope_type = ? AND gm.scope_id = ?';
+    params.push(context.scopeType, String(context.scopeId));
+  }
+
+  const rows = await db.query(
+    `SELECT gm.*, gr.name AS role_name, gr.weight
+     FROM governance_memberships gm
+     INNER JOIN governance_roles gr ON gr.id = gm.role_id
+     INNER JOIN governance_role_permissions grp ON grp.role_id = gr.id
+     WHERE gm.character_id = ?
+       AND gm.status = 'active'
+       AND grp.permission = ?
+       ${scopeFilter}
+     ORDER BY gr.weight DESC
+     LIMIT 1`,
+    params
+  );
+
+  if (rows.length === 0) {
+    return { allowed: false, reason: 'Sem permissao IC para esta acao.' };
+  }
+
+  return { allowed: true, source: rows[0] };
+}
+
+async function requirePermission(actorId, permission, context = {}) {
+  const check = await hasPermission(actorId, permission, context);
+  if (!check.allowed) {
+    notify(actorId, check.reason);
+    return null;
+  }
+  return check;
+}
+
+async function createRealm(actorId, realmId, name) {
+  if (!await requirePermission(actorId, PERMISSIONS.MANAGE_REALM)) return;
+  if (!realmId || !name) {
+    notify(actorId, 'Uso: /realmcreate <id> <nome>');
+    return;
+  }
+  const actor = getCharacter(actorId);
+  await db.query(
+    `INSERT INTO realms (id, name, ruler_character_id)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+    [realmId, name, actor?.characterId || null]
+  );
+  await ensureDefaultRoles(SCOPE.REALM, realmId);
+  if (actor) await addMembershipInternal(actor.characterId, SCOPE.REALM, realmId, 'leader', actor.characterId);
+  await audit(actorId, null, 'realm:create', `realm=${realmId} name=${name}`);
+  notify(actorId, `Reino registrado: ${name}.`);
+}
+
+async function createCity(actorId, cityId, realmId, holdId, name) {
+  if (!await requirePermission(actorId, PERMISSIONS.MANAGE_CITY)) return;
+  if (!cityId || !realmId || !holdId || !name) {
+    notify(actorId, 'Uso: /citycreate <id> <realmId> <holdId> <nome>');
+    return;
+  }
+  const actor = getCharacter(actorId);
+  await db.query(
+    `INSERT INTO cities (id, realm_id, hold_id, name, governor_character_id)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE realm_id = VALUES(realm_id), hold_id = VALUES(hold_id), name = VALUES(name)`,
+    [cityId, realmId, holdId, name, actor?.characterId || null]
+  );
+  await ensureDefaultRoles(SCOPE.CITY, cityId);
+  if (actor) await addMembershipInternal(actor.characterId, SCOPE.CITY, cityId, 'leader', actor.characterId);
+  await audit(actorId, null, 'city:create', `city=${cityId} realm=${realmId} hold=${holdId} name=${name}`);
+  notify(actorId, `Cidade registrada: ${name}.`);
+}
+
+async function createFaction(actorId, tag, name) {
+  if (!await requirePermission(actorId, PERMISSIONS.MANAGE_FACTION)) return;
+  if (!tag || !name) {
+    notify(actorId, 'Uso: /govfcreate <tag> <nome>');
+    return;
+  }
+  const actor = getCharacter(actorId);
+  const result = await db.query(
+    `INSERT INTO factions (tag, name, leader_character_id)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+    [tag, name, actor?.characterId || null]
+  );
+  const factionId = result.insertId || (await db.query('SELECT id FROM factions WHERE tag = ?', [tag]))[0]?.id;
+  if (!factionId) {
+    notify(actorId, 'Nao foi possivel criar a faccao.');
+    return;
+  }
+  await ensureDefaultRoles(SCOPE.FACTION, factionId);
+  if (actor) await addMembershipInternal(actor.characterId, SCOPE.FACTION, factionId, 'leader', actor.characterId);
+  await audit(actorId, null, 'faction:create', `faction=${factionId} tag=${tag} name=${name}`);
+  notify(actorId, `Faccao registrada: ${tag} ${name}.`);
+}
+
+async function addMembershipInternal(characterId, scopeType, scopeId, roleName, grantedByCharacterId) {
+  await ensureDefaultRoles(scopeType, scopeId);
+  const role = await getRole(scopeType, scopeId, roleName);
+  if (!role) throw new Error(`Cargo inexistente: ${roleName}`);
+  await db.query(
+    `INSERT INTO governance_memberships (character_id, scope_type, scope_id, role_id, granted_by_character_id)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE role_id = VALUES(role_id), status = 'active', granted_by_character_id = VALUES(granted_by_character_id)`,
+    [characterId, scopeType, String(scopeId), role.id, grantedByCharacterId || null]
+  );
+}
+
+async function addMember(actorId, targetActorId, scopeType, scopeId, roleName = 'member') {
+  if (!await requirePermission(actorId, PERMISSIONS.INVITE_MEMBER, { scopeType, scopeId })) return;
+  const actor = getCharacter(actorId);
+  const target = getCharacter(targetActorId);
+  if (!target) {
+    notify(actorId, 'Alvo nao encontrado ou personagem nao carregado.');
+    return;
+  }
+  await addMembershipInternal(target.characterId, scopeType, scopeId, roleName, actor?.characterId || null);
+  await audit(actorId, targetActorId, 'member:add', `scope=${scopeType}:${scopeId} role=${roleName}`);
+  notify(actorId, 'Membro adicionado.');
+  notify(targetActorId, `Voce recebeu um cargo em ${scopeType}:${scopeId}.`);
+}
+
+async function setDuty(actorId, enabled) {
+  const actor = getCharacter(actorId);
+  if (!actor) return;
+  const permission = await hasPermission(actorId, PERMISSIONS.GUARD_DUTY);
+  if (!permission.allowed) {
+    notify(actorId, 'Voce nao possui cargo de guarda.');
+    return;
+  }
+  await db.query(
+    `UPDATE governance_memberships gm
+     INNER JOIN governance_roles gr ON gr.id = gm.role_id
+     INNER JOIN governance_role_permissions grp ON grp.role_id = gr.id
+     SET gm.on_duty = ?
+     WHERE gm.character_id = ? AND gm.status = 'active' AND grp.permission = ?`,
+    [enabled ? 1 : 0, actor.characterId, PERMISSIONS.GUARD_DUTY]
+  );
+  await audit(actorId, null, enabled ? 'guard:duty_on' : 'guard:duty_off', null);
+  notify(actorId, enabled ? 'Servico de guarda iniciado.' : 'Servico de guarda encerrado.');
+}
+
+async function stopTarget(officerActorId, targetActorId, reason = 'abordagem') {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_DETAIN)) return;
+  const range = assertRange(officerActorId, targetActorId, DEFAULT_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+
+  await db.query(
+    `INSERT INTO guard_detentions (target_character_id, officer_character_id, status, reason)
+     VALUES (?, ?, 'stopped', ?)`,
+    [target.characterId, officer.characterId, reason]
+  );
+  characterState.set(target.characterId, STATES.IN_DIALOG, { reason: 'guard_stop', officerCharacterId: officer.characterId });
+  await audit(officerActorId, targetActorId, 'guard:stop', reason);
+  notify(officerActorId, 'Alvo abordado.');
+  notify(targetActorId, `Voce foi abordado pela guarda. Motivo: ${reason}`);
+  commands.broadcastProximityMessage(officerActorId, '* Faz uma abordagem oficial da guarda.', 600);
+}
+
+async function detainTarget(officerActorId, targetActorId, reason = 'detencao preventiva') {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_DETAIN)) return;
+  const range = assertRange(officerActorId, targetActorId, DEFAULT_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+
+  await db.query(
+    `INSERT INTO guard_detentions (target_character_id, officer_character_id, status, reason)
+     VALUES (?, ?, 'detained', ?)`,
+    [target.characterId, officer.characterId, reason]
+  );
+  characterState.set(target.characterId, STATES.RESTRAINED, { reason, officerCharacterId: officer.characterId });
+  await db.query(
+    `INSERT INTO character_restraints (character_id, restrained_by_character_id, type)
+     VALUES (?, ?, 'guard_detention')
+     ON DUPLICATE KEY UPDATE restrained_by_character_id = VALUES(restrained_by_character_id), type = VALUES(type), applied_at = NOW()`,
+    [target.characterId, officer.characterId]
+  );
+  if (typeof mp !== 'undefined') {
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 0]);
+  }
+  await audit(officerActorId, targetActorId, 'guard:detain', reason);
+  notify(officerActorId, 'Alvo detido.');
+  notify(targetActorId, `Voce foi detido pela guarda. Motivo: ${reason}`);
+}
+
+async function releaseTarget(officerActorId, targetActorId, reason = 'liberado') {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_RELEASE)) return;
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+
+  await db.query(
+    `UPDATE guard_detentions
+     SET status = 'released', released_at = NOW()
+     WHERE target_character_id = ? AND status IN ('stopped', 'detained', 'escorted')`,
+    [target.characterId]
+  );
+  await db.query('DELETE FROM character_restraints WHERE character_id = ?', [target.characterId]);
+  characterState.set(target.characterId, STATES.NORMAL, {});
+  if (typeof mp !== 'undefined') {
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 100]);
+  }
+  await audit(officerActorId, targetActorId, 'guard:release', reason);
+  notify(officerActorId, 'Alvo liberado.');
+  notify(targetActorId, 'Voce foi liberado pela guarda.');
+}
+
+async function hasActiveWarrant(characterId) {
+  const rows = await db.query(
+    `SELECT * FROM warrants
+     WHERE target_character_id = ? AND status = 'active'
+     ORDER BY severity DESC, created_at DESC
+     LIMIT 1`,
+    [characterId]
+  );
+  return rows[0] || null;
+}
+
+async function requestSearch(officerActorId, targetActorId, reason = 'revista') {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_SEARCH)) return;
+  const range = assertRange(officerActorId, targetActorId, SEARCH_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+
+  const warrant = await hasActiveWarrant(target.characterId);
+  const forced = Boolean(warrant);
+  const result = await db.query(
+    `INSERT INTO guard_searches (target_character_id, officer_character_id, reason, forced, status)
+     VALUES (?, ?, ?, ?, ?)`,
+    [target.characterId, officer.characterId, reason, forced ? 1 : 0, forced ? 'approved' : 'pending']
+  );
+
+  await audit(officerActorId, targetActorId, forced ? 'guard:search_forced' : 'guard:search_request', `searchId=${result.insertId} reason=${reason}`);
+  if (forced) {
+    await showInventorySnapshot(officerActorId, targetActorId, result.insertId);
+    return;
+  }
+
+  notify(officerActorId, 'Revista solicitada. Aguarde consentimento ou use mandado.');
+  notify(targetActorId, `Guarda solicita revista. Use /searchaccept ${result.insertId} ou /searchdeny ${result.insertId}.`);
+}
+
+async function approveSearch(targetActorId, searchId, approved) {
+  const target = getCharacter(targetActorId);
+  if (!target) return;
+  const rows = await db.query(
+    `SELECT * FROM guard_searches
+     WHERE id = ? AND target_character_id = ? AND status = 'pending'
+     LIMIT 1`,
+    [searchId, target.characterId]
+  );
+  const search = rows[0];
+  if (!search) {
+    notify(targetActorId, 'Solicitacao de revista nao encontrada.');
+    return;
+  }
+  await db.query('UPDATE guard_searches SET status = ?, responded_at = NOW() WHERE id = ?', [approved ? 'approved' : 'denied', searchId]);
+  if (!approved) {
+    notify(targetActorId, 'Voce recusou a revista.');
+    await audit(targetActorId, null, 'guard:search_denied', `searchId=${searchId}`);
+    return;
+  }
+
+  const officerActorId = findActorByCharacterId(search.officer_character_id);
+  if (officerActorId) {
+    await showInventorySnapshot(officerActorId, targetActorId, searchId);
+  }
+  notify(targetActorId, 'Voce aceitou a revista.');
+}
+
+function findActorByCharacterId(characterId) {
+  return commands.getActiveActorByCharacterId(characterId);
+}
+
+async function showInventorySnapshot(officerActorId, targetActorId, searchId) {
+  const target = getCharacter(targetActorId);
+  if (!target) return;
+  const rows = await db.query(
+    'SELECT base_id, count FROM character_inventory WHERE character_id = ? AND count > 0 ORDER BY base_id LIMIT 40',
+    [target.characterId]
+  );
+  const snapshot = rows.map(r => `0x${Number(r.base_id).toString(16)}x${r.count}`).join(', ') || 'sem itens registrados';
+  await db.query('UPDATE guard_searches SET result_snapshot = ? WHERE id = ?', [snapshot, searchId]);
+  notify(officerActorId, `Inventario do alvo: ${snapshot}`);
+}
+
+async function issueWarrant(officerActorId, targetActorId, severity, reason) {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_WARRANT)) return;
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+  const normalizedSeverity = ['minor', 'serious', 'major', 'capital'].includes(severity) ? severity : 'serious';
+  await db.query(
+    `INSERT INTO warrants (target_character_id, issued_by_character_id, severity, reason, scope_type, scope_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [target.characterId, officer.characterId, normalizedSeverity, reason || 'Mandado emitido pela guarda', SCOPE.CITY, 'global']
+  );
+  await audit(officerActorId, targetActorId, 'guard:warrant', `severity=${normalizedSeverity} reason=${reason}`);
+  notify(officerActorId, 'Mandado emitido.');
+  notify(targetActorId, 'Um mandado foi emitido contra voce.');
+}
+
+async function fineTarget(officerActorId, targetActorId, amount, reason = 'multa') {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_FINE)) return;
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+  const fine = parsePositiveInt(amount, 0);
+  if (fine <= 0) {
+    notify(officerActorId, 'Valor de multa invalido.');
+    return;
+  }
+
+  const paid = await economy.removeGold(target.characterId, fine);
+  await db.query(
+    `INSERT INTO fines (target_character_id, officer_character_id, amount, reason, status, paid_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [target.characterId, officer.characterId, fine, reason, paid ? 'paid' : 'unpaid', paid ? new Date() : null]
+  );
+  if (!paid) {
+    await db.query(
+      `INSERT INTO warrants (target_character_id, issued_by_character_id, severity, reason, scope_type, scope_id)
+       VALUES (?, ?, 'minor', ?, ?, ?)`,
+      [target.characterId, officer.characterId, `Multa nao paga: ${reason}`, SCOPE.CITY, 'global']
+    );
+  }
+  await audit(officerActorId, targetActorId, 'guard:fine', `amount=${fine} reason=${reason} paid=${paid}`);
+  notify(officerActorId, paid ? 'Multa paga e registrada.' : 'Multa registrada como divida; mandado menor criado.');
+  notify(targetActorId, paid ? `Voce pagou multa de ${fine} septims.` : `Multa de ${fine} septims registrada como divida.`);
+}
+
+async function confiscateItem(officerActorId, targetActorId, baseId, count, reason = 'confisco') {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_CONFISCATE)) return;
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+  const itemId = Number.parseInt(String(baseId), String(baseId).startsWith('0x') ? 16 : 10);
+  const amount = parsePositiveInt(count, 1);
+  if (!Number.isFinite(itemId)) {
+    notify(officerActorId, 'Item invalido.');
+    return;
+  }
+  const removed = await inventory.removeItem(targetActorId, target.characterId, itemId, amount, 'guard_confiscate', MODULE);
+  if (!removed) {
+    notify(officerActorId, 'O alvo nao possui esse item em quantidade suficiente no banco.');
+    return;
+  }
+  await db.query(
+    `INSERT INTO confiscations (target_character_id, officer_character_id, base_id, count, reason)
+     VALUES (?, ?, ?, ?, ?)`,
+    [target.characterId, officer.characterId, itemId, amount, reason]
+  );
+  await audit(officerActorId, targetActorId, 'guard:confiscate', `baseId=0x${itemId.toString(16)} count=${amount} reason=${reason}`);
+  notify(officerActorId, 'Item confiscado e registrado como evidencia.');
+  notify(targetActorId, 'Um item foi confiscado pela guarda.');
+}
+
+async function arrestTarget(officerActorId, targetActorId, sentenceMinutes, crimeSummary) {
+  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_ARREST)) return;
+  const range = assertRange(officerActorId, targetActorId, ESCORT_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
+  const officer = getCharacter(officerActorId);
+  const target = getCharacter(targetActorId);
+  if (!officer || !target) return;
+
+  const warrant = await hasActiveWarrant(target.characterId);
+  const detentions = await db.query(
+    `SELECT id FROM guard_detentions
+     WHERE target_character_id = ? AND status IN ('stopped', 'detained', 'escorted')
+     ORDER BY created_at DESC LIMIT 1`,
+    [target.characterId]
+  );
+  if (!warrant && detentions.length === 0) {
+    notify(officerActorId, 'Prenda apenas alvo detido ou com mandado ativo.');
+    return;
+  }
+
+  const minutes = Math.min(parsePositiveInt(sentenceMinutes, 10), 180);
+  const crime = crimeSummary || warrant?.reason || 'Crime nao especificado';
+  const prison = await getDefaultPrison();
+
+  await db.query(
+    `INSERT INTO prison_records (character_id, arrested_by_character_id, crime_summary, sentence_minutes, cell_id)
+     VALUES (?, ?, ?, ?, ?)`,
+    [target.characterId, officer.characterId, crime, minutes, prison.cellId]
+  );
+  await db.query(
+    `INSERT INTO custody_records (target_character_id, officer_character_id, status, sentence_minutes, crime_summary)
+     VALUES (?, ?, 'jailed', ?, ?)`,
+    [target.characterId, officer.characterId, minutes, crime]
+  );
+  await db.query('UPDATE warrants SET status = ? WHERE target_character_id = ? AND status = ?', ['served', target.characterId, 'active']);
+  await db.query('DELETE FROM character_restraints WHERE character_id = ?', [target.characterId]);
+  characterState.set(target.characterId, STATES.IMPRISONED, { sentenceMinutes: minutes, crimeSummary: crime });
+
+  if (typeof mp !== 'undefined') {
+    mp.set(targetActorId, 'locationalData', {
+      pos: prison.pos,
+      rot: [0, 0, 0],
+      cellOrWorldDesc: prison.cellId
+    });
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 100]);
+  }
+
+  await audit(officerActorId, targetActorId, 'guard:arrest', `sentence=${minutes} crime=${crime}`);
+  notify(officerActorId, 'Prisao registrada.');
+  notify(targetActorId, `Voce foi preso por ${minutes} minutos. Crime: ${crime}`);
+}
+
+async function getDefaultPrison() {
+  const rows = await db.query(
+    `SELECT prison_cell_id, prison_pos_x, prison_pos_y, prison_pos_z
+     FROM cities
+     WHERE prison_cell_id IS NOT NULL
+     ORDER BY id
+     LIMIT 1`
+  );
+  if (rows.length === 0) {
+    return { cellId: '0x162e2', pos: [35, -165, -189] };
+  }
+  return {
+    cellId: rows[0].prison_cell_id,
+    pos: [rows[0].prison_pos_x || 35, rows[0].prison_pos_y || -165, rows[0].prison_pos_z || -189]
+  };
+}
+
+async function releaseExpiredPrisoners() {
+  const rows = await db.query(
+    `SELECT id, character_id, sentence_minutes, arrested_at
+     FROM prison_records
+     WHERE status = 'active'`
+  );
+  for (const row of rows) {
+    const elapsed = Math.floor((Date.now() - new Date(row.arrested_at).getTime()) / 60000);
+    await db.query('UPDATE prison_records SET time_served_minutes = ? WHERE id = ?', [elapsed, row.id]);
+    if (elapsed < row.sentence_minutes) continue;
+    await db.query('UPDATE prison_records SET status = ?, released_at = NOW() WHERE id = ?', ['released', row.id]);
+    await db.query(
+      `UPDATE custody_records SET status = 'released', released_at = NOW()
+       WHERE target_character_id = ? AND status = 'jailed'`,
+      [row.character_id]
+    );
+  }
+}
+
+async function getInteractionActions(actorId, targetActorId) {
+  const actor = getCharacter(actorId);
+  const target = getCharacter(targetActorId);
+  if (!actor || !target || actorId === targetActorId) return { sections: [] };
+
+  const sections = [];
+  const guardActions = [];
+
+  try {
+    const marketStalls = require('./market-stalls-service');
+    if (marketStalls && typeof marketStalls.getInteractionSections === 'function') {
+      const marketSections = await marketStalls.getInteractionSections(actorId, targetActorId);
+      if (marketSections && marketSections.length > 0) sections.push(...marketSections);
+    }
+  } catch (err) {
+    console.error('[governance] market-stalls hook failed:', err.message);
+  }
+
+  try {
+    const economyRegional = require('./economy-regional');
+    if (economyRegional && typeof economyRegional.getInteractionSections === 'function') {
+      const economySections = await economyRegional.getInteractionSections(actorId, targetActorId);
+      if (economySections && economySections.length > 0) sections.push(...economySections);
+    }
+  } catch (err) {
+    console.error('[governance] economy-regional hook failed:', err.message);
+  }
+  const guardPerms = [
+    [PERMISSIONS.GUARD_DETAIN, 'guard.stop', 'Abordar'],
+    [PERMISSIONS.GUARD_SEARCH, 'guard.search', 'Revistar'],
+    [PERMISSIONS.VIEW_RECORDS, 'guard.records', 'Ver ficha'],
+    [PERMISSIONS.GUARD_FINE, 'guard.fine', 'Aplicar multa'],
+    [PERMISSIONS.GUARD_DETAIN, 'guard.detain', 'Deter'],
+    [PERMISSIONS.GUARD_ARREST, 'guard.arrest', 'Prender'],
+    [PERMISSIONS.GUARD_CONFISCATE, 'guard.confiscate', 'Confiscar item'],
+    [PERMISSIONS.GUARD_RELEASE, 'guard.release', 'Liberar']
+  ];
+
+  for (const [permission, action, label] of guardPerms) {
+    const check = await hasPermission(actorId, permission);
+    if (check.allowed) guardActions.push({ action, label });
+  }
+
+  if (guardActions.length > 0) {
+    sections.push({ id: 'guard', label: 'Guarda', actions: guardActions });
+  }
+
+  return { targetActorId, sections };
+}
+
+async function handleInteractionAction(actorId, action, payload = {}) {
+  const targetActorId = parseActorId(payload.targetActorId || payload.target || payload.actorId);
+  if (!Number.isFinite(targetActorId)) {
+    notify(actorId, 'Alvo invalido.');
+    return;
+  }
+
+  if (action.startsWith('stall.')) {
+    try {
+      const marketStalls = require('./market-stalls-service');
+      return await marketStalls.handleInteractionAction(actorId, action, payload);
+    } catch (err) {
+      console.error('[governance] market-stalls interaction failed:', err.message);
+      return;
+    }
+  }
+
+  if (action.startsWith('npc.')) {
+    try {
+      const economyRegional = require('./economy-regional');
+      return await economyRegional.handleInteractionAction(actorId, action, payload);
+    } catch (err) {
+      console.error('[governance] economy-regional interaction failed:', err.message);
+      return;
+    }
+  }
+
+  switch (action) {
+    case 'guard.stop':
+      return stopTarget(actorId, targetActorId, payload.reason || 'abordagem');
+    case 'guard.search':
+      return requestSearch(actorId, targetActorId, payload.reason || 'revista');
+    case 'guard.detain':
+      return detainTarget(actorId, targetActorId, payload.reason || 'detencao');
+    case 'guard.release':
+      return releaseTarget(actorId, targetActorId, payload.reason || 'liberado');
+    case 'guard.fine':
+      return fineTarget(actorId, targetActorId, payload.amount, payload.reason || 'multa');
+    case 'guard.arrest':
+      return arrestTarget(actorId, targetActorId, payload.sentenceMinutes || 10, payload.reason || 'prisao');
+    case 'guard.confiscate':
+      return confiscateItem(actorId, targetActorId, payload.baseId, payload.count || 1, payload.reason || 'confisco');
+    case 'guard.records':
+      return showCriminalRecord(actorId, targetActorId);
+    default:
+      notify(actorId, 'Acao de governanca desconhecida.');
+  }
+}
+
+async function handleUiEvent(actorId, uiEvent) {
+  if (!initialized || !uiEvent || typeof uiEvent !== 'object') return false;
+
+  const type = uiEvent.type;
+  const data = uiEvent.data || {};
+  if (type === 'governance:interaction:actions') {
+    const targetActorId = parseActorId(data.targetActorId);
+    const result = await getInteractionActions(actorId, targetActorId);
+    sendBrowserModal(actorId, 'governance:interaction:actions', result);
+    notify(actorId, `Acoes disponiveis: ${safeJson(result.sections)}`);
+    return true;
+  }
+  if (type === 'governance:interaction:execute') {
+    await handleInteractionAction(actorId, data.action, data);
+    return true;
+  }
+  return false;
+}
+
+async function showCriminalRecord(actorId, targetActorId) {
+  if (!await requirePermission(actorId, PERMISSIONS.VIEW_RECORDS)) return;
+  const target = getCharacter(targetActorId);
+  if (!target) return;
+  const records = await db.query(
+    `SELECT crime, bounty, hold, resolved, created_at
+     FROM criminal_records
+     WHERE character_id = ?
+     ORDER BY created_at DESC LIMIT 8`,
+    [target.characterId]
+  );
+  const warrants = await db.query(
+    `SELECT severity, reason, status
+     FROM warrants
+     WHERE target_character_id = ?
+     ORDER BY created_at DESC LIMIT 5`,
+    [target.characterId]
+  );
+  const summary = [
+    ...records.map(r => `[${r.resolved ? 'resolvido' : 'ativo'}] ${r.crime} ${r.bounty}g ${r.hold}`),
+    ...warrants.map(w => `[mandado:${w.status}] ${w.severity} ${w.reason}`)
+  ].join(' | ') || 'Ficha limpa.';
+  notify(actorId, summary);
+}
+
+async function setTax(actorId, scopeType, scopeId, rateRaw) {
+  if (!await requirePermission(actorId, PERMISSIONS.MANAGE_TAXES, { scopeType, scopeId })) return;
+  const rate = Number.parseFloat(rateRaw);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 0.35) {
+    notify(actorId, 'Imposto invalido. Use valor entre 0 e 0.35.');
+    return;
+  }
+  if (scopeType === SCOPE.CITY) {
+    await db.query('UPDATE cities SET tax_rate = ? WHERE id = ?', [rate, scopeId]);
+  } else if (scopeType === SCOPE.REALM) {
+    await db.query('UPDATE realms SET tax_rate = ? WHERE id = ?', [rate, scopeId]);
+  } else {
+    notify(actorId, 'Impostos so existem em cidade ou reino.');
+    return;
+  }
+  await audit(actorId, null, 'tax:set', `scope=${scopeType}:${scopeId} rate=${rate}`);
+  notify(actorId, 'Imposto atualizado.');
+}
+
+async function registerShop(actorId, cityId, shopId, name, ownerActorRaw) {
+  if (!await requirePermission(actorId, PERMISSIONS.MANAGE_SHOPS, { scopeType: SCOPE.CITY, scopeId: cityId })) return;
+  const ownerActorId = ownerActorRaw ? parseActorId(ownerActorRaw) : actorId;
+  const owner = getCharacter(ownerActorId);
+  if (!owner) {
+    notify(actorId, 'Dono da loja nao encontrado.');
+    return;
+  }
+  await db.query(
+    `INSERT INTO shops (id, city_id, owner_character_id, name, status)
+     VALUES (?, ?, ?, ?, 'active')
+     ON DUPLICATE KEY UPDATE city_id = VALUES(city_id), owner_character_id = VALUES(owner_character_id), name = VALUES(name)`,
+    [shopId, cityId, owner.characterId, name]
+  );
+  await audit(actorId, ownerActorId, 'shop:register', `shop=${shopId} city=${cityId} name=${name}`);
+  notify(actorId, 'Loja registrada.');
+}
+
+async function createEvent(actorId, scopeType, scopeId, eventType, title) {
+  if (!await requirePermission(actorId, PERMISSIONS.MANAGE_EVENTS, { scopeType, scopeId })) return;
+  await db.query(
+    `INSERT INTO governance_events (scope_type, scope_id, event_type, title, status, created_by_character_id)
+     VALUES (?, ?, ?, ?, 'scheduled', ?)`,
+    [scopeType, String(scopeId), eventType, title, getCharacter(actorId)?.characterId || null]
+  );
+  await audit(actorId, null, 'event:create', `scope=${scopeType}:${scopeId} type=${eventType} title=${title}`);
+  notify(actorId, 'Evento registrado.');
+}
+
+function commandDefs() {
+  return [
+    {
+      name: '/realmcreate',
+      description: '[Gov] Cria reino',
+      usage: '/realmcreate <id> <nome>',
+      handler: (actorId, args) => {
+        const [id, ...name] = args.split(' ');
+        createRealm(actorId, id, name.join(' '));
+      }
+    },
+    {
+      name: '/citycreate',
+      description: '[Gov] Cria cidade',
+      usage: '/citycreate <id> <realmId> <holdId> <nome>',
+      handler: (actorId, args) => {
+        const [id, realmId, holdId, ...name] = args.split(' ');
+        createCity(actorId, id, realmId, holdId, name.join(' '));
+      }
+    },
+    {
+      name: '/govfcreate',
+      description: '[Gov] Cria faccao',
+      usage: '/govfcreate <tag> <nome>',
+      handler: (actorId, args) => {
+        const [tag, ...name] = args.split(' ');
+        createFaction(actorId, tag, name.join(' '));
+      }
+    },
+    {
+      name: '/govadd',
+      description: '[Gov] Adiciona membro a escopo',
+      usage: '/govadd <actorId> <realm|city|faction> <scopeId> <role>',
+      handler: (actorId, args) => {
+        const [target, scopeType, scopeId, roleName = 'member'] = args.split(' ');
+        addMember(actorId, parseActorId(target), scopeType, scopeId, roleName);
+      }
+    },
+    {
+      name: ['/guardduty', '/servico'],
+      description: '[Guarda] Liga/desliga servico',
+      usage: '/guardduty on|off',
+      handler: (actorId, args) => setDuty(actorId, String(args).trim().toLowerCase() !== 'off')
+    },
+    {
+      name: '/guardstop',
+      description: '[Guarda] Aborda jogador',
+      usage: '/guardstop <actorId> <motivo>',
+      handler: (actorId, args) => {
+        const [target, ...reason] = args.split(' ');
+        stopTarget(actorId, parseActorId(target), reason.join(' ') || 'abordagem');
+      }
+    },
+    {
+      name: '/detain',
+      description: '[Guarda] Detem jogador',
+      usage: '/detain <actorId> <motivo>',
+      handler: (actorId, args) => {
+        const [target, ...reason] = args.split(' ');
+        detainTarget(actorId, parseActorId(target), reason.join(' ') || 'detencao');
+      }
+    },
+    {
+      name: '/release',
+      description: '[Guarda] Libera jogador',
+      usage: '/release <actorId>',
+      handler: (actorId, args) => releaseTarget(actorId, parseActorId(args.trim()))
+    },
+    {
+      name: '/search',
+      description: '[Guarda] Solicita ou executa revista',
+      usage: '/search <actorId> <motivo>',
+      handler: (actorId, args) => {
+        const [target, ...reason] = args.split(' ');
+        requestSearch(actorId, parseActorId(target), reason.join(' ') || 'revista');
+      }
+    },
+    {
+      name: '/searchaccept',
+      description: 'Aceita revista',
+      usage: '/searchaccept <id>',
+      handler: (actorId, args) => approveSearch(actorId, parsePositiveInt(args, 0), true)
+    },
+    {
+      name: '/searchdeny',
+      description: 'Recusa revista',
+      usage: '/searchdeny <id>',
+      handler: (actorId, args) => approveSearch(actorId, parsePositiveInt(args, 0), false)
+    },
+    {
+      name: '/warrant',
+      description: '[Guarda] Emite mandado',
+      usage: '/warrant <actorId> <minor|serious|major|capital> <motivo>',
+      handler: (actorId, args) => {
+        const [target, severity, ...reason] = args.split(' ');
+        issueWarrant(actorId, parseActorId(target), severity, reason.join(' '));
+      }
+    },
+    {
+      name: '/fine',
+      description: '[Guarda] Aplica multa',
+      usage: '/fine <actorId> <valor> <motivo>',
+      handler: (actorId, args) => {
+        const [target, amount, ...reason] = args.split(' ');
+        fineTarget(actorId, parseActorId(target), amount, reason.join(' ') || 'multa');
+      }
+    },
+    {
+      name: '/arrest',
+      description: '[Guarda] Prende jogador',
+      usage: '/arrest <actorId> <minutos> <crime>',
+      handler: (actorId, args) => {
+        const [target, minutes, ...crime] = args.split(' ');
+        arrestTarget(actorId, parseActorId(target), minutes, crime.join(' ') || 'crime');
+      }
+    },
+    {
+      name: '/confiscate',
+      description: '[Guarda] Confisca item',
+      usage: '/confiscate <actorId> <baseId> <count> <motivo>',
+      handler: (actorId, args) => {
+        const [target, baseId, count, ...reason] = args.split(' ');
+        confiscateItem(actorId, parseActorId(target), baseId, count, reason.join(' ') || 'confisco');
+      }
+    },
+    {
+      name: '/record',
+      description: '[Guarda] Ve ficha criminal',
+      usage: '/record <actorId>',
+      handler: (actorId, args) => showCriminalRecord(actorId, parseActorId(args.trim()))
+    },
+    {
+      name: '/taxset',
+      description: '[Gov] Define imposto',
+      usage: '/taxset <realm|city> <scopeId> <rate>',
+      handler: (actorId, args) => {
+        const [scopeType, scopeId, rate] = args.split(' ');
+        setTax(actorId, scopeType, scopeId, rate);
+      }
+    },
+    {
+      name: '/shopregister',
+      description: '[Gov] Registra loja',
+      usage: '/shopregister <cityId> <shopId> <ownerActorId> <nome>',
+      handler: (actorId, args) => {
+        const [cityId, shopId, ownerActor, ...name] = args.split(' ');
+        registerShop(actorId, cityId, shopId, name.join(' '), ownerActor);
+      }
+    },
+    {
+      name: '/govevent',
+      description: '[Gov] Cria evento',
+      usage: '/govevent <realm|city|faction> <scopeId> <type> <titulo>',
+      handler: (actorId, args) => {
+        const [scopeType, scopeId, type, ...title] = args.split(' ');
+        createEvent(actorId, scopeType, scopeId, type, title.join(' '));
+      }
+    }
+  ];
+}
+
+async function initGovernanceService() {
+  actionPolicy.registerAction('guard_stop', ['gameplay'], 'Abordar pela guarda');
+  actionPolicy.registerAction('guard_search', ['gameplay'], 'Revistar pela guarda');
+  actionPolicy.registerAction('guard_detain', ['gameplay'], 'Deter pela guarda');
+  actionPolicy.registerAction('guard_arrest', ['gameplay'], 'Prender pela guarda');
+  actionPolicy.registerAction('governance_manage', ['gameplay'], 'Gerenciar governo');
+  await ensureDefaultRolesForExistingScopes();
+  initialized = true;
+  if (!sentenceTimer) {
+    sentenceTimer = setInterval(() => {
+      releaseExpiredPrisoners().catch(err => console.error('[governance] sentence tick failed:', err.message));
+    }, 60 * 1000);
+  }
+  await releaseExpiredPrisoners();
+  console.log('[governance] Governance service initialized.');
+}
+
+function shutdownGovernanceService() {
+  if (sentenceTimer) clearInterval(sentenceTimer);
+  sentenceTimer = null;
+  initialized = false;
+}
+
+module.exports = {
+  SCOPE,
+  PERMISSIONS,
+  commandDefs,
+  initGovernanceService,
+  shutdownGovernanceService,
+  handleUiEvent,
+  getInteractionActions,
+  handleInteractionAction,
+  hasPermission,
+  createRealm,
+  createCity,
+  createFaction,
+  addMember,
+  setDuty,
+  stopTarget,
+  detainTarget,
+  releaseTarget,
+  requestSearch,
+  approveSearch,
+  issueWarrant,
+  fineTarget,
+  confiscateItem,
+  arrestTarget,
+  setTax,
+  registerShop,
+  createEvent
+};

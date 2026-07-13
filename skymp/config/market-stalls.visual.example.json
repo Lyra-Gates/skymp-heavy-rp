@@ -1,0 +1,32 @@
+{
+  "enabled": false,
+  "strategy": "server_place_static",
+  "notes": "Copy this file to market-stalls.visual.json after a licensed/custom market stall plugin is available.",
+  "defaultStallBaseId": null,
+  "fallbackDisplayName": "Barraca de Comerciante",
+  "scale": 1.0,
+  "allowedAssetSources": [
+    {
+      "name": "HeavyRP_Props.esm",
+      "status": "preferred",
+      "reason": "Server-owned plugin with stable FormIDs and verified asset permissions."
+    }
+  ],
+  "candidateReferences": [
+    {
+      "name": "Rally's Market Stalls Animated",
+      "url": "https://www.nexusmods.com/skyrimspecialedition/mods/81282",
+      "use": "visual reference or licensed mesh/texture candidate only"
+    },
+    {
+      "name": "Medieval Markets",
+      "url": "https://www.nexusmods.com/skyrimspecialedition/mods/161479",
+      "use": "market layout and atmosphere reference"
+    },
+    {
+      "name": "Your Market Stall",
+      "url": "https://www.nexusmods.com/skyrimspecialedition/mods/15814",
+      "use": "gameplay reference only; do not depend on its scripts"
+    }
+  ]
+}

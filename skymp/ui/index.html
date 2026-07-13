@@ -108,6 +108,227 @@
       margin-top: 14px;
     }
     .trade-btn:hover { background: #d4b97e; }
+
+    /* === INTERACTION MENU / GOVERNANCE === */
+    #interaction-menu {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(0,0,0,0.08), rgba(0,0,0,0.42));
+      z-index: 220;
+    }
+    #interaction-menu.open { display: flex; }
+    .interaction-shell {
+      width: min(720px, calc(100vw - 40px));
+      max-height: calc(100vh - 64px);
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 14px;
+      color: #f5f1e8;
+    }
+    .interaction-panel,
+    .interaction-detail {
+      background: rgba(10, 10, 13, 0.92);
+      border: 1px solid rgba(187, 161, 107, 0.65);
+      border-radius: 8px;
+      box-shadow: 0 16px 50px rgba(0,0,0,0.72);
+      overflow: hidden;
+    }
+    .interaction-head {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid rgba(187, 161, 107, 0.28);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .interaction-title {
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      color: #d8bf82;
+      line-height: 1.2;
+    }
+    .interaction-target {
+      font-size: 12px;
+      color: rgba(245,241,232,0.66);
+      margin-top: 4px;
+    }
+    .interaction-close {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.04);
+      color: #f5f1e8;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .interaction-body {
+      padding: 12px;
+      overflow: auto;
+      max-height: calc(100vh - 170px);
+    }
+    .interaction-section + .interaction-section { margin-top: 14px; }
+    .interaction-section-title {
+      margin: 0 2px 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.3px;
+      color: rgba(216,191,130,0.8);
+    }
+    .interaction-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .interaction-action {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 12px;
+      border: 1px solid rgba(128,128,128,0.46);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.62);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      text-align: left;
+    }
+    .interaction-action:hover,
+    .interaction-action.active {
+      background: rgba(128,128,128,0.34);
+      border-color: rgba(216,191,130,0.75);
+    }
+    .interaction-action[disabled] {
+      opacity: 0.48;
+      cursor: default;
+    }
+    .interaction-action .hint {
+      color: rgba(245,241,232,0.45);
+      font-size: 12px;
+    }
+    .interaction-detail {
+      min-height: 360px;
+    }
+    .detail-empty {
+      height: 100%;
+      min-height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      color: rgba(245,241,232,0.58);
+      text-align: center;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .detail-form {
+      display: none;
+      padding: 14px;
+    }
+    .detail-form.active { display: block; }
+    .detail-form h3 {
+      margin-bottom: 6px;
+      color: #d8bf82;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .detail-form p {
+      margin-bottom: 14px;
+      color: rgba(245,241,232,0.62);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .form-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .form-row {
+      display: grid;
+      gap: 6px;
+    }
+    .form-row label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(216,191,130,0.82);
+    }
+    .form-row input,
+    .form-row select,
+    .form-row textarea {
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.55);
+      color: #f5f1e8;
+      padding: 10px 11px;
+      font-size: 14px;
+      outline: none;
+      resize: vertical;
+    }
+    .form-row textarea { min-height: 86px; }
+    .form-row input:focus,
+    .form-row select:focus,
+    .form-row textarea:focus {
+      border-color: rgba(216,191,130,0.85);
+    }
+    .detail-footer {
+      margin-top: 14px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .detail-btn {
+      min-width: 96px;
+      min-height: 36px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.06);
+      color: #f5f1e8;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .detail-btn.primary {
+      background: #bba16b;
+      color: #080808;
+      border-color: #bba16b;
+      font-weight: 700;
+    }
+    .detail-btn:hover { filter: brightness(1.08); }
+    .interaction-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 34px;
+      transform: translateX(-50%);
+      display: none;
+      max-width: min(540px, calc(100vw - 32px));
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(187,161,107,0.55);
+      background: rgba(10,10,13,0.92);
+      color: #f5f1e8;
+      font-size: 13px;
+      z-index: 260;
+    }
+    .interaction-toast.visible { display: block; }
+
+    @media (max-width: 720px) {
+      .interaction-shell {
+        grid-template-columns: 1fr;
+      }
+      .interaction-detail {
+        min-height: 280px;
+      }
+      .interaction-body {
+        max-height: 38vh;
+      }
+    }
   </style>
 </head>
 <body>
@@ -133,6 +354,36 @@
   </div>
 </div>
 
+<!-- Interaction / Governance Menu -->
+<div id="interaction-menu" aria-hidden="true">
+  <div class="interaction-shell">
+    <div class="interaction-panel">
+      <div class="interaction-head">
+        <div>
+          <div class="interaction-title">Interagir</div>
+          <div class="interaction-target" id="interaction-target">Sem alvo</div>
+        </div>
+        <button class="interaction-close" onclick="closeInteractionMenu()" aria-label="Fechar">×</button>
+      </div>
+      <div class="interaction-body" id="interaction-actions"></div>
+    </div>
+
+    <div class="interaction-detail">
+      <div id="interaction-detail-empty" class="detail-empty">Selecione uma acao para continuar.</div>
+      <form id="interaction-action-form" class="detail-form" onsubmit="submitInteractionAction(event)">
+        <h3 id="detail-title">Acao</h3>
+        <p id="detail-description"></p>
+        <div class="form-grid" id="detail-fields"></div>
+        <div class="detail-footer">
+          <button type="button" class="detail-btn" onclick="clearInteractionDetail()">Cancelar</button>
+          <button type="submit" class="detail-btn primary">Confirmar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<div id="interaction-toast" class="interaction-toast"></div>
+
 <script>
   // ── Mock mp para testes fora do SkyMP ─────────────────────────────────────
   if (typeof mp === 'undefined') {
@@ -150,8 +401,199 @@
     peers: new Map(),          // actorId -> { pc, gainNode, audioEl }
     ws: null,
     audioCtx: null,
-    localStream: null
+    localStream: null,
+    interaction: {
+      targetActorId: null,
+      sections: [],
+      selectedAction: null
+    }
   };
+
+  const DEFAULT_INTERACTION_SECTIONS = [
+    {
+      id: 'social',
+      label: 'Social',
+      actions: [
+        { action: 'social.trade', label: 'Trocar', preset: 'trade' },
+        { action: 'social.group', label: 'Grupo', preset: 'group' },
+        { action: 'social.introduce', label: 'Apresentar-se', preset: 'introduce' }
+      ]
+    }
+  ];
+
+  const ACTION_CONFIG = {
+    'social.trade': {
+      title: 'Trocar',
+      description: 'Envia uma solicitacao de troca para o alvo.',
+      fields: [],
+      submitType: 'chat',
+      chatCommand: ({ targetActorId }) => `/trade ${formatActorId(targetActorId)}`
+    },
+    'social.group': {
+      title: 'Grupo',
+      description: 'Envia uma solicitacao de grupo para o alvo.',
+      fields: [],
+      submitType: 'chat',
+      chatCommand: ({ targetActorId }) => `/groupinvite ${formatActorId(targetActorId)}`
+    },
+    'social.introduce': {
+      title: 'Apresentar-se',
+      description: 'Registra que o alvo passa a conhecer seu personagem pelo nome.',
+      fields: [],
+      submitType: 'chat',
+      chatCommand: ({ targetActorId }) => `/apresentar ${formatActorId(targetActorId)}`
+    },
+    'guard.stop': {
+      title: 'Abordar',
+      description: 'Inicia uma abordagem oficial da guarda.',
+      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: verificacao de identidade' }]
+    },
+    'guard.search': {
+      title: 'Revistar',
+      description: 'Solicita consentimento para revista. Se houver mandado ativo, a revista sera forcada pelo servidor.',
+      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: suspeita de contrabando' }]
+    },
+    'guard.records': {
+      title: 'Ver ficha',
+      description: 'Consulta ficha criminal e mandados conhecidos do alvo.',
+      fields: []
+    },
+    'guard.fine': {
+      title: 'Aplicar multa',
+      description: 'Registra multa. O servidor cobra automaticamente se o alvo possuir ouro suficiente.',
+      fields: [
+        { name: 'amount', label: 'Valor', type: 'number', min: 1, placeholder: '150' },
+        { name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: desordem publica' }
+      ]
+    },
+    'guard.detain': {
+      title: 'Deter',
+      description: 'Detem o alvo temporariamente para procedimento da guarda.',
+      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: resistencia a abordagem' }]
+    },
+    'guard.arrest': {
+      title: 'Prender',
+      description: 'Registra prisao e envia o alvo para a cela configurada.',
+      fields: [
+        { name: 'sentenceMinutes', label: 'Pena em minutos', type: 'number', min: 1, max: 180, placeholder: '10' },
+        { name: 'reason', label: 'Crime', type: 'textarea', placeholder: 'Ex: roubo e resistencia' }
+      ]
+    },
+    'guard.confiscate': {
+      title: 'Confiscar item',
+      description: 'Remove item do inventario persistente do alvo e registra como evidencia.',
+      fields: [
+        { name: 'baseId', label: 'FormID do item', type: 'text', placeholder: '0x0000000F' },
+        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' },
+        { name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: item ilegal' }
+      ]
+    },
+    'guard.release': {
+      title: 'Liberar',
+      description: 'Encerra abordagem, detencao ou escolta do alvo.',
+      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: sem irregularidades' }]
+    },
+    'stall.view': {
+      title: 'Ver Vitrine',
+      description: 'Lista os itens a venda nesta barraca.',
+      fields: [],
+      submitType: 'event',
+      eventName: 'governance:interaction:execute'
+    },
+    'stall.buy': {
+      title: 'Comprar Item',
+      description: 'Compre um item especifico desta barraca.',
+      fields: [
+        { name: 'itemId', label: 'ID do Item', type: 'number', min: 1, placeholder: 'Ex: 1' },
+        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' }
+      ],
+      submitType: 'event',
+      eventName: 'governance:interaction:execute'
+    },
+    'stall.manage': {
+      title: 'Gerenciar Barraca',
+      description: 'Adiciona ou remove itens da sua propria barraca.',
+      fields: [
+        { name: 'actionType', label: 'Acao', type: 'select', options: [{value: 'add', label: 'Adicionar'}, {value: 'remove', label: 'Remover'}] },
+        { name: 'baseId', label: 'FormID do Item', type: 'text', placeholder: '0x0000000F' },
+        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' },
+        { name: 'price', label: 'Preco (apenas para adicionar)', type: 'number', min: 0, placeholder: '5' }
+      ],
+      submitType: 'event',
+      eventName: 'governance:interaction:execute'
+    },
+    'npc.market_view': {
+      title: 'Mercado: Ver Precos',
+      description: 'Lista os itens e precos disponiveis no mercado local.',
+      fields: [],
+      submitType: 'event',
+      eventName: 'governance:interaction:execute'
+    },
+    'npc.market_buy': {
+      title: 'Mercado: Comprar',
+      description: 'Compra itens superfaturados do NPC local.',
+      fields: [
+        { name: 'baseId', label: 'FormID do Item', type: 'text', placeholder: '0x0000000F' },
+        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' }
+      ],
+      submitType: 'event',
+      eventName: 'governance:interaction:execute'
+    },
+    'npc.market_sell': {
+      title: 'Mercado: Vender',
+      description: 'Vende itens ao NPC local por uma fracao do valor.',
+      fields: [
+        { name: 'baseId', label: 'FormID do Item', type: 'text', placeholder: '0x0000000F' },
+        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' }
+      ],
+      submitType: 'event',
+      eventName: 'governance:interaction:execute'
+    }
+  };
+
+  function normalizePayload(data) {
+    if (!data) return {};
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return {}; }
+    }
+    return data;
+  }
+
+  function formatActorId(actorId) {
+    if (typeof actorId === 'number') return `0x${actorId.toString(16)}`;
+    const raw = String(actorId || '');
+    return raw.startsWith('0x') ? raw : `0x${raw}`;
+  }
+
+  function sendUiEvent(type, data) {
+    const payload = { type, data };
+    if (!window.mp) return;
+
+    if (typeof window.mp.send === 'function') {
+      window.mp.send(type, JSON.stringify(data || {}));
+    }
+    if (typeof window.mp.trigger === 'function') {
+      window.mp.trigger(type, data || {});
+      window.mp.trigger('cef::ui:event', payload);
+    }
+  }
+
+  function sendChatCommand(command) {
+    if (!command) return;
+    if (window.mp && typeof window.mp.send === 'function') {
+      window.mp.send('cef::chat:send', command);
+      return;
+    }
+    sendUiEvent('cef::chat:send', command);
+  }
+
+  function showInteractionToast(message) {
+    const el = document.getElementById('interaction-toast');
+    el.textContent = message;
+    el.classList.add('visible');
+    clearTimeout(showInteractionToast._timer);
+    showInteractionToast._timer = setTimeout(() => el.classList.remove('visible'), 2400);
+  }
 
   // ── WebSocket Signaling ───────────────────────────────────────────────────
   function connectVoip(actorId) {
@@ -353,6 +795,211 @@
     mp.trigger('cef::trade:cancel', {});
   }
 
+  // ── Interaction Menu / Governance ───────────────────────────────────────────
+  function mergeInteractionSections(serverSections) {
+    const result = DEFAULT_INTERACTION_SECTIONS.map(section => ({
+      ...section,
+      actions: section.actions.map(action => ({ ...action }))
+    }));
+
+    for (const section of serverSections || []) {
+      const existing = result.find(item => item.id === section.id);
+      if (existing) {
+        existing.actions.push(...(section.actions || []));
+      } else {
+        result.push(section);
+      }
+    }
+
+    return result.filter(section => section.actions && section.actions.length > 0);
+  }
+
+  function openInteractionMenu(data) {
+    const d = normalizePayload(data);
+    state.interaction.targetActorId = d.targetActorId || d.target || d.actorId || null;
+    state.interaction.sections = mergeInteractionSections(d.sections || []);
+    state.interaction.selectedAction = null;
+
+    document.getElementById('interaction-target').textContent =
+      state.interaction.targetActorId ? `Alvo ${formatActorId(state.interaction.targetActorId)}` : 'Sem alvo';
+
+    renderInteractionActions();
+    clearInteractionDetail();
+    document.getElementById('interaction-menu').classList.add('open');
+    document.getElementById('interaction-menu').setAttribute('aria-hidden', 'false');
+
+    if (state.interaction.targetActorId) {
+      sendUiEvent('governance:interaction:actions', { targetActorId: state.interaction.targetActorId });
+    }
+  }
+
+  function updateInteractionActions(data) {
+    const d = normalizePayload(data);
+    if (d.targetActorId && String(d.targetActorId) !== String(state.interaction.targetActorId)) {
+      return;
+    }
+    state.interaction.sections = mergeInteractionSections(d.sections || []);
+    renderInteractionActions();
+  }
+
+  function closeInteractionMenu() {
+    document.getElementById('interaction-menu').classList.remove('open');
+    document.getElementById('interaction-menu').setAttribute('aria-hidden', 'true');
+    state.interaction.targetActorId = null;
+    state.interaction.sections = [];
+    state.interaction.selectedAction = null;
+    clearInteractionDetail();
+    sendUiEvent('governance:interaction:close', {});
+  }
+
+  function renderInteractionActions() {
+    const root = document.getElementById('interaction-actions');
+    root.innerHTML = '';
+
+    for (const section of state.interaction.sections) {
+      const sectionEl = document.createElement('section');
+      sectionEl.className = 'interaction-section';
+
+      const title = document.createElement('div');
+      title.className = 'interaction-section-title';
+      title.textContent = section.label || section.id;
+      sectionEl.appendChild(title);
+
+      const list = document.createElement('div');
+      list.className = 'interaction-actions';
+
+      for (const item of section.actions || []) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'interaction-action';
+        button.disabled = Boolean(item.disabled);
+        button.dataset.action = item.action;
+        button.innerHTML = `<span>${item.label || item.action}</span><span class="hint">›</span>`;
+        button.onclick = () => selectInteractionAction(item.action);
+        list.appendChild(button);
+      }
+
+      sectionEl.appendChild(list);
+      root.appendChild(sectionEl);
+    }
+  }
+
+  function selectInteractionAction(action) {
+    state.interaction.selectedAction = action;
+    for (const el of document.querySelectorAll('.interaction-action')) {
+      el.classList.toggle('active', el.dataset.action === action);
+    }
+
+    const config = ACTION_CONFIG[action] || {
+      title: action,
+      description: 'Executa a acao selecionada.',
+      fields: []
+    };
+
+    document.getElementById('interaction-detail-empty').style.display = 'none';
+    const form = document.getElementById('interaction-action-form');
+    form.classList.add('active');
+    document.getElementById('detail-title').textContent = config.title;
+    document.getElementById('detail-description').textContent = config.description || '';
+
+    const fields = document.getElementById('detail-fields');
+    fields.innerHTML = '';
+    for (const field of config.fields || []) {
+      fields.appendChild(createActionField(field));
+    }
+  }
+
+  function createActionField(field) {
+    const row = document.createElement('div');
+    row.className = 'form-row';
+
+    const label = document.createElement('label');
+    label.htmlFor = `field-${field.name}`;
+    label.textContent = field.label;
+    row.appendChild(label);
+
+    let input;
+    if (field.type === 'textarea') {
+      input = document.createElement('textarea');
+    } else if (field.type === 'select') {
+      input = document.createElement('select');
+      for (const option of field.options || []) {
+        const opt = document.createElement('option');
+        opt.value = option.value;
+        opt.textContent = option.label;
+        input.appendChild(opt);
+      }
+    } else {
+      input = document.createElement('input');
+      input.type = field.type || 'text';
+    }
+
+    input.id = `field-${field.name}`;
+    input.name = field.name;
+    if (field.placeholder) input.placeholder = field.placeholder;
+    if (field.min !== undefined) input.min = field.min;
+    if (field.max !== undefined) input.max = field.max;
+    row.appendChild(input);
+    return row;
+  }
+
+  function clearInteractionDetail() {
+    state.interaction.selectedAction = null;
+    document.getElementById('interaction-detail-empty').style.display = 'flex';
+    document.getElementById('interaction-action-form').classList.remove('active');
+    document.getElementById('detail-fields').innerHTML = '';
+    for (const el of document.querySelectorAll('.interaction-action')) {
+      el.classList.remove('active');
+    }
+  }
+
+  function submitInteractionAction(event) {
+    event.preventDefault();
+    const action = state.interaction.selectedAction;
+    if (!action || !state.interaction.targetActorId) {
+      showInteractionToast('Selecione uma acao valida.');
+      return;
+    }
+
+    const config = ACTION_CONFIG[action] || {};
+    const data = {
+      targetActorId: state.interaction.targetActorId,
+      action
+    };
+
+    const formData = new FormData(event.currentTarget);
+    for (const [key, value] of formData.entries()) {
+      data[key] = value;
+    }
+
+    if (config.submitType === 'chat') {
+      sendChatCommand(config.chatCommand(data));
+    } else if (config.submitType === 'event') {
+      sendUiEvent(config.eventName, data);
+    } else {
+      sendUiEvent('governance:interaction:execute', data);
+    }
+
+    showInteractionToast('Acao enviada.');
+    closeInteractionMenu();
+  }
+
+  window.openInteractionMenu = openInteractionMenu;
+  window.updateInteractionActions = updateInteractionActions;
+  window.closeInteractionMenu = closeInteractionMenu;
+  window.handleServerModal = (payload) => {
+    const message = normalizePayload(payload);
+    if (message.type === 'governance:interaction:actions') {
+      updateInteractionActions(message.data);
+    }
+    if (message.type === 'governance:interaction:open') {
+      openInteractionMenu(message.data);
+    }
+    if (message.type === 'governance:toast') {
+      showInteractionToast(message.data && message.data.message ? message.data.message : 'Atualizado.');
+    }
+  };
+
   // ── Eventos vindos do backend Node.js ────────────────────────────────────
   if (mp && mp.events) {
     mp.events.add('voip:connect', (data) => {
@@ -373,7 +1020,18 @@
       const d = typeof data === 'string' ? JSON.parse(data) : data;
       setVoiceMode(d.mode);
     });
+
+    mp.events.add('interaction:open', (data) => openInteractionMenu(data));
+    mp.events.add('interaction:close', () => closeInteractionMenu());
+    mp.events.add('governance:interaction:actions', (data) => updateInteractionActions(data));
+    mp.events.add('governance:interaction:open', (data) => openInteractionMenu(data));
   }
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('interaction-menu').classList.contains('open')) {
+      closeInteractionMenu();
+    }
+  });
 </script>
 </body>
 </html>

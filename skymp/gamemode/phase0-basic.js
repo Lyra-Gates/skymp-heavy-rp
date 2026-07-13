@@ -8,6 +8,8 @@ const db            = require(path.join(gamemodeDir, 'database'));
 const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
 const commands      = require(path.join(gamemodeDir, 'commands'));
 const moduleRegistry = require(path.join(gamemodeDir, 'core', 'module-registry'));
+const governance    = require(path.join(gamemodeDir, 'governance-service'));
+const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -38,6 +40,34 @@ moduleRegistry.register({
   commands: [],
   initialize: async () => {
     require(path.join(gamemodeDir, 'death-service')).initDeathService();
+  }
+});
+
+moduleRegistry.register({
+  id: 'governance',
+  enabledBy: 'ENABLE_GOVERNANCE_SERVICE',
+  phase: 'lab',
+  dependencies: [],
+  commands: governance.commandDefs(),
+  initialize: async () => {
+    await governance.initGovernanceService();
+  },
+  shutdown: async () => {
+    governance.shutdownGovernanceService();
+  }
+});
+
+moduleRegistry.register({
+  id: 'market-stalls',
+  enabledBy: 'ENABLE_MARKET_STALLS_SERVICE',
+  phase: 'lab',
+  dependencies: ['governance'],
+  commands: marketStalls.commandDefs(),
+  initialize: async () => {
+    await marketStalls.initMarketStallsService();
+  },
+  shutdown: async () => {
+    marketStalls.shutdownMarketStallsService();
   }
 });
 
@@ -99,13 +129,22 @@ if (typeof mp !== "undefined") {
   mp.makeProperty('browserModal', {
     isVisibleByOwner: true,
     isVisibleByNeighbors: false,
-    updateOwner: '',
+    updateOwner: `
+      if (ctx.value && ctx.sp && ctx.sp.browser && ctx.sp.browser.executeJavaScript) {
+        const payload = JSON.stringify(ctx.value);
+        ctx.sp.browser.executeJavaScript('window.handleServerModal && window.handleServerModal(' + payload + ')');
+      }
+    `,
     updateNeighbor: ''
   });
   
   mp.onUiEvent = (pcFormId, uiEvent) => {
     try {
       console.log(`[phase0] onUiEvent callback from ${pcFormId.toString(16)}:`, uiEvent);
+      const governanceResult = governance.handleUiEvent(pcFormId, uiEvent);
+      if (governanceResult instanceof Promise) {
+        governanceResult.catch(err => console.error('[phase0] governance UI event failed:', err.message));
+      }
       if (uiEvent.type === 'cef::chat:send') {
         const text = uiEvent.data;
         commands.handleChatInput(pcFormId, text);

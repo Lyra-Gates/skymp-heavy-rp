@@ -1,0 +1,38 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+const api = {
+  windowMinimize: () => ipcRenderer.send('window-minimize'),
+  windowClose: () => ipcRenderer.send('window-close'),
+  getLauncherConfig: () => ipcRenderer.invoke('get-launcher-config'),
+  saveGamePath: (folderPath: string) => ipcRenderer.invoke('save-game-path', folderPath),
+  selectGamePath: () => ipcRenderer.invoke('select-game-path'),
+  checkGamePath: (folderPath: string) => ipcRenderer.invoke('check-game-path', folderPath),
+  ensureSkyrimIni: (opts?: any) => ipcRenderer.invoke('ensure-skyrim-ini', opts),
+  getDisplaySettings: () => ipcRenderer.invoke('get-display-settings'),
+  discordLogin: () => ipcRenderer.invoke('discord-login'),
+  discordLogout: () => ipcRenderer.invoke('discord-logout'),
+  getAuthStatus: () => ipcRenderer.invoke('get-auth-status'),
+  joinQueue: (password?: string) => ipcRenderer.invoke('join-queue', password),
+  pollQueue: () => ipcRenderer.invoke('poll-queue'),
+  getLocalPlugins: (folderPath: string) => ipcRenderer.invoke('get-local-plugins', folderPath),
+  verifyMods: (folderPath: string) => ipcRenderer.invoke('verify-mods', folderPath),
+  analyzePlugins: (folderPath: string, serverLoadOrder?: string[]) => ipcRenderer.invoke('analyze-plugins', folderPath, serverLoadOrder),
+  syncLoadorder: (folderPath: string, serverLoadOrder: string[]) => ipcRenderer.invoke('sync-loadorder', folderPath, serverLoadOrder),
+  isGameRunning: () => ipcRenderer.invoke('is-game-running'),
+  killGame: () => ipcRenderer.invoke('kill-game'),
+  checkClientUpdate: (folderPath: string) => ipcRenderer.invoke('check-client-update', folderPath),
+  installClientUpdate: (folderPath: string) => ipcRenderer.invoke('install-client-update', folderPath),
+  checkModsUpdate: (folderPath: string) => ipcRenderer.invoke('check-mods-update', folderPath),
+  installModsUpdate: (folderPath: string, force?: boolean) => ipcRenderer.invoke('install-mods-update', folderPath, force),
+  onUpdateProgress: (callback: (value: any) => void) => {
+    ipcRenderer.removeAllListeners('update-progress');
+    ipcRenderer.on('update-progress', (_event, value) => callback(value));
+  },
+  onModsUpdateProgress: (callback: (value: any) => void) => {
+    ipcRenderer.removeAllListeners('mods-update-progress');
+    ipcRenderer.on('mods-update-progress', (_event, value) => callback(value));
+  },
+  launchGame: (folderPath: string, ticket: string) => ipcRenderer.invoke('launch-game', folderPath, ticket)
+};
+
+contextBridge.exposeInMainWorld('electronAPI', api);

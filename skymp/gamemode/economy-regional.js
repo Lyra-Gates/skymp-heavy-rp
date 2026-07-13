@@ -51,18 +51,30 @@ async function restockTick() {
   await loadCache();
 }
 
-/**
- * Retorna o preço de venda ajustado pela oferta atual do mercado.
- */
-function getDynamicSellPrice(holdId, baseId, basePrice) {
-  const entry = pricesCache[holdId]?.[baseId];
-  if (!entry) return basePrice;
+function getBaseValue(entry) {
+  if (!entry) return 15; // default base value
+  // Usamos o buy_price do DB como base
+  return entry.buy_price || 15;
+}
 
-  const stock = entry.stock;
-  // 0~30: preço alto (+30%). 31~70: normal. 71~100: baixo (-20%)
-  if (stock <= 30) return Math.floor(basePrice * 1.3);
-  if (stock >= 70) return Math.floor(basePrice * 0.8);
-  return basePrice;
+/**
+ * Preco que o NPC paga ao jogador (Spread punitivo: 40% do base)
+ */
+function getDynamicSellPrice(stock, baseValue) {
+  let price = baseValue * 0.4;
+  if (stock >= 70) price *= 0.5; // Muito estoque = paga miseria
+  if (stock <= 30) price *= 1.5; // Pouco estoque = paga um pouco melhor
+  return Math.max(1, Math.floor(price));
+}
+
+/**
+ * Preco que o NPC cobra do jogador (Spread punitivo: 180% do base)
+ */
+function getDynamicBuyPrice(stock, baseValue) {
+  let price = baseValue * 1.8;
+  if (stock <= 30) price *= 1.4; // Pouco estoque = cobra absurdo
+  if (stock >= 70) price *= 0.8; // Muito estoque = cobra um pouco menos
+  return Math.max(1, Math.floor(price));
 }
 
 /**
@@ -81,9 +93,12 @@ async function sellToMarket(actorId, characterId, baseId, qty = 1) {
     return;
   }
 
-  // Calcula preço
-  const baseSell = pricesCache[holdId]?.[baseId]?.sell_price || 5;
-  const price    = getDynamicSellPrice(holdId, baseId, baseSell);
+  // Calcula preço punitivo
+  const entry = pricesCache[holdId]?.[baseId];
+  const baseValue = getBaseValue(entry);
+  const currentStock = entry ? entry.stock : 50;
+  const price = getDynamicSellPrice(currentStock, baseValue);
+
   const gross    = price * qty;
   const tax      = Math.ceil(gross * hold.tax_rate);
   const net      = gross - tax;
@@ -95,10 +110,10 @@ async function sellToMarket(actorId, characterId, baseId, qty = 1) {
   // Acumula imposto no tesouro do Hold
   await db.query('UPDATE holds SET treasury = treasury + ? WHERE id = ?', [tax, holdId]);
 
-  // Reduz o estoque no mercado
+  // Aumenta o estoque no mercado
   await db.query(
-    'INSERT INTO market_prices (hold_id, base_id, sell_price, buy_price, stock) VALUES (?, ?, ?, ?, 95) ON DUPLICATE KEY UPDATE stock = GREATEST(stock - ?, 0)',
-    [holdId, baseId, baseSell, Math.floor(baseSell * 1.4), qty]
+    'INSERT INTO market_prices (hold_id, base_id, sell_price, buy_price, stock) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE stock = LEAST(stock + ?, 100)',
+    [holdId, baseId, price, getDynamicBuyPrice(currentStock, baseValue), Math.min(100, 50 + qty), qty]
   );
 
   if (typeof mp !== 'undefined') {
@@ -120,7 +135,9 @@ async function buyFromMarket(actorId, characterId, baseId, qty = 1) {
     return;
   }
 
-  const totalCost = entry.buy_price * qty;
+  const baseValue = getBaseValue(entry);
+  const unitPrice = getDynamicBuyPrice(entry.stock, baseValue);
+  const totalCost = unitPrice * qty;
   const paid = await economy.removeGold(characterId, totalCost);
   if (!paid) {
     if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Ouro insuficiente. Necessário: ${totalCost}g.`]);
@@ -151,7 +168,12 @@ async function showMarketInfo(actorId, characterId) {
     return;
   }
 
-  const summary = prices.map(p => `0x${p.base_id.toString(16)}: compra=${p.buy_price}g, venda=${p.sell_price}g (${p.stock})`).join(' | ');
+  const summary = prices.map(p => {
+    const base = getBaseValue(p);
+    const buy = getDynamicBuyPrice(p.stock, base);
+    const sell = getDynamicSellPrice(p.stock, base);
+    return `0x${p.base_id.toString(16)}: compra=${buy}g, venda=${sell}g (estoque:${p.stock})`;
+  }).join(' | ');
   if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`[${hold.name}] ${summary}`]);
 }
 
@@ -209,6 +231,60 @@ async function setTaxRate(actorId, holdId, rate) {
   await admin.auditLog(ch?.accountId, null, 'economy:setTax', `hold=${holdId} rate=${rate}`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// UI Interaction Hooks
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function getInteractionSections(actorId, targetActorId) {
+  // Apenas NPCs (nao-players) oferecem o mercado regional
+  const commands = require('./commands');
+  const targetChar = commands.getActiveCharacterData(targetActorId);
+  if (targetChar) return []; // Se tem data, eh player
+
+  const ch = commands.getActiveCharacterData(actorId);
+  if (!ch) return [];
+
+  const holdId = characterHold.get(ch.characterId) || 'whiterun';
+  const hold = holdCache[holdId];
+  const holdName = hold ? hold.name : 'Regional';
+
+  return [{
+    id: 'npc_market',
+    label: `Mercado ${holdName}`,
+    actions: [
+      { action: 'npc.market_view', label: 'Ver Precos' },
+      { action: 'npc.market_buy', label: 'Comprar Item' },
+      { action: 'npc.market_sell', label: 'Vender Item' }
+    ]
+  }];
+}
+
+async function handleInteractionAction(actorId, action, payload = {}) {
+  const ch = commands.getActiveCharacterData(actorId);
+  if (!ch) return;
+
+  const baseIdText = payload.baseId || '';
+  const baseId = Number.parseInt(baseIdText, baseIdText.startsWith('0x') ? 16 : 10);
+  const qty = Number.parseInt(payload.count) || 1;
+
+  switch (action) {
+    case 'npc.market_view':
+      return showMarketInfo(actorId, ch.characterId);
+    case 'npc.market_buy':
+      if (!Number.isFinite(baseId)) {
+        if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['ID Invalido.']);
+        return;
+      }
+      return buyFromMarket(actorId, ch.characterId, baseId, qty);
+    case 'npc.market_sell':
+      if (!Number.isFinite(baseId)) {
+        if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['ID Invalido.']);
+        return;
+      }
+      return sellToMarket(actorId, ch.characterId, baseId, qty);
+  }
+}
+
 module.exports = {
   initRegionalEconomy,
   sellToMarket,
@@ -216,5 +292,7 @@ module.exports = {
   showMarketInfo,
   setCharacterHold,
   withdrawHoldTreasury,
-  setTaxRate
+  setTaxRate,
+  getInteractionSections,
+  handleInteractionAction
 };
