@@ -1,6 +1,6 @@
 # Servidor SkyMP Heavy RP Publico - Plano de Desenvolvimento
 
-> **Status Atual (Auditoria Recente):** A Fase 0 esta parcialmente validada em laboratorio local: boot, primeiro cliente, segundo perfil por log, spawn inicial e persistencia basica possuem evidencia. Antes de Alfa, ainda faltam dois ambientes reais, validacao visual de movimento, mudanca de celula, inventario/equipamento, morte/respawn controlado e persistencia apos restart.
+> **Status Atual (Ativo):** A Fase 0 de fundação técnica foi validada e expandida. Estamos atuando nas Fases 3, 4 e 5. Sistemas críticos como o Governance (prisões, multas, mandados), Market Stalls (barracas de jogadores) com integração total via UI CEF, Economia Regional (NPCs atuando como sumidouros punitivos para incentivar trocas entre jogadores) e o Launcher oficial em React/Electron já foram implementados e testados em laboratório.
 
 ## 1. Visao
 
@@ -769,11 +769,11 @@ Rodar o projeto de forma sustentavel.
 - Se o estado SkyMP usara `file` no MVP e `mongodb` em producao.
 - Como cumprir publicacao de codigo/alteracoes exigida pelas licencas do SkyMP.
 
-## 14. Proximo Passo Imediato
+## 14. Próximo Passo Imediato
 
-Comecar pela Fase 0. Nao desenhar a economia inteira antes de provar estabilidade do SkyMP com a versao alvo do Skyrim e pelo menos dois clientes reais.
+Com a economia (Market Stalls, Regional NPCs) e o sistema de governo implementados, o próximo foco natural é o sistema de **Housing / Propriedades (Fase 6)** ou refinar o combate/física (laboratório).
 
-O primeiro marco tecnico e:
+O marco técnico atual é:
 
 ```text
 Marco 0.1 - Teste de Conexao SkyMP

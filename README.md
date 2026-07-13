@@ -13,9 +13,10 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 
 ## Status Atual do Projeto (Auditoria Recente)
 
-- **Fase 0 parcialmente validada**: O boot local, conexão de cliente, spawn inicial, segundo perfil por log e persistência básica foram testados em laboratório. A validação visual com dois ambientes, mudança de célula, inventário/equipamento e persistência pós-restart ainda seguem pendentes.
-- **Integração CEF / VOIP em protótipo**: Chat local e backend VOIP existem no gamemode, mas ainda precisam de validação funcional em sessão real antes de serem tratados como operacionais para alfa.
-- **TODOs Pendentes**: A configuração dos FormIDs reais dos plugins (ex: `ITEM_FISHING_ROD`) no sistema de empregos.
+- **Núcleo de Roleplay Avançado**: Foram implementados o **Governance Service** (Prisões, Multas, Impostos) e a **Economia Controlada** com ênfase no comércio entre jogadores via **Market Stalls**. O comércio regional (NPCs) atua como um sistema punitivo de *spread* (NPCs compram muito barato e vendem muito caro) para engajar transações Player-to-Player.
+- **UI CEF / Menu de Interação Integrados**: A UI CEF e o gamemode Node.js agora possuem comunicação de eventos bi-direcional. Jogadores podem interagir com outros jogadores e NPCs clicando através de um menu contextual para inspecionar, prender, multar ou abrir o painel de mercado, abandonando a necessidade de comandos de chat engessados.
+- **Launcher App**: Um Launcher em React + Electron (Vite) funcional foi adicionado em `apps/launcher`, controlando autenticação, configurações e boot da build.
+- **Fase Inicial (Fase 0)**: As fundações locais (conexão, persistência base em banco MariaDB via scripts SQL migrados) já foram garantidas em ambiente de laboratório.
 
 ## Como Executar o Servidor (Desenvolvimento)
 
