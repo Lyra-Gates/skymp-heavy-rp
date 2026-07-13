@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, FolderOpen, Search, Wrench } from 'lucide-react';
+import { ArrowLeft, Bug, Download, FolderOpen, Search, Wrench } from 'lucide-react';
 
 export function Settings() {
   const navigate = useNavigate();
@@ -111,6 +111,18 @@ export function Settings() {
     else setError(result.error || 'Falha ao atualizar mods.');
   };
 
+  const handleReportCrashes = async () => {
+    resetMessages();
+    setBusy('crash-report');
+    const result = await window.electronAPI.reportRecentCrashes();
+    setBusy('');
+    if (result.ok) {
+      setSuccess(result.sent ? `Crash report enviado (${result.sent} arquivo(s)).` : 'Nenhum crash recente encontrado.');
+    } else {
+      setError(result.error || 'Falha ao enviar crash report.');
+    }
+  };
+
   return (
     <div className="page-container">
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
@@ -168,6 +180,9 @@ export function Settings() {
           </button>
           <button className="btn-secondary" onClick={handleInstallMods} disabled={!!busy}>
             <Download size={18} /> Atualizar Mods
+          </button>
+          <button className="btn-secondary" onClick={handleReportCrashes} disabled={!!busy}>
+            <Bug size={18} /> Enviar Crash
           </button>
         </div>
         {busy && <p style={{ color: 'var(--accent-gold)', marginTop: '12px' }}>Executando: {busy}</p>}

@@ -1,4 +1,6 @@
 const path    = require('path');
+const fs      = require('fs');
+const crypto  = require('crypto');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 require('dotenv').config({ path: path.resolve(__dirname, '../../skymp/gamemode/.env') });
 const express = require('express');
@@ -11,6 +13,7 @@ const DiscordStrategy = require('passport-discord').Strategy;
 const app  = express();
 const PORT = process.env.PANEL_PORT || 3001;
 const INTERNAL_API_SECRET = requireEnv('INTERNAL_API_SECRET');
+const CRASH_REPORT_DIR = path.join(__dirname, 'crash-reports');
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -36,9 +39,34 @@ const db = async (sql, params = []) => {
   return rows;
 };
 
+function ensureCrashReportDir() {
+  if (!fs.existsSync(CRASH_REPORT_DIR)) fs.mkdirSync(CRASH_REPORT_DIR, { recursive: true });
+}
+
+function sanitizeCrashText(value, maxLength) {
+  return String(value || '').replace(/\0/g, '').slice(0, maxLength);
+}
+
+function normalizeCrashReport(body) {
+  const crashes = Array.isArray(body.crashes) ? body.crashes.slice(0, 3) : [];
+  return {
+    id: `${Date.now()}-${crypto.randomUUID()}`,
+    receivedAt: new Date().toISOString(),
+    discordId: sanitizeCrashText(body.discordId, 64) || null,
+    username: sanitizeCrashText(body.username, 120) || null,
+    clientVersion: sanitizeCrashText(body.clientVersion, 80) || null,
+    launcherVersion: sanitizeCrashText(body.launcherVersion, 80) || null,
+    crashes: crashes.map((crash) => ({
+      filename: sanitizeCrashText(crash.filename || crash.name, 160).replace(/[\\/:*?"<>|]/g, '_') || 'crash.log',
+      mtime: Number(crash.mtime) || null,
+      content: sanitizeCrashText(crash.content, 65000)
+    })).filter((crash) => crash.content.length > 0)
+  };
+}
+
 // ── Middleware ─────────────────────────────────────────────────────────────
 app.use(cors({ origin: `http://localhost:${PORT}`, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '512kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
   secret: requireEnv('SESSION_SECRET'),
@@ -335,6 +363,52 @@ app.get('/api/prison', requireStaff, async (req, res) => {
     );
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// API: Crash reports do launcher
+app.post('/api/crashes/client', async (req, res) => {
+  try {
+    const report = normalizeCrashReport(req.body || {});
+    if (report.crashes.length === 0) return res.status(400).json({ ok: false, error: 'Nenhum crash valido recebido' });
+
+    ensureCrashReportDir();
+    const filePath = path.join(CRASH_REPORT_DIR, `${report.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(report, null, 2));
+
+    res.json({ ok: true, id: report.id, received: report.crashes.length });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/crashes', requireStaff, async (req, res) => {
+  try {
+    ensureCrashReportDir();
+    const reports = fs.readdirSync(CRASH_REPORT_DIR)
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => {
+        const fullPath = path.join(CRASH_REPORT_DIR, name);
+        const raw = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+        return {
+          id: raw.id,
+          receivedAt: raw.receivedAt,
+          discordId: raw.discordId,
+          username: raw.username,
+          clientVersion: raw.clientVersion,
+          launcherVersion: raw.launcherVersion,
+          files: Array.isArray(raw.crashes) ? raw.crashes.map((crash) => ({
+            filename: crash.filename,
+            mtime: crash.mtime,
+            bytes: String(crash.content || '').length
+          })) : []
+        };
+      })
+      .sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)))
+      .slice(0, 100);
+    res.json(reports);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── API: Launcher Manifesto ──────────────────────────────────────────────────

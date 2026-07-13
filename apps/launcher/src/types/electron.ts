@@ -30,6 +30,8 @@ export interface ElectronAPI {
   installClientUpdate: (folderPath: string) => Promise<any>;
   checkModsUpdate: (folderPath: string) => Promise<any>;
   installModsUpdate: (folderPath: string, force?: boolean) => Promise<any>;
+  getRecentCrashes: () => Promise<Array<{ name: string; mtime: number }>>;
+  reportRecentCrashes: () => Promise<any>;
   onUpdateProgress: (callback: (value: any) => void) => void;
   onModsUpdateProgress: (callback: (value: any) => void) => void;
   launchGame: (folderPath: string, ticket: string) => Promise<boolean>;

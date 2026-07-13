@@ -1120,6 +1120,38 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
 });
 
 // ─── Game Launch ───
+ipcMain.handle('get-recent-crashes', async () => {
+  return collectRecentCrashLogs(5).map(file => ({
+    name: file.name,
+    mtime: file.mtime
+  }));
+});
+
+ipcMain.handle('report-recent-crashes', async () => {
+  const auth = readAuthFile();
+  const config = readLauncherConfig();
+  const crashes = collectRecentCrashLogs(2);
+  if (crashes.length === 0) return { ok: true, sent: 0 };
+
+  const payload = {
+    discordId: auth?.discordId || null,
+    username: auth?.globalName || auth?.username || null,
+    clientVersion: config.gamePath ? readStamp(config.gamePath, CLIENT_VERSION_FILENAME) : null,
+    launcherVersion: app.getVersion(),
+    crashes: crashes.map(file => {
+      const raw = fs.readFileSync(file.fullPath);
+      const maxBytes = 60 * 1024;
+      const content = raw.length > maxBytes
+        ? Buffer.concat([raw.subarray(0, maxBytes), Buffer.from('\n...[truncado pelo launcher]')]).toString('utf8')
+        : raw.toString('utf8');
+      return { filename: file.name, mtime: file.mtime, content };
+    })
+  };
+
+  const result = await postJsonToApi('/api/crashes/client', payload);
+  return { ok: !!result?.ok || result?.status === 'ok', sent: crashes.length, response: result };
+});
+
 ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
   if (!folderPath) return false;
   const exePath = path.join(folderPath, 'skse64_loader.exe');

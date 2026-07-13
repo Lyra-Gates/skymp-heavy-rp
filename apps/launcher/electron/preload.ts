@@ -24,6 +24,8 @@ const api = {
   installClientUpdate: (folderPath: string) => ipcRenderer.invoke('install-client-update', folderPath),
   checkModsUpdate: (folderPath: string) => ipcRenderer.invoke('check-mods-update', folderPath),
   installModsUpdate: (folderPath: string, force?: boolean) => ipcRenderer.invoke('install-mods-update', folderPath, force),
+  getRecentCrashes: () => ipcRenderer.invoke('get-recent-crashes'),
+  reportRecentCrashes: () => ipcRenderer.invoke('report-recent-crashes'),
   onUpdateProgress: (callback: (value: any) => void) => {
     ipcRenderer.removeAllListeners('update-progress');
     ipcRenderer.on('update-progress', (_event, value) => callback(value));

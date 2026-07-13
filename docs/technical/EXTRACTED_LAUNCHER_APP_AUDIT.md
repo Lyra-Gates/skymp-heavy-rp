@@ -136,3 +136,65 @@ O app extraido adiciona principalmente:
 Vale aproveitar a arquitetura e algoritmos, especialmente update/modpack/INI/crash. Nao vale importar o app inteiro.
 
 O caminho seguro e portar recurso por recurso para `apps/launcher` em TypeScript, removendo segredos, parametrizando endpoints e adicionando UI de consentimento para qualquer acao que mova/remova arquivos do jogador.
+
+## Implementacao aplicada em 2026-07-13
+
+O primeiro corte de migracao ficou focado no que ja encaixava no launcher atual sem importar segredos ou endpoints do app extraido.
+
+### Ja presente/validado no launcher
+
+- Update de cliente via manifesto, download, SHA256 e extracao.
+- Update de modpack em partes com manifest/content signature.
+- Reparador de `Skyrim.ini` e `SkyrimPrefs.ini`.
+- Verificacao/sincronizacao de `plugins.txt`.
+- Analise de plugins/masters para diagnostico de load order.
+- Painel de manutencao em `apps/launcher/src/pages/Settings.tsx`.
+
+### Novo neste corte
+
+- Botao `Enviar Crash` no painel de manutencao do launcher.
+- IPC `get-recent-crashes` e `report-recent-crashes` no processo Electron.
+- Coleta local de logs recentes em:
+  - `Documents\My Games\Skyrim Special Edition\SKSE`
+  - `Documents\My Games\Skyrim Special Edition\SKSE\Crashlogs`
+- Limite de envio:
+  - ate 2 arquivos por report;
+  - ate 60 KB por arquivo no launcher;
+  - ate 3 arquivos/65 KB por arquivo no backend.
+- Envio para API propria: `POST /api/crashes/client`.
+- Nenhum webhook ou segredo de Discord fica no cliente.
+
+### Backend de suporte
+
+O painel web em `apps/web/server.js` agora possui:
+
+- `POST /api/crashes/client`
+  - Recebe crash reports do launcher.
+  - Normaliza campos basicos (`discordId`, `username`, versao do cliente/launcher).
+  - Salva JSON local em `apps/web/crash-reports/`.
+
+- `GET /api/crashes`
+  - Lista os ultimos reports para staff autenticada.
+  - Nao retorna o conteudo completo do log, apenas metadados/bytes por arquivo.
+
+A pasta `apps/web/crash-reports/` foi adicionada ao `.gitignore`.
+
+### Configuracao operacional
+
+O launcher usa `VITE_API_PORT` para falar com a API configurada em `SERVER_IP`.
+
+Para testar o crash report contra o painel web atual, alinhar uma das opcoes:
+
+1. Rodar o painel web na mesma porta esperada pelo launcher.
+2. Definir `VITE_API_PORT` para o `PANEL_PORT` do painel web.
+3. Mover a rota `/api/crashes/client` para a mesma API que ja serve fila/mods, caso ela seja o servico oficial do launcher.
+
+Sem esse alinhamento de porta, o botao do launcher compila e executa, mas o envio retornara erro de conexao.
+
+### Validacao feita
+
+- `npx tsc --noEmit` em `apps/launcher`.
+- `npx vite build` em `apps/launcher`.
+- `npm run lint` em `apps/launcher`.
+- `node --check server.js` em `apps/web`.
+- `git diff --check` nos arquivos alterados.
