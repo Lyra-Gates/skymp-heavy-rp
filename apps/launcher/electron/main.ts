@@ -5,16 +5,20 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import crypto from 'crypto';
-import { URL, URLSearchParams } from 'url';
+import { URL } from 'url';
 
 // ─── Constants & Env ───
+// Estes valores são substituídos em tempo de build pelo `define` do
+// vite.config.ts — em runtime não existe `.env` do lado do app empacotado.
+// VITE_DISCORD_CLIENT_SECRET foi removido de propósito: o secret vive só no
+// painel web (ver POST /api/launcher/oauth/exchange).
 const DISCORD_CLIENT_ID = process.env.VITE_DISCORD_CLIENT_ID || '';
-const DISCORD_CLIENT_SECRET = process.env.VITE_DISCORD_CLIENT_SECRET || '';
 const DISCORD_REDIRECT_URI = process.env.VITE_DISCORD_REDIRECT_URI || 'http://localhost:19847/callback';
 const SERVER_IP = process.env.VITE_SERVER_IP || '127.0.0.1';
 const SERVER_PORT = parseInt(process.env.VITE_SERVER_PORT || '7757', 10);
 const API_PORT = parseInt(process.env.VITE_API_PORT || '7758', 10);
 const DIST_REPO = process.env.VITE_GITHUB_DIST_REPO || '';
+const PANEL_URL = (process.env.VITE_PANEL_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
 const AUTH_FILE = path.join(app.getPath('userData'), 'auth.json');
 const LAUNCHER_CONFIG_FILE = path.join(app.getPath('userData'), 'launcher-config.json');
 const CLIENT_VERSION_FILENAME = 'skymp_client_version.txt';
@@ -371,61 +375,46 @@ function clearAuthFile() {
   } catch {}
 }
 
-function httpsPost(url: string, body: any): Promise<{ status: number, data: any }> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const postData = new URLSearchParams(body).toString();
-    
-    const req = https.request({
+
+function escapeHtml(value: string): string {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] as string
+  ));
+}
+
+/**
+ * POST de JSON para uma URL arbitrária (http ou https). Diferente de
+ * `postJsonToApi`, que é fixo no host/porta do servidor de jogo — o painel web
+ * costuma ficar em outro host/porta (VITE_PANEL_URL).
+ */
+function postJsonToUrl(url: string, body: any): Promise<{ status: number, data: any }> {
+  return new Promise((resolve) => {
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { resolve({ status: 0, data: null }); return; }
+
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const postData = JSON.stringify(body);
+
+    const req = transport.request({
       hostname: parsed.hostname,
-      port: 443,
-      path: parsed.pathname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(postData),
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
       }
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try {
-          resolve({ status: res.statusCode || 500, data: JSON.parse(data) });
-        } catch {
-          reject(new Error(`Failed to parse response: ${data}`));
-        }
+        try { resolve({ status: res.statusCode || 500, data: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode || 500, data: null }); }
       });
     });
-    
-    req.on('error', reject);
-    req.write(postData);
-    req.end();
-  });
-}
 
-function httpsGet(url: string, headers: any): Promise<{ status: number, data: any }> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    
-    const req = https.request({
-      hostname: parsed.hostname,
-      port: 443,
-      path: parsed.pathname,
-      method: 'GET',
-      headers: headers || {}
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          resolve({ status: res.statusCode || 500, data: JSON.parse(data) });
-        } catch {
-          reject(new Error(`Failed to parse response: ${data}`));
-        }
-      });
-    });
-    
-    req.on('error', reject);
+    req.on('error', () => resolve({ status: 0, data: null }));
+    req.write(postData);
     req.end();
   });
 }
@@ -660,45 +649,29 @@ ipcMain.handle('discord-login', async () => {
           return;
         }
 
-        const tokenResponse = await httpsPost('https://discord.com/api/oauth2/token', {
-          client_id: DISCORD_CLIENT_ID,
-          client_secret: DISCORD_CLIENT_SECRET,
-          grant_type: 'authorization_code',
-          code: code,
+        // A troca de `code` por token roda no painel web, não aqui: o client
+        // secret do Discord não pode viajar dentro de um instalador que os
+        // jogadores baixam. Ver POST /api/launcher/oauth/exchange em
+        // apps/web/server.js e docs/technical/LAUNCHER_DISTRIBUTION.md.
+        const exchange = await postJsonToUrl(`${PANEL_URL}/api/launcher/oauth/exchange`, {
+          code,
           redirect_uri: DISCORD_REDIRECT_URI,
         });
 
-        if (tokenResponse.status !== 200 || !tokenResponse.data.access_token) {
+        if (exchange.status !== 200 || !exchange.data || !exchange.data.discordId) {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erro ao trocar código por token.</h1>');
+          res.end('<h1>Erro ao concluir o login. Verifique se o painel do servidor está acessível.</h1>');
           callbackServer.close();
           finish(null);
           return;
         }
 
-        const accessToken = tokenResponse.data.access_token;
-        const refreshToken = tokenResponse.data.refresh_token;
-
-        const userResponse = await httpsGet('https://discord.com/api/users/@me', {
-          Authorization: `Bearer ${accessToken}`
-        });
-
-        if (userResponse.status !== 200 || !userResponse.data.id) {
-          res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erro ao obter dados do usuário.</h1>');
-          callbackServer.close();
-          finish(null);
-          return;
-        }
-
-        const user = userResponse.data;
+        const user = exchange.data;
         const authData = {
-          discordId: user.id,
+          discordId: user.discordId,
           username: user.username,
-          globalName: user.global_name || user.username,
-          avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null,
-          accessToken: accessToken,
-          refreshToken: refreshToken,
+          globalName: user.globalName || user.username,
+          avatar: user.avatar || null,
           loginDate: new Date().toISOString(),
         };
 
@@ -710,7 +683,7 @@ ipcMain.handle('discord-login', async () => {
             <body style="background:#0a0a0a;color:#c9a227;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
               <div style="text-align:center;">
                 <h1>✅ Login realizado com sucesso!</h1>
-                <p style="color:#d6d3d1;">Bem-vindo, ${user.global_name || user.username}! Pode fechar esta janela.</p>
+                <p style="color:#d6d3d1;">Bem-vindo, ${escapeHtml(authData.globalName)}! Pode fechar esta janela.</p>
               </div>
             </body>
           </html>
@@ -779,7 +752,7 @@ ipcMain.handle('discord-logout', async () => {
 
 ipcMain.handle('get-auth-status', async () => {
   const auth = readAuthFile();
-  if (!auth || !auth.accessToken) return null;
+  if (!auth || !auth.discordId) return null;
   return {
     discordId: auth.discordId,
     username: auth.username,
@@ -792,11 +765,11 @@ ipcMain.handle('get-auth-status', async () => {
 // ─── Queue System ───
 ipcMain.handle('join-queue', async (_event, password) => {
   const auth = readAuthFile();
-  if (!auth || !auth.accessToken) return { status: 'error', message: 'not_authenticated' };
+  if (!auth || !auth.discordId) return { status: 'error', message: 'not_authenticated' };
 
   try {
     return await new Promise((resolve) => {
-      const postData = JSON.stringify({ accessToken: auth.accessToken, password: password || "" });
+      const postData = JSON.stringify({ discordId: auth.discordId, password: password || "" });
       const req = http.request({
         hostname: SERVER_IP,
         port: API_PORT,
@@ -1222,7 +1195,7 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
 
   try {
     const auth = readAuthFile();
-    if (auth && auth.accessToken && auth.discordId) {
+    if (auth && auth.discordId) {
       const configPath = path.join(folderPath, 'Data', 'Platform', 'Plugins', 'skymp_config.json');
       let config: any = {};
       if (fs.existsSync(configPath)) {

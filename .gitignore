@@ -1,6 +1,14 @@
 references/
 node_modules/
 apps/*/node_modules/
+
+# Segredos de runtime. Os .env.example ficam versionados (whitelist abaixo);
+# qualquer .env real carrega SESSION_SECRET, DISCORD_CLIENT_SECRET, DB_PASS
+# e DISCORD_BOT_TOKEN — nunca pode entrar no repositorio.
+.env
+.env.*
+!.env.example
+
 skymp/server/
 skymp/artifacts/
 skymp/client-backups/
