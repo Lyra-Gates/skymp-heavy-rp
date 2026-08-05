@@ -14,9 +14,8 @@
   <div class="login-card">
     <div class="logo">SKYMP</div>
     <div class="subtitle">Heavy RP · Staff Panel</div>
-    <input type="password" id="pin-input" placeholder="••••" maxlength="8" autofocus>
-    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" onclick="doLogin()">Entrar</button>
-    <p id="login-error" style="color:#e05252;margin-top:12px;font-size:13px;display:none">PIN inválido</p>
+    <a class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;display:flex" href="/api/auth/discord">Entrar com Discord</a>
+    <p id="login-error" style="color:#e05252;margin-top:12px;font-size:13px;display:none">Acesso staff negado. Fale com um administrador.</p>
   </div>
 </div>
 
@@ -86,20 +85,26 @@
 let currentPage = 'dashboard';
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-async function doLogin() {
-  const pin = document.getElementById('pin-input').value;
-  const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pin }), credentials:'include' });
-  if (r.ok) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').classList.add('visible');
-    navigate('dashboard');
-    startClock();
-  } else {
-    document.getElementById('login-error').style.display = 'block';
+async function checkAuth() {
+  try {
+    const r = await fetch('/api/me', { credentials: 'include' });
+    if (r.ok) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      navigate('dashboard');
+      startClock();
+    } else {
+      document.getElementById('login-screen').style.display = '';
+      document.getElementById('app').classList.remove('visible');
+      if (r.status === 403) document.getElementById('login-error').style.display = 'block';
+    }
+  } catch (err) {
+    document.getElementById('login-screen').style.display = '';
+    document.getElementById('app').classList.remove('visible');
   }
 }
 
-document.getElementById('pin-input').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+checkAuth();
 
 async function doLogout() {
   await fetch('/api/auth/logout', { method:'POST', credentials:'include' });
@@ -211,8 +216,8 @@ async function renderWhitelist(el) {
     <table>
       <thead><tr><th>Discord</th><th>Personagem</th><th>Status</th><th>Data</th><th>Ações</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td>${r.discord_name || '—'}</td>
-        <td>${r.first_name ? r.first_name+' '+r.last_name : '—'}</td>
+        <td>${escapeHtml(r.discord_name) || '—'}</td>
+        <td>${r.first_name ? escapeHtml(r.first_name)+' '+escapeHtml(r.last_name) : '—'}</td>
         <td><span class="pill pill-${r.status}">${r.status}</span></td>
         <td style="color:var(--muted)">${fmt(r.created_at)}</td>
         <td style="display:flex;gap:6px;padding-top:8px">
@@ -244,8 +249,8 @@ async function renderCharacters(el) {
     <table id="chars-table">
       <thead><tr><th>Nome IC</th><th>Discord</th><th>Status</th><th>Ouro</th><th>Criado em</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td><strong>${r.first_name} ${r.last_name}</strong></td>
-        <td style="color:var(--muted)">${r.discord_name||'—'}</td>
+        <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
+        <td style="color:var(--muted)">${escapeHtml(r.discord_name)||'—'}</td>
         <td><span class="pill pill-${r.status}">${r.status}</span></td>
         <td>⚜ ${r.gold.toLocaleString()}</td>
         <td style="color:var(--muted)">${fmt(r.created_at)}</td>
@@ -259,8 +264,8 @@ async function renderCharacters(el) {
 async function searchChars(q) {
   const rows = await api(`/api/characters?q=${encodeURIComponent(q)}`);
   document.querySelector('#chars-table tbody').innerHTML = rows.map(r=>`<tr>
-    <td><strong>${r.first_name} ${r.last_name}</strong></td>
-    <td style="color:var(--muted)">${r.discord_name||'—'}</td>
+    <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
+    <td style="color:var(--muted)">${escapeHtml(r.discord_name)||'—'}</td>
     <td><span class="pill pill-${r.status}">${r.status}</span></td>
     <td>⚜ ${r.gold.toLocaleString()}</td>
     <td style="color:var(--muted)">${fmt(r.created_at)}</td>
@@ -289,8 +294,8 @@ async function renderEconomy(el) {
         <thead><tr><th>#</th><th>Personagem</th><th>Discord</th><th>Ouro</th></tr></thead>
         <tbody>${top.map((r,i)=>`<tr>
           <td style="color:var(--muted)">${i+1}</td>
-          <td><strong>${r.first_name} ${r.last_name}</strong></td>
-          <td style="color:var(--muted)">${r.username||'—'}</td>
+          <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
+          <td style="color:var(--muted)">${escapeHtml(r.username)||'—'}</td>
           <td style="color:var(--accent);font-weight:600">⚜ ${r.gold.toLocaleString()}</td>
         </tr>`).join('')}
         </tbody>
@@ -305,8 +310,8 @@ async function renderFactions(el) {
     <table>
       <thead><tr><th>Tag</th><th>Nome</th><th>Membros</th><th>Tesouro</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td><span style="color:${r.color_hex||'#bba16b'};font-weight:700;font-family:monospace">${r.tag}</span></td>
-        <td>${r.name}</td>
+        <td><span style="color:${r.color_hex||'#bba16b'};font-weight:700;font-family:monospace">${escapeHtml(r.tag)}</span></td>
+        <td>${escapeHtml(r.name)}</td>
         <td>${r.member_count}</td>
         <td>⚜ ${r.treasury.toLocaleString()}</td>
       </tr>`).join('')}
@@ -323,10 +328,10 @@ async function renderCriminal(el) {
     <table>
       <thead><tr><th>Personagem</th><th>Crime</th><th>Recompensa</th><th>Hold</th><th>Status</th><th>Data</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td><strong>${r.first_name} ${r.last_name}</strong></td>
-        <td>${r.crime}</td>
+        <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
+        <td>${escapeHtml(r.crime)}</td>
         <td style="color:var(--warning)">⚜ ${r.bounty}</td>
-        <td style="color:var(--muted)">${r.hold}</td>
+        <td style="color:var(--muted)">${escapeHtml(r.hold)}</td>
         <td><span class="pill ${r.resolved?'pill-released':'pill-active'}">${r.resolved?'Resolvido':'Ativo'}</span></td>
         <td style="color:var(--muted)">${fmt(r.created_at)}</td>
       </tr>`).join('')}
@@ -343,8 +348,8 @@ async function renderPrison(el) {
     <table>
       <thead><tr><th>Personagem</th><th>Crime</th><th>Pena</th><th>Cumprido</th><th>Preso em</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td><strong>${r.first_name} ${r.last_name}</strong></td>
-        <td>${r.crime_summary||'—'}</td>
+        <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
+        <td>${escapeHtml(r.crime_summary)||'—'}</td>
         <td>${r.sentence_minutes} min</td>
         <td>
           <div style="display:flex;align-items:center;gap:8px">
@@ -375,10 +380,10 @@ async function renderAudit(el) {
     <table>
       <thead><tr><th>Ação</th><th>Por</th><th>Alvo</th><th>Detalhes</th><th>Data</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
-        <td><span style="color:${colorAction(r.action)};font-family:monospace;font-size:12px">${r.action}</span></td>
-        <td>${r.actor_name||'—'}</td>
-        <td style="color:var(--muted)">${r.target_name||'—'}</td>
-        <td style="color:var(--muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.details||'—'}</td>
+        <td><span style="color:${colorAction(r.action)};font-family:monospace;font-size:12px">${escapeHtml(r.action)}</span></td>
+        <td>${escapeHtml(r.actor_name)||'—'}</td>
+        <td style="color:var(--muted)">${escapeHtml(r.target_name)||'—'}</td>
+        <td style="color:var(--muted);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.details)||'—'}</td>
         <td style="color:var(--muted);white-space:nowrap">${fmt(r.created_at)}</td>
       </tr>`).join('')}
       ${rows.length===0?'<tr><td colspan="5" class="empty">Nenhum registro</td></tr>':''}
@@ -388,6 +393,12 @@ async function renderAudit(el) {
 }
 
 // ── Util ───────────────────────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
 function fmt(d) {
   if (!d) return '—';
   return new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});

@@ -39,8 +39,20 @@ const db = async (sql, params = []) => {
   return rows;
 };
 
-function ensureCrashReportDir() {
-  if (!fs.existsSync(CRASH_REPORT_DIR)) fs.mkdirSync(CRASH_REPORT_DIR, { recursive: true });
+const fsp = fs.promises;
+
+async function ensureCrashReportDir() {
+  await fsp.mkdir(CRASH_REPORT_DIR, { recursive: true });
+}
+
+// ── Rate limiting simples (janela deslizante em memória) ────────────────────
+const rateLimitBuckets = new Map();
+function isRateLimited(key, maxRequests, windowMs) {
+  const now = Date.now();
+  const timestamps = (rateLimitBuckets.get(key) || []).filter((t) => now - t < windowMs);
+  timestamps.push(now);
+  rateLimitBuckets.set(key, timestamps);
+  return timestamps.length > maxRequests;
 }
 
 function sanitizeCrashText(value, maxLength) {
@@ -65,6 +77,9 @@ function normalizeCrashReport(body) {
 }
 
 // ── Middleware ─────────────────────────────────────────────────────────────
+if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 app.use(cors({ origin: `http://localhost:${PORT}`, credentials: true }));
 app.use(express.json({ limit: '512kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -72,7 +87,11 @@ app.use(session({
   secret: requireEnv('SESSION_SECRET'),
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, maxAge: 8 * 60 * 60 * 1000 } // 8h
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000 // 8h
+  }
 }));
 
 // ── Auth via Discord OAuth ───────────────────────────────────────────────────
@@ -89,7 +108,7 @@ passport.use(new DiscordStrategy({
     scope: ['identify']
 }, async (accessToken, refreshToken, profile, done) => {
     try {
-        let [rows] = await db('SELECT account_id FROM discord_identities WHERE discord_id = ?', [profile.id]);
+        const rows = await db('SELECT account_id FROM discord_identities WHERE discord_id = ?', [profile.id]);
         let accountId;
         if (rows.length === 0) {
             const [accRes] = await pool.execute('INSERT INTO accounts (status) VALUES (?)', ['active']);
@@ -111,16 +130,19 @@ function requireAuth(req, res, next) {
   res.status(401).json({ error: 'Não autenticado' });
 }
 
+// A autoridade de staff é derivada EXCLUSIVAMENTE da tabela `staff_roles`.
+// O campo `vip_level` em `accounts` é SOMENTE para monetização (VIP/Apoiador).
+// NUNCA usar vip_level como critério de permissão administrativa.
 async function requireStaff(req, res, next) {
   if (!req.isAuthenticated || !req.isAuthenticated()) return res.status(401).json({ error: 'Nao autenticado' });
   try {
-    const [rows] = await pool.execute('SELECT vip_level FROM accounts WHERE id = ? LIMIT 1', [req.user.accountId]);
-    const vipLevel = rows.length > 0 ? Number(rows[0].vip_level) : 0;
-    if (vipLevel < 10) return res.status(403).json({ error: 'Acesso staff negado' });
-    req.staff = { vipLevel };
+    const rows = await db('SELECT role FROM staff_roles WHERE account_id = ? LIMIT 1', [req.user.accountId]);
+    if (rows.length === 0) return res.status(403).json({ error: 'Acesso staff negado' });
+    req.staff = { role: rows[0].role };
     return next();
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('[requireStaff]', err);
+    return res.status(500).json({ error: 'Erro interno do servidor' });
   }
 }
 
@@ -133,7 +155,7 @@ app.get('/api/auth/discord/callback', passport.authenticate('discord', {
 
 app.post('/api/auth/logout', (req, res) => {
   req.logout((err) => {
-    if(err) return res.status(500).json({ error: err.message });
+    if(err) { console.error('[logout]', err); return res.status(500).json({ error: 'Erro interno do servidor' }); }
     req.session.destroy(() => res.json({ ok: true }));
   });
 });
@@ -141,19 +163,19 @@ app.post('/api/auth/logout', (req, res) => {
 // Rotas do Jogador Público
 app.get('/api/me', requireAuth, async (req, res) => {
     try {
-        const [appRows] = await db('SELECT * FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
+        const appRows = await db('SELECT * FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
         const application = appRows.length > 0 ? appRows[0] : null;
         res.json({
             user: req.user,
             application
         });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { console.error('[/api/me]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 app.post('/api/apply', requireAuth, async (req, res) => {
     const { first_name, last_name, biography } = req.body;
     try {
-        const [existing] = await db('SELECT status FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
+        const existing = await db('SELECT status FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
         if (existing.length > 0 && (existing[0].status === 'pending' || existing[0].status === 'approved')) {
             return res.status(400).json({ error: 'Você já possui uma aplicação pendente ou aprovada.' });
         }
@@ -169,7 +191,7 @@ app.post('/api/apply', requireAuth, async (req, res) => {
         );
 
         res.json({ ok: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { console.error('[/api/apply]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Dashboard ─────────────────────────────────────────────────────────
@@ -189,7 +211,7 @@ app.get('/api/dashboard', requireStaff, async (req, res) => {
       prisoners:   prisoners[0].c,
       factions:    factions[0].c
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/dashboard]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Whitelist ─────────────────────────────────────────────────────────
@@ -207,7 +229,7 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
        LIMIT 100`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/whitelist GET]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
@@ -220,9 +242,9 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
       [status, reviewer_notes || null, req.params.id]
     );
     
-    // Buscar o discord_id relacionado para notificar o bot
-    const [idRows] = await db(
-      `SELECT d.discord_id FROM discord_identities d
+    // Buscar o discord_id e account_id relacionados para notificar o bot e auditar
+    const idRows = await db(
+      `SELECT d.discord_id, a.id as account_id FROM discord_identities d
        INNER JOIN accounts a ON a.id = d.account_id
        INNER JOIN whitelist_applications wa ON wa.account_id = a.id
        WHERE wa.id=?`, [req.params.id]
@@ -238,7 +260,16 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
          WHERE wa.id=?`, [req.params.id]
       );
     }
-    
+
+    // Auditoria: registra quem revisou a aplicação de whitelist
+    const auditAction = status === 'approved' ? 'whitelist:approve'
+      : status === 'rejected' ? 'whitelist:reject'
+      : 'whitelist:reset';
+    await db(
+      'INSERT INTO audit_logs (action, actor_account_id, target_account_id, details) VALUES (?, ?, ?, ?)',
+      [auditAction, req.user.accountId, idRows.length > 0 ? idRows[0].account_id : null, reviewer_notes || null]
+    );
+
     // Sincronizar com o Bot do Discord
     if (idRows.length > 0) {
         try {
@@ -256,7 +287,7 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
     }
 
     res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Personagens ───────────────────────────────────────────────────────
@@ -274,7 +305,7 @@ app.get('/api/characters', requireStaff, async (req, res) => {
       [search, search, search]
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/characters]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Audit Logs ────────────────────────────────────────────────────────
@@ -291,7 +322,7 @@ app.get('/api/audit', requireStaff, async (req, res) => {
        ORDER BY al.created_at DESC LIMIT 200`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/audit]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Economia / Holds ──────────────────────────────────────────────────
@@ -305,7 +336,7 @@ app.get('/api/economy/holds', requireStaff, async (req, res) => {
        ORDER BY h.name`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/economy/holds]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 app.get('/api/economy/top-gold', requireStaff, async (req, res) => {
@@ -318,7 +349,7 @@ app.get('/api/economy/top-gold', requireStaff, async (req, res) => {
        ORDER BY c.gold DESC LIMIT 10`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/economy/top-gold]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Fichas Criminais ──────────────────────────────────────────────────
@@ -332,7 +363,7 @@ app.get('/api/criminal', requireStaff, async (req, res) => {
        ORDER BY cr.resolved ASC, cr.created_at DESC LIMIT 100`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/criminal]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Facções ───────────────────────────────────────────────────────────
@@ -346,7 +377,7 @@ app.get('/api/factions', requireStaff, async (req, res) => {
        GROUP BY f.id ORDER BY member_count DESC`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/factions]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // ── API: Presos Ativos ─────────────────────────────────────────────────────
@@ -362,34 +393,48 @@ app.get('/api/prison', requireStaff, async (req, res) => {
        ORDER BY pr.arrested_at DESC`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error('[/api/prison]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
 // API: Crash reports do launcher
+const CRASH_REPORT_MAX_BYTES = 256 * 1024;
 app.post('/api/crashes/client', async (req, res) => {
   try {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    if (isRateLimited(`crashes:${ip}`, 10, 60 * 1000)) {
+      return res.status(429).json({ ok: false, error: 'Muitas requisições, tente novamente mais tarde.' });
+    }
+
+    const contentLength = Number(req.get('content-length') || 0);
+    if (contentLength > CRASH_REPORT_MAX_BYTES) {
+      return res.status(413).json({ ok: false, error: 'Payload muito grande' });
+    }
+
     const report = normalizeCrashReport(req.body || {});
     if (report.crashes.length === 0) return res.status(400).json({ ok: false, error: 'Nenhum crash valido recebido' });
 
-    ensureCrashReportDir();
+    await ensureCrashReportDir();
     const filePath = path.join(CRASH_REPORT_DIR, `${report.id}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(report, null, 2));
+    await fsp.writeFile(filePath, JSON.stringify(report, null, 2));
 
     res.json({ ok: true, id: report.id, received: report.crashes.length });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    console.error('[/api/crashes/client]', err);
+    res.status(500).json({ ok: false, error: 'Erro interno do servidor' });
   }
 });
 
 app.get('/api/crashes', requireStaff, async (req, res) => {
   try {
-    ensureCrashReportDir();
-    const reports = fs.readdirSync(CRASH_REPORT_DIR)
-      .filter((name) => name.endsWith('.json'))
-      .map((name) => {
-        const fullPath = path.join(CRASH_REPORT_DIR, name);
-        const raw = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-        return {
+    await ensureCrashReportDir();
+    const names = (await fsp.readdir(CRASH_REPORT_DIR)).filter((name) => name.endsWith('.json'));
+
+    const reports = [];
+    for (const name of names) {
+      const fullPath = path.join(CRASH_REPORT_DIR, name);
+      try {
+        const raw = JSON.parse(await fsp.readFile(fullPath, 'utf8'));
+        reports.push({
           id: raw.id,
           receivedAt: raw.receivedAt,
           discordId: raw.discordId,
@@ -401,13 +446,17 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
             mtime: crash.mtime,
             bytes: String(crash.content || '').length
           })) : []
-        };
-      })
-      .sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)))
-      .slice(0, 100);
-    res.json(reports);
+        });
+      } catch (fileErr) {
+        console.error(`[/api/crashes] Arquivo corrompido ignorado: ${name}`, fileErr.message);
+      }
+    }
+
+    reports.sort((a, b) => String(b.receivedAt).localeCompare(String(a.receivedAt)));
+    res.json(reports.slice(0, 100));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[/api/crashes]', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });
 
