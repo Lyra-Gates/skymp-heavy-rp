@@ -1030,7 +1030,7 @@
     if (message.type === 'governance:interaction:open') {
       openInteractionMenu(message.data);
     }
-    if (message.type === 'governance:toast') {
+    if (message.type === 'governance:toast' || message.type === 'toast') {
       showInteractionToast(message.data && message.data.message ? message.data.message : 'Atualizado.');
     }
   };

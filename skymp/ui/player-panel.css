@@ -250,6 +250,55 @@
 .pp-gauge-fill.magicka { background: linear-gradient(90deg, #6b9cff, #a8c4ff); box-shadow: 0 0 10px rgba(107,156,255,0.5); }
 .pp-gauge-fill.stamina { background: linear-gradient(90deg, #34d399, #86e8c3); box-shadow: 0 0 10px rgba(52,211,153,0.5); }
 
+/* ── Linha social editável (apelidar pessoa conhecida direto no painel) ────── */
+.pp-row.social {
+  flex-wrap: wrap;
+}
+.pp-rename-btn {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--pp-border);
+  background: var(--pp-panel-2);
+  color: var(--pp-text-dim);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+}
+.pp-rename-btn:hover { color: var(--pp-accent-bright); border-color: rgba(139, 124, 246, 0.35); }
+.pp-rename-form {
+  display: none;
+  width: 100%;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pp-rename-form.open { display: flex; }
+.pp-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--pp-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--pp-text);
+  font-size: 12px;
+  font-family: inherit;
+}
+.pp-rename-input:focus { outline: none; border-color: var(--pp-accent); }
+.pp-rename-save {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(139, 124, 246, 0.35);
+  background: var(--pp-accent-dim);
+  color: var(--pp-accent-bright);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pp-rename-save:hover { background: rgba(139, 124, 246, 0.24); }
+
 .pp-hint {
   margin-top: 16px;
   padding-top: 10px;

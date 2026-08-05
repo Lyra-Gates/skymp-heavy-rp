@@ -143,12 +143,15 @@ function mockDb() {
   };
 }
 
-// Injetar mock antes de importar o módulo
+// Injetar mock antes de importar o módulo. Guarda a instância única que o
+// módulo real acaba usando (require é cacheado), pra dar spy nas queries dela.
+let capturedDbInstance = null;
 const Module = require('module');
 const originalLoad = Module._load;
 Module._load = function(request, parent, isMain) {
   if (request === '../database' || request === './database' || request.endsWith('/database')) {
-    return mockDb();
+    if (!capturedDbInstance) capturedDbInstance = mockDb();
+    return capturedDbInstance;
   }
   return originalLoad.apply(this, arguments);
 };
@@ -249,6 +252,60 @@ describe('transaction-service', () => {
       });
 
       assert.strictEqual(ok, false, 'Deve retornar false para item inexistente');
+    });
+  });
+
+  describe('addGold / removeGold', () => {
+    it('addGold soma ouro e registra no ledger', async () => {
+      const ok = await transactionService.addGold({ characterId: 1, amount: 100, reason: 'test', module: 'test' });
+      assert.strictEqual(ok, true);
+      assert.strictEqual(mockGold[1], 100);
+      assert.ok(mockLedger.some(l => l.type === 'gold'));
+    });
+
+    it('removeGold subtrai ouro quando ha saldo suficiente', async () => {
+      mockGold[1] = 500;
+      const ok = await transactionService.removeGold({ characterId: 1, amount: 200, reason: 'test', module: 'test' });
+      assert.strictEqual(ok, true);
+      assert.strictEqual(mockGold[1], 300);
+    });
+
+    it('removeGold retorna false e nao altera saldo quando insuficiente', async () => {
+      mockGold[1] = 50;
+      const ok = await transactionService.removeGold({ characterId: 1, amount: 200, reason: 'test', module: 'test' });
+      assert.strictEqual(ok, false);
+      assert.strictEqual(mockGold[1], 50);
+    });
+
+    it('removeGold trava a linha do saldo com FOR UPDATE (regressão do bug de saldo negativo)', async () => {
+      // O bug original fazia SELECT gold sem lock dentro da transação: duas
+      // remoções concorrentes liam o mesmo saldo, ambas passavam na checagem
+      // e o UPDATE relativo deixava o saldo negativo mesmo assim. Espiona as
+      // queries reais que getConnection() recebe durante um removeGold real
+      // pra travar a regressão de "o SELECT de saldo pede o lock".
+      mockGold[1] = 300;
+      const seenQueries = [];
+      const originalGetConnection = capturedDbInstance.getConnection.bind(capturedDbInstance);
+      capturedDbInstance.getConnection = async () => {
+        const conn = await originalGetConnection();
+        const originalConnQuery = conn.query.bind(conn);
+        conn.query = (sql, params) => {
+          seenQueries.push(sql);
+          return originalConnQuery(sql, params);
+        };
+        return conn;
+      };
+
+      try {
+        const ok = await transactionService.removeGold({ characterId: 1, amount: 100, reason: 'test', module: 'test' });
+        assert.strictEqual(ok, true);
+      } finally {
+        capturedDbInstance.getConnection = originalGetConnection;
+      }
+
+      const goldSelect = seenQueries.find(sql => /SELECT gold FROM characters/i.test(sql));
+      assert.ok(goldSelect, 'removeGold deve consultar o saldo dentro da transação');
+      assert.match(goldSelect, /FOR UPDATE/i);
     });
   });
 

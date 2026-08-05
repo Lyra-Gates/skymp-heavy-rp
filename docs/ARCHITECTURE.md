@@ -44,6 +44,8 @@ No sentido UI→servidor, `mp.onUiEvent` despacha todo evento através de `core/
 - **Economia**: `market-stalls-service.getMyEconomySummary()`.
 - **Social**: lista de `character_known_identities` do próprio personagem.
 - UI em `skymp/ui/player-panel.css` / `player-panel.js`, com identidade visual espelhando o [Prisma UI](https://prismaui.dev) (glass card preto, glow violeta, chip de status, navegação em pílulas com runas Elder Futhark como ícone de cada aba).
+- **Atualização proativa**: `core/panel-refresh-bus.js` é um `EventEmitter` desacoplado — `governance-service.js` chama `panelRefreshBus.requestRefresh(actorId, 'governance'|'status')` após multa, mandado ou prisão, e o `player-panel-service.js` (assinante único, registrado em `initPlayerPanelService`) reenvia a seção correspondente **só se o painel daquele jogador já estiver aberto**. Existe pra evitar que `governance-service.js` precise depender de `player-panel-service.js` (que já depende dele), sem forçar o painel a abrir sozinho na tela do jogador.
+- **Ação direta na aba Social**: cada pessoa conhecida tem um botão "Apelidar" que abre um mini-formulário inline (`skymp/ui/player-panel.js`, `socialRow`/`bindSocialRenameHandlers`) e envia `panel:social:rename` com `{ targetCharacterId, alias }`. `player-panel-service.renameKnownPerson` chama `identity-service.upsertKnownIdentity` diretamente pelos characterIds — funciona mesmo com o alvo desconectado, já que `character_known_identities` não depende de um actorId ativo.
 
 ### 1.5 Launcher do Cliente (`apps/launcher`)
 Desenvolvido em **Electron / React**.

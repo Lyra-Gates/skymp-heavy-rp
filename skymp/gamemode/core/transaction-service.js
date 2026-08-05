@@ -62,12 +62,18 @@ async function _recordGoldLedger(conn, opts) {
  * Não cria nem destrói a transação, apenas executa queries.
  */
 async function _applyInventoryDelta(conn, characterId, baseId, delta) {
+  // FOR UPDATE trava a linha (ou o gap, se ainda não existir) dentro da transação
+  // ativa em conn — uma segunda chamada concorrente pra mesma (characterId, baseId)
+  // bloqueia aqui até o commit/rollback da primeira, em vez de ler o mesmo valor
+  // obsoleto e sobrescrever (o bug original permitia duplicar/perder itens quando
+  // duas operações rodavam em paralelo, ex: stall_add + stall_pack).
+  const [rows] = await conn.query(
+    'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ? FOR UPDATE',
+    [characterId, baseId]
+  );
+
   if (delta > 0) {
     // Adiciona itens
-    const [rows] = await conn.query(
-      'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ?',
-      [characterId, baseId]
-    );
     if (rows.length > 0) {
       await conn.query(
         'UPDATE character_inventory SET count = count + ? WHERE character_id = ? AND base_id = ?',
@@ -81,10 +87,6 @@ async function _applyInventoryDelta(conn, characterId, baseId, delta) {
     }
   } else {
     // Remove itens (delta é negativo)
-    const [rows] = await conn.query(
-      'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ?',
-      [characterId, baseId]
-    );
     if (rows.length === 0) throw new Error(`Personagem ${characterId} não possui item 0x${baseId.toString(16)}`);
     const currentCount = rows[0].count;
     const remove = Math.abs(delta);
@@ -103,7 +105,11 @@ async function _applyInventoryDelta(conn, characterId, baseId, delta) {
  */
 async function _applyGoldDelta(conn, characterId, delta) {
   if (delta < 0) {
-    const [rows] = await conn.query('SELECT gold FROM characters WHERE id = ?', [characterId]);
+    // FOR UPDATE serializa débitos concorrentes do mesmo personagem — sem isso,
+    // duas remoções simultâneas podem ambas ler o saldo antigo, ambas passar na
+    // checagem de saldo suficiente, e o UPDATE relativo (gold = gold + ?) deixar
+    // o saldo negativo mesmo assim.
+    const [rows] = await conn.query('SELECT gold FROM characters WHERE id = ? FOR UPDATE', [characterId]);
     if (rows.length === 0) throw new Error(`Personagem ${characterId} não encontrado`);
     if (rows[0].gold + delta < 0) throw new Error(`Ouro insuficiente: tem ${rows[0].gold}, precisa ${Math.abs(delta)}`);
   }
@@ -303,6 +309,86 @@ async function transfer(opts) {
 }
 
 /**
+ * Concede ouro a um personagem (BD + ledger), atômico via _applyGoldDelta.
+ * @param {object} opts
+ * @param {number} opts.characterId
+ * @param {number} opts.amount - positivo
+ * @param {string} opts.reason
+ * @param {string} opts.module
+ * @param {string} [opts.idempotencyKey]
+ * @returns {Promise<boolean>}
+ */
+async function addGold(opts) {
+  const { characterId, amount, reason, module: mod, idempotencyKey } = opts;
+  if (amount <= 0) throw new Error('amount deve ser positivo');
+
+  if (idempotencyKey) {
+    const existing = await db.query('SELECT transaction_id FROM gold_transactions WHERE idempotency_key = ?', [idempotencyKey]);
+    if (existing.length > 0) {
+      console.log(`[transaction] addGold idempotent skip: key=${idempotencyKey}`);
+      return true;
+    }
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await _applyGoldDelta(conn, characterId, amount);
+    await _recordGoldLedger(conn, { characterId, delta: amount, reason, module: mod, idempotencyKey });
+    await conn.commit();
+    console.log(`[transaction] addGold: char=${characterId} +${amount}g (${reason})`);
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    console.error(`[transaction] addGold falhou: char=${characterId}:`, err.message);
+    return false;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Remove ouro de um personagem (BD + ledger), atômico via _applyGoldDelta —
+ * rejeita (retorna false) se o saldo for insuficiente, sem deixar o saldo negativo
+ * mesmo sob concorrência (a linha é travada com FOR UPDATE dentro da transação).
+ * @param {object} opts
+ * @param {number} opts.characterId
+ * @param {number} opts.amount - positivo
+ * @param {string} opts.reason
+ * @param {string} opts.module
+ * @param {string} [opts.idempotencyKey]
+ * @returns {Promise<boolean>}
+ */
+async function removeGold(opts) {
+  const { characterId, amount, reason, module: mod, idempotencyKey } = opts;
+  if (amount <= 0) throw new Error('amount deve ser positivo');
+
+  if (idempotencyKey) {
+    const existing = await db.query('SELECT transaction_id FROM gold_transactions WHERE idempotency_key = ?', [idempotencyKey]);
+    if (existing.length > 0) {
+      console.log(`[transaction] removeGold idempotent skip: key=${idempotencyKey}`);
+      return true;
+    }
+  }
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    await _applyGoldDelta(conn, characterId, -amount);
+    await _recordGoldLedger(conn, { characterId, delta: -amount, reason, module: mod, idempotencyKey });
+    await conn.commit();
+    console.log(`[transaction] removeGold: char=${characterId} -${amount}g (${reason})`);
+    return true;
+  } catch (err) {
+    await conn.rollback();
+    console.error(`[transaction] removeGold falhou (provavel saldo insuficiente): char=${characterId}:`, err.message);
+    return false;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
  * Verifica se o personagem possui quantidade suficiente de item.
  * Usa o banco como fonte de verdade (não o inventário do cliente).
  */
@@ -322,4 +408,4 @@ async function getGold(characterId) {
   return rows.length > 0 ? rows[0].gold : 0;
 }
 
-module.exports = { giveItem, removeItem, transfer, hasItem, getGold };
+module.exports = { giveItem, removeItem, transfer, hasItem, getGold, addGold, removeGold };

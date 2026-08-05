@@ -78,13 +78,16 @@ async function logRpChatEvent(event) {
   }
 }
 
-// Envia uma notificação vanilla do Skyrim na tela do jogador
-// NOTA: actorDesc é construído mas a chamada atual usa notification global.
-// TODO: Fase 1 — redirecionar para o ator específico via SkyMP quando a API suportar.
+// Envia uma notificação PRIVADA (só a tela do próprio actorId) via o canal
+// browserModal (isVisibleByOwner=true, isVisibleByNeighbors=false — ver
+// phase0-basic.js). Antes disso usava Debug.Notification 'global', que a
+// engine transmite pra TODOS os clientes conectados — vazando ficha
+// criminal, inventário revistado e mensagens de staff pra tela de todo
+// mundo. Renderizado como toast pela UI (index.html: handleServerModal).
 function sendNotification(actorId, message) {
   if (typeof mp === 'undefined') return;
   try {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, [message]);
+    mp.set(actorId, 'browserModal', { type: 'toast', data: { message }, sentAt: Date.now() });
   } catch (err) {
     console.error(`[commands] Failed to send notification to actor ${actorId.toString(16)}:`, err.message);
   }

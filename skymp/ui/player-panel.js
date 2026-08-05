@@ -47,14 +47,21 @@
     return `${Number(value || 0).toLocaleString('pt-BR')}g`;
   }
 
-  /** Linha de dado limpa: rótulo à esquerda, valor à direita, hairline embaixo. */
+  /**
+   * Linha de dado limpa: rótulo à esquerda, valor à direita, hairline embaixo.
+   * `value` é escapado por padrão — passe texto puro, nunca HTML pré-montado.
+   * Só use `opts.rawValueHtml: true` se `value` já for HTML confiavelmente
+   * gerado por este arquivo (ex: markup de outro helper), nunca texto vindo
+   * do servidor sem passar por escapeHtml antes.
+   */
   function row(label, value, opts = {}) {
     const valueClass = opts.valueClass ? ` ${opts.valueClass}` : '';
     const sub = opts.sub ? `<span class="sub">${escapeHtml(opts.sub)}</span>` : '';
+    const safeValue = opts.rawValueHtml ? value : escapeHtml(value);
     return `
       <div class="pp-row">
         <span class="label">${escapeHtml(label)}${sub}</span>
-        <span class="value${valueClass}">${value}</span>
+        <span class="value${valueClass}">${safeValue}</span>
       </div>
     `;
   }
@@ -127,7 +134,7 @@
 
       <div class="pp-h">Resumo</div>
       ${row('Ouro', gold(data.gold), { valueClass: 'accent' })}
-      ${row('Condição', escapeHtml(STATE_LABELS[data.state] || data.state), { valueClass: BAD_STATES.has(data.state) ? 'warn' : '' })}
+      ${row('Condição', STATE_LABELS[data.state] || data.state, { valueClass: BAD_STATES.has(data.state) ? 'warn' : '' })}
     `;
   }
 
@@ -143,7 +150,7 @@
       .join('');
 
     const warrant = data.activeWarrant
-      ? row('Mandado ativo', escapeHtml(data.activeWarrant.severity), { valueClass: 'warn', sub: data.activeWarrant.reason ? ` · ${data.activeWarrant.reason}` : '' })
+      ? row('Mandado ativo', data.activeWarrant.severity, { valueClass: 'warn', sub: data.activeWarrant.reason ? ` · ${data.activeWarrant.reason}` : '' })
       : '';
 
     const fines = (data.recentFines || [])
@@ -180,6 +187,24 @@
     `;
   }
 
+  /** Linha social: mesmo layout de `row()`, mas com botão de apelidar + form inline. */
+  function socialRow(person) {
+    const sourceLabel = KNOWN_SOURCE_LABELS[person.source] || person.source || '';
+    return `
+      <div class="pp-row social" data-character-id="${escapeHtml(person.characterId)}">
+        <span class="label">${escapeHtml(person.name)}</span>
+        <span class="value">
+          ${escapeHtml(sourceLabel)}
+          <button type="button" class="pp-rename-btn" data-rename-toggle>Apelidar</button>
+        </span>
+        <form class="pp-rename-form" data-rename-form>
+          <input type="text" class="pp-rename-input" data-rename-input placeholder="Como você o(a) reconhece" maxlength="64" />
+          <button type="submit" class="pp-rename-save">Salvar</button>
+        </form>
+      </div>
+    `;
+  }
+
   function renderSocial(data) {
     const body = $('pp-section-social');
     if (!data) {
@@ -187,15 +212,44 @@
       return;
     }
 
-    const known = (data.knownPeople || [])
-      .map(p => row(p.name, KNOWN_SOURCE_LABELS[p.source] || p.source || ''))
-      .join('') || '<div class="pp-empty">Você ainda não conhece ninguém.</div>';
+    const known = (data.knownPeople || []).map(socialRow).join('')
+      || '<div class="pp-empty">Você ainda não conhece ninguém.</div>';
 
     body.innerHTML = `
       <div class="pp-h">Rostos Conhecidos</div>
       ${known}
       <div class="pp-hint">${escapeHtml(data.hint || '')}</div>
     `;
+
+    bindSocialRenameHandlers(body);
+  }
+
+  /** Delegação de clique/submit pros botões "Apelidar" recém-criados via innerHTML. */
+  function bindSocialRenameHandlers(body) {
+    for (const toggleBtn of body.querySelectorAll('[data-rename-toggle]')) {
+      toggleBtn.addEventListener('click', () => {
+        const rowEl = toggleBtn.closest('.pp-row.social');
+        const form = rowEl.querySelector('[data-rename-form]');
+        const input = rowEl.querySelector('[data-rename-input]');
+        form.classList.toggle('open');
+        if (form.classList.contains('open')) input.focus();
+      });
+    }
+
+    for (const form of body.querySelectorAll('[data-rename-form]')) {
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const rowEl = form.closest('.pp-row.social');
+        const input = form.querySelector('[data-rename-input]');
+        const alias = input.value.trim();
+        const targetCharacterId = Number(rowEl.dataset.characterId);
+        if (!alias || !targetCharacterId) return;
+
+        sendUiEvent('panel:social:rename', { targetCharacterId, alias });
+        form.classList.remove('open');
+        input.value = '';
+      });
+    }
   }
 
   // ── API exposta para o restante da UI / servidor ──────────────────────────

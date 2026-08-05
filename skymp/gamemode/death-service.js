@@ -73,7 +73,7 @@ async function executeRespawn(actorId) {
     console.log(`[death-service] Respawn complete for actor ${actorId.toString(16)}.`);
     
     // Notifica o jogador
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você foi resgatado e acordou em um local seguro.']);
+    commands.sendNotification(actorId, 'Você foi resgatado e acordou em um local seguro.');
 
   } catch (err) {
     console.error(`[death-service] Failed to respawn actor ${actorId.toString(16)}:`, err.message);

@@ -140,9 +140,7 @@ async function giveItemAdmin(actorId, targetActorId, baseId, count) {
   });
 
   if (!success) {
-    if (typeof mp !== 'undefined') {
-      mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['[Staff] Falha ao entregar item.']);
-    }
+    commands.sendNotification(actorId, '[Staff] Falha ao entregar item.');
     return;
   }
 
@@ -186,8 +184,8 @@ async function kickPlayer(actorId, targetActorId, reason) {
   const charData = commands.getActiveCharacterData(actorId);
   const targetData = commands.getActiveCharacterData(targetActorId);
   await auditLog(charData?.accountId, targetData?.accountId, 'staff:kick', `role=${getRole(actorId)} reason=${reason}`);
+  commands.sendNotification(targetActorId, `Você foi expulso: ${reason}`);
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você foi expulso: ${reason}`]);
     setTimeout(() => {
       if (typeof mp !== 'undefined') mp.kick(targetActorId);
     }, 3000);
@@ -208,18 +206,14 @@ async function setGold(actorId, targetActorId, amount) {
   if (!targetChar) return;
 
   await db.query('UPDATE characters SET gold = ? WHERE id = ?', [amount, targetChar.characterId]);
-  if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`[Staff] Ouro definido para ${amount} Septims.`]);
-  }
+  commands.sendNotification(actorId, `[Staff] Ouro definido para ${amount} Septims.`);
   const charData = commands.getActiveCharacterData(actorId);
   await auditLog(charData?.accountId, targetChar.accountId, 'staff:setGold', `role=${getRole(actorId)} amount=${amount}`);
   console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) set gold=${amount} for char ${targetChar.characterId}`);
 }
 
 function sendDenied(actorId) {
-  if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['[Staff] Permissão negada.']);
-  }
+  commands.sendNotification(actorId, '[Staff] Permissão negada.');
 }
 
 module.exports = {

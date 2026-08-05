@@ -191,6 +191,11 @@ if (typeof mp !== "undefined") {
 }
 
 const activeUsers = new Set();
+// Cache userId -> actorId enquanto conectado. Necessário porque no momento em
+// que detectamos a desconexão (connected === false) o ator já foi destruído
+// pela engine e mp.getUserActor(userId) normalmente falha/retorna nada —
+// sem isso, removeActiveCharacter/playerPanel.cleanup nunca rodavam de fato.
+const userActorMap = new Map();
 
 // Polling de Conexões de Rede (2 em 2 segundos)
 setInterval(() => {
@@ -217,7 +222,8 @@ setInterval(() => {
             }
           }
           console.log(`[phase0] User ${userId} mapped to profileId: ${foundProfileId}`);
-          
+          userActorMap.set(userId, actorId);
+
           if (foundProfileId !== -1) {
             // Executa verificação assíncrona no banco
             whitelist.checkWhitelist(userId, foundProfileId, actorId)
@@ -227,6 +233,7 @@ setInterval(() => {
                 } else {
                   console.log(`[phase0] User ${userId} was rejected and kicked by database check.`);
                   activeUsers.delete(userId);
+                  userActorMap.delete(userId);
                   commands.removeActiveCharacter(actorId);
                   playerPanel.cleanup(actorId);
                 }
@@ -235,6 +242,7 @@ setInterval(() => {
                 console.error(`[phase0] Error in async checkWhitelist for user ${userId}:`, err.message);
                 if (typeof mp !== 'undefined') mp.kick(userId);
                 activeUsers.delete(userId);
+                userActorMap.delete(userId);
                 commands.removeActiveCharacter(actorId);
                 playerPanel.cleanup(actorId);
               });
@@ -248,15 +256,16 @@ setInterval(() => {
     } else if (!connected && activeUsers.has(userId)) {
       activeUsers.delete(userId);
       console.log(`[phase0] Disconnection detected! User ID: ${userId}`);
-      
-      try {
-        const actorId = mp.getUserActor(userId);
-        if (actorId) {
+
+      const actorId = userActorMap.get(userId);
+      userActorMap.delete(userId);
+      if (actorId) {
+        try {
           commands.removeActiveCharacter(actorId);
           playerPanel.cleanup(actorId);
+        } catch (err) {
+          console.error(`[phase0] Error cleaning up disconnected user ${userId}:`, err.message);
         }
-      } catch (err) {
-        // O ator pode já ter sido destruído na desconexão
       }
     }
   }

@@ -410,28 +410,59 @@ async function packStall(actorId, stallIdRaw) {
   }
 
   const stallId = parsePositiveInt(stallIdRaw, 0);
-  const rows = await db.query('SELECT * FROM market_stalls WHERE id = ? AND status = ?', [stallId, 'active']);
-  const stall = rows[0];
-  if (!stall) {
-    notify(actorId, 'Barraca ativa nao encontrada.');
+
+  // Trava a barraca e todos os itens listados numa unica transacao ANTES de
+  // marcar qualquer coisa como removida — sem isso, packStall rodando junto
+  // de removeItem/buyItem no mesmo item podia ler status='listed' duas vezes
+  // e devolver/vender o mesmo item mais de uma vez (duplicacao de item).
+  const conn = await db.getConnection();
+  let stall = null;
+  let items = [];
+  try {
+    await conn.beginTransaction();
+
+    const [stallRows] = await conn.query('SELECT * FROM market_stalls WHERE id = ? AND status = ? FOR UPDATE', [stallId, 'active']);
+    stall = stallRows[0];
+    if (!stall) {
+      await conn.rollback();
+      notify(actorId, 'Barraca ativa nao encontrada.');
+      return;
+    }
+    if (stall.owner_character_id !== character.characterId && !admin.hasPermission(actorId, 'manage_staff')) {
+      await conn.rollback();
+      notify(actorId, 'Apenas o dono pode recolher esta barraca.');
+      return;
+    }
+
+    const [itemRows] = await conn.query(
+      `SELECT id, base_id, count FROM market_stall_items
+       WHERE stall_id = ? AND status = 'listed' AND count > 0
+       FOR UPDATE`,
+      [stallId]
+    );
+    items = itemRows;
+
+    for (const item of items) {
+      await conn.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', item.id]);
+    }
+    await conn.query('UPDATE market_stalls SET status = ?, updated_at = NOW() WHERE id = ?', ['packed', stallId]);
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    console.error('[market-stalls] packStall transaction failed:', err.message);
+    notify(actorId, 'Erro ao recolher barraca.');
     return;
-  }
-  if (stall.owner_character_id !== character.characterId && !admin.hasPermission(actorId, 'manage_staff')) {
-    notify(actorId, 'Apenas o dono pode recolher esta barraca.');
-    return;
+  } finally {
+    conn.release();
   }
 
-  const items = await db.query(
-    `SELECT id, base_id, count FROM market_stall_items
-     WHERE stall_id = ? AND status = 'listed' AND count > 0`,
-    [stallId]
-  );
+  // Devolve os itens DEPOIS do commit — a barraca e os itens ja estao marcados
+  // como recolhidos/removidos de forma atomica, entao nao ha mais janela pra
+  // outra chamada concorrente reivindicar o mesmo item.
   for (const item of items) {
     await inventory.giveItem(actorId, character.characterId, item.base_id, item.count, 'stall_pack_return', MODULE);
-    await db.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', item.id]);
   }
-
-  await db.query('UPDATE market_stalls SET status = ?, updated_at = NOW() WHERE id = ?', ['packed', stallId]);
   if (typeof mp !== 'undefined' && stall.visual_ref_id) {
     try {
       mp.set(stall.visual_ref_id, 'isDisabled', true);
@@ -547,21 +578,42 @@ async function removeItem(actorId, itemIdRaw) {
   }
 
   const itemId = parsePositiveInt(itemIdRaw, 0);
-  const rows = await db.query(
-    `SELECT msi.*, ms.owner_character_id, ms.id AS stall_id
-     FROM market_stall_items msi
-     INNER JOIN market_stalls ms ON ms.id = msi.stall_id
-     WHERE msi.id = ? AND msi.status = 'listed'`,
-    [itemId]
-  );
-  const item = rows[0];
-  if (!item || item.owner_character_id !== character.characterId) {
-    notify(actorId, 'Item de barraca nao encontrado ou voce nao e o dono.');
+
+  // Trava a linha do item ANTES de checar status='listed' — sem isso, removeItem
+  // rodando junto de packStall/buyItem no mesmo item podia ambos ler 'listed' e
+  // ambos devolver o item (duplicacao). Ver mesmo padrao em buyItem/packStall.
+  const conn = await db.getConnection();
+  let item = null;
+  try {
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query(
+      `SELECT msi.*, ms.owner_character_id, ms.id AS stall_id
+       FROM market_stall_items msi
+       INNER JOIN market_stalls ms ON ms.id = msi.stall_id
+       WHERE msi.id = ? AND msi.status = 'listed'
+       FOR UPDATE`,
+      [itemId]
+    );
+    item = rows[0];
+    if (!item || item.owner_character_id !== character.characterId) {
+      await conn.rollback();
+      notify(actorId, 'Item de barraca nao encontrado ou voce nao e o dono.');
+      return;
+    }
+
+    await conn.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', itemId]);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    console.error('[market-stalls] removeItem transaction failed:', err.message);
+    notify(actorId, 'Erro ao remover item.');
     return;
+  } finally {
+    conn.release();
   }
 
   await inventory.giveItem(actorId, character.characterId, item.base_id, item.count, 'stall_unlist_item', MODULE);
-  await db.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', itemId]);
   await audit(actorId, 'stall:item_remove', `itemId=${itemId}`, item.stall_id);
   notify(actorId, 'Item removido da barraca e devolvido.');
 }
@@ -1100,9 +1152,10 @@ async function handleInteractionAction(actorId, action, payload = {}) {
       return buyItem(actorId, stallId, payload.itemId, payload.count || 1);
     case 'stall.manage':
       if (payload.actionType === 'add') {
-         return addItem(actorId, payload.baseId, payload.count, payload.price, 'Mercadoria');
+        return addItem(actorId, stallId, payload.baseId, payload.count, payload.price, payload.label || 'Mercadoria');
       } else if (payload.actionType === 'remove') {
-         return removeItem(actorId, payload.baseId); // Na verdade precisa do ID da listagem, entao a UI deveria mandar o list ID.
+        // removeItem espera o ID da listagem (market_stall_items.id), nao o baseId.
+        return removeItem(actorId, payload.itemId);
       }
       return;
     default:

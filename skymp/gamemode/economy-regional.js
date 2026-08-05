@@ -37,12 +37,16 @@ async function loadCache() {
   console.log(`[economy-regional] Cache loaded: ${holds.length} holds, ${prices.length} price entries.`);
 }
 
-setInterval(loadCache, 5 * 60 * 1000);
+setInterval(() => {
+  loadCache().catch(err => console.error('[economy-regional] Falha ao recarregar cache:', err.message));
+}, 5 * 60 * 1000);
 
 async function initRegionalEconomy() {
   await loadCache();
   // Ticker de restoque: a cada 15 minutos restaura 5% do estoque
-  setInterval(restockTick, 15 * 60 * 1000);
+  setInterval(() => {
+    restockTick().catch(err => console.error('[economy-regional] Falha no restockTick:', err.message));
+  }, 15 * 60 * 1000);
   console.log('[economy-regional] Regional economy initialized.');
 }
 

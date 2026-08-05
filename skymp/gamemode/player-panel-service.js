@@ -22,6 +22,8 @@ const characterState = require('./core/character-state');
 const transactionService = require('./core/transaction-service');
 const governance = require('./governance-service');
 const marketStalls = require('./market-stalls-service');
+const identity = require('./identity-service');
+const panelRefreshBus = require('./core/panel-refresh-bus');
 
 const VITALS_POLL_INTERVAL_MS = 2000;
 
@@ -96,6 +98,43 @@ async function buildSocialSnapshot(actorId) {
   };
 }
 
+/**
+ * Renomeia (apelida) uma pessoa já conhecida direto pela aba Social do painel.
+ * Não exige que o alvo esteja online — `character_known_identities` é indexada
+ * por characterId, então isso funciona mesmo com o alvo desconectado — MAS exige
+ * que já exista uma entrada known prévia (apresentação/apelido anterior) pra esse
+ * alvo, senão qualquer characterId (1..N) poderia ser varrido pra quebrar o
+ * sistema de anonimato/disfarce. Ver identity-service.getKnownDisplayName.
+ * @param {number} actorId
+ * @param {number} targetCharacterId
+ * @param {string} alias
+ * @returns {Promise<boolean>}
+ */
+async function renameKnownPerson(actorId, targetCharacterId, alias) {
+  const myCharacter = commands.getActiveCharacterData(actorId);
+  if (!myCharacter) return false;
+
+  const cleanAlias = identity.sanitizeDisplayName(alias);
+  const parsedTargetId = Number(targetCharacterId);
+  if (!cleanAlias || !Number.isFinite(parsedTargetId) || parsedTargetId <= 0) return false;
+
+  const alreadyKnown = await db.query(
+    'SELECT 1 FROM character_known_identities WHERE observer_character_id = ? AND target_character_id = ? LIMIT 1',
+    [myCharacter.characterId, parsedTargetId]
+  ).catch(() => []);
+  if (alreadyKnown.length === 0) return false;
+
+  await identity.upsertKnownIdentity(myCharacter.characterId, parsedTargetId, cleanAlias, 'alias');
+  await identity.auditIdentityEvent(
+    myCharacter.accountId,
+    null,
+    'identity:alias',
+    `via_panel observerCharacterId=${myCharacter.characterId} targetCharacterId=${parsedTargetId} alias=${cleanAlias}`
+  );
+
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Envio para a UI
 // ─────────────────────────────────────────────────────────────────────────────
@@ -147,6 +186,28 @@ async function pushAllSections(actorId) {
     pushEconomy(actorId),
     pushSocial(actorId)
   ]);
+}
+
+const PUSH_BY_CHANNEL = {
+  status: pushStatus,
+  governance: pushGovernance,
+  economy: pushEconomy,
+  social: pushSocial
+};
+
+/**
+ * Reage a panelRefreshBus.requestRefresh(actorId, channel) — disparado por
+ * outros serviços (ex: governance-service após multa/prisão) quando algo
+ * muda para um jogador. Só empurra dado se o painel dele estiver aberto;
+ * caso contrário não faz nada (evita abrir o painel à força).
+ * @param {number} actorId
+ * @param {string} channel
+ */
+function handlePanelRefreshRequest(actorId, channel) {
+  if (!_openPanelActors.has(actorId)) return;
+  const push = PUSH_BY_CHANNEL[channel];
+  if (!push) return;
+  push(actorId).catch(err => console.error('[player-panel] Falha ao reagir a refresh solicitado:', err.message));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,6 +287,12 @@ async function handleUiEvent(actorId, uiEvent) {
     case 'panel:refresh:social':
       await pushSocial(actorId);
       return true;
+    case 'panel:social:rename': {
+      const data = uiEvent.data || {};
+      const renamed = await renameKnownPerson(actorId, data.targetCharacterId, data.alias);
+      if (renamed) await pushSocial(actorId);
+      return true;
+    }
     default:
       return false;
   }
@@ -244,12 +311,14 @@ function commandDefs() {
 
 async function initPlayerPanelService() {
   startVitalsLoop();
+  panelRefreshBus.onRefresh(handlePanelRefreshRequest);
   initialized = true;
   console.log('[player-panel] Player panel service initialized.');
 }
 
 function shutdownPlayerPanelService() {
   stopVitalsLoop();
+  panelRefreshBus.offRefresh(handlePanelRefreshRequest);
   _openPanelActors.clear();
   _lastStatusJson.clear();
   initialized = false;
@@ -264,5 +333,7 @@ module.exports = {
   cleanup,
   buildStatusSnapshot,
   buildSocialSnapshot,
+  renameKnownPerson,
+  handlePanelRefreshRequest,
   isInitialized: () => initialized
 };

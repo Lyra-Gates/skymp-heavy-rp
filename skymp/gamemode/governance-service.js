@@ -14,10 +14,11 @@
 const db = require('./database');
 const admin = require('./admin-service');
 const commands = require('./commands');
-const economy = require('./economy-service');
 const inventory = require('./inventory-service');
 const characterState = require('./core/character-state');
 const actionPolicy = require('./core/action-policy');
+const panelRefreshBus = require('./core/panel-refresh-bus');
+const transactionService = require('./core/transaction-service');
 
 const { STATES } = characterState;
 
@@ -276,22 +277,17 @@ async function getMembership(characterId, scopeType, scopeId) {
   return rows[0] || null;
 }
 
-async function getDutyMembership(characterId) {
-  const rows = await db.query(
-    `SELECT gm.*, gr.name AS role_name, gr.weight
-     FROM governance_memberships gm
-     INNER JOIN governance_roles gr ON gr.id = gm.role_id
-     INNER JOIN governance_role_permissions grp ON grp.role_id = gr.id
-     WHERE gm.character_id = ?
-       AND gm.status = 'active'
-       AND gm.on_duty = 1
-       AND grp.permission = ?
-     ORDER BY gr.weight DESC
-     LIMIT 1`,
-    [characterId, PERMISSIONS.GUARD_DUTY]
-  );
-  return rows[0] || null;
-}
+// Permissoes de guarda que exigem estar em servico (gm.on_duty = 1). GUARD_DUTY
+// fica de fora de propósito — é o próprio toggle de entrar/sair de serviço.
+const GUARD_DUTY_REQUIRED = new Set([
+  PERMISSIONS.GUARD_SEARCH,
+  PERMISSIONS.GUARD_DETAIN,
+  PERMISSIONS.GUARD_ARREST,
+  PERMISSIONS.GUARD_FINE,
+  PERMISSIONS.GUARD_WARRANT,
+  PERMISSIONS.GUARD_CONFISCATE,
+  PERMISSIONS.GUARD_RELEASE
+]);
 
 async function hasPermission(actorId, permission, context = {}) {
   if (isStaffGovernor(actorId)) {
@@ -307,6 +303,7 @@ async function hasPermission(actorId, permission, context = {}) {
     scopeFilter = 'AND gm.scope_type = ? AND gm.scope_id = ?';
     params.push(context.scopeType, String(context.scopeId));
   }
+  const dutyFilter = GUARD_DUTY_REQUIRED.has(permission) ? 'AND gm.on_duty = 1' : '';
 
   const rows = await db.query(
     `SELECT gm.*, gr.name AS role_name, gr.weight
@@ -317,13 +314,17 @@ async function hasPermission(actorId, permission, context = {}) {
        AND gm.status = 'active'
        AND grp.permission = ?
        ${scopeFilter}
+       ${dutyFilter}
      ORDER BY gr.weight DESC
      LIMIT 1`,
     params
   );
 
   if (rows.length === 0) {
-    return { allowed: false, reason: 'Sem permissao IC para esta acao.' };
+    const reason = GUARD_DUTY_REQUIRED.has(permission)
+      ? 'Sem permissao IC para esta acao (ou voce esta fora de servico).'
+      : 'Sem permissao IC para esta acao.';
+    return { allowed: false, reason };
   }
 
   return { allowed: true, source: rows[0] };
@@ -608,6 +609,11 @@ async function showInventorySnapshot(officerActorId, targetActorId, searchId) {
 
 async function issueWarrant(officerActorId, targetActorId, severity, reason) {
   if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_WARRANT)) return;
+  const range = assertRange(officerActorId, targetActorId, DEFAULT_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
   const officer = getCharacter(officerActorId);
   const target = getCharacter(targetActorId);
   if (!officer || !target) return;
@@ -620,10 +626,16 @@ async function issueWarrant(officerActorId, targetActorId, severity, reason) {
   await audit(officerActorId, targetActorId, 'guard:warrant', `severity=${normalizedSeverity} reason=${reason}`);
   notify(officerActorId, 'Mandado emitido.');
   notify(targetActorId, 'Um mandado foi emitido contra voce.');
+  panelRefreshBus.requestRefresh(targetActorId, 'governance');
 }
 
 async function fineTarget(officerActorId, targetActorId, amount, reason = 'multa') {
   if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_FINE)) return;
+  const range = assertRange(officerActorId, targetActorId, DEFAULT_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
   const officer = getCharacter(officerActorId);
   const target = getCharacter(targetActorId);
   if (!officer || !target) return;
@@ -633,7 +645,12 @@ async function fineTarget(officerActorId, targetActorId, amount, reason = 'multa
     return;
   }
 
-  const paid = await economy.removeGold(target.characterId, fine);
+  const paid = await transactionService.removeGold({
+    characterId: target.characterId,
+    amount: fine,
+    reason: `guard_fine:${reason}`,
+    module: MODULE
+  });
   await db.query(
     `INSERT INTO fines (target_character_id, officer_character_id, amount, reason, status, paid_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -649,10 +666,17 @@ async function fineTarget(officerActorId, targetActorId, amount, reason = 'multa
   await audit(officerActorId, targetActorId, 'guard:fine', `amount=${fine} reason=${reason} paid=${paid}`);
   notify(officerActorId, paid ? 'Multa paga e registrada.' : 'Multa registrada como divida; mandado menor criado.');
   notify(targetActorId, paid ? `Voce pagou multa de ${fine} septims.` : `Multa de ${fine} septims registrada como divida.`);
+  panelRefreshBus.requestRefresh(targetActorId, 'governance');
+  panelRefreshBus.requestRefresh(targetActorId, 'status');
 }
 
 async function confiscateItem(officerActorId, targetActorId, baseId, count, reason = 'confisco') {
   if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_CONFISCATE)) return;
+  const range = assertRange(officerActorId, targetActorId, DEFAULT_RANGE);
+  if (!range.ok) {
+    notify(officerActorId, range.reason);
+    return;
+  }
   const officer = getCharacter(officerActorId);
   const target = getCharacter(targetActorId);
   if (!officer || !target) return;
@@ -730,6 +754,8 @@ async function arrestTarget(officerActorId, targetActorId, sentenceMinutes, crim
   await audit(officerActorId, targetActorId, 'guard:arrest', `sentence=${minutes} crime=${crime}`);
   notify(officerActorId, 'Prisao registrada.');
   notify(targetActorId, `Voce foi preso por ${minutes} minutos. Crime: ${crime}`);
+  panelRefreshBus.requestRefresh(targetActorId, 'governance');
+  panelRefreshBus.requestRefresh(targetActorId, 'status');
 }
 
 async function getDefaultPrison() {
@@ -765,6 +791,19 @@ async function releaseExpiredPrisoners() {
        WHERE target_character_id = ? AND status = 'jailed'`,
       [row.character_id]
     );
+
+    // Sem isso o jogador fica permanentemente IMPRISONED na memória (character-state
+    // é um cache separado do DB) mesmo com a pena já expirada no banco — bloqueado por
+    // core/action-policy.js até reconectar. Libera o estado e a velocidade se online.
+    characterState.set(row.character_id, STATES.NORMAL, {});
+    const releasedActorId = commands.getActiveActorByCharacterId(row.character_id);
+    if (releasedActorId) {
+      if (typeof mp !== 'undefined') {
+        mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', releasedActorId, ['SpeedMult', 100]);
+      }
+      notify(releasedActorId, 'Voce cumpriu sua pena e foi libertado.');
+      panelRefreshBus.requestRefresh(releasedActorId, 'status');
+    }
   }
 }
 
@@ -786,14 +825,16 @@ async function getInteractionActions(actorId, targetActorId) {
     console.error('[governance] market-stalls hook failed:', err.message);
   }
 
-  try {
-    const economyRegional = require('./economy-regional');
-    if (economyRegional && typeof economyRegional.getInteractionSections === 'function') {
-      const economySections = await economyRegional.getInteractionSections(actorId, targetActorId);
-      if (economySections && economySections.length > 0) sections.push(...economySections);
+  if (process.env.ENABLE_REGIONAL_ECONOMY === 'true') {
+    try {
+      const economyRegional = require('./economy-regional');
+      if (economyRegional && typeof economyRegional.getInteractionSections === 'function') {
+        const economySections = await economyRegional.getInteractionSections(actorId, targetActorId);
+        if (economySections && economySections.length > 0) sections.push(...economySections);
+      }
+    } catch (err) {
+      console.error('[governance] economy-regional hook failed:', err.message);
     }
-  } catch (err) {
-    console.error('[governance] economy-regional hook failed:', err.message);
   }
   const guardPerms = [
     [PERMISSIONS.GUARD_DETAIN, 'guard.stop', 'Abordar'],
@@ -836,6 +877,10 @@ async function handleInteractionAction(actorId, action, payload = {}) {
   }
 
   if (action.startsWith('npc.')) {
+    if (process.env.ENABLE_REGIONAL_ECONOMY !== 'true') {
+      notify(actorId, 'Economia regional desativada neste servidor.');
+      return;
+    }
     try {
       const economyRegional = require('./economy-regional');
       return await economyRegional.handleInteractionAction(actorId, action, payload);
