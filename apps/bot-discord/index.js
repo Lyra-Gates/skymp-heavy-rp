@@ -3,14 +3,19 @@ const crypto = require('crypto');
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 const app = express();
+const voiceChannels = require('./voiceChannels');
 
 app.use(express.json());
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates]
+});
 
 const GUILD_ID = process.env.GUILD_ID;
 const WHITELIST_ROLE_ID = process.env.WHITELIST_ROLE_ID;
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
+const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID;
+const VOICE_CATEGORY_ID = process.env.VOICE_CATEGORY_ID;
 
 function requireEnv(name) {
     const value = process.env[name];
@@ -27,6 +32,23 @@ requireEnv('INTERNAL_API_SECRET');
 
 client.once('ready', () => {
     console.log(`[discord-bot] Bot logado como ${client.user.tag}`);
+});
+
+// Canais de voz temporários (/voz-criar, /voz-fechar) — ver voiceChannels.js.
+// Comandos precisam ser registrados separadamente com `node deploy-commands.js`.
+client.on('interactionCreate', async (interaction) => {
+    try {
+        await voiceChannels.handleInteraction(interaction, {
+            staffRoleId: STAFF_ROLE_ID,
+            voiceCategoryId: VOICE_CATEGORY_ID
+        });
+    } catch (err) {
+        console.error('[discord-bot] Erro ao processar interação:', err.message);
+    }
+});
+
+client.on('voiceStateUpdate', (oldState, newState) => {
+    voiceChannels.handleVoiceStateUpdate(oldState, newState);
 });
 
 // ── Rate limiting simples (janela deslizante em memória) ────────────────────

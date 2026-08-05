@@ -21,8 +21,9 @@ Desenvolvido em **Express.js / Node.js**.
 
 ### 1.3 Bot do Discord (`apps/bot-discord`)
 Desenvolvido em **discord.js**.
-- Facilita o envio de logs do servidor para canais da moderação.
-- Realiza a ponte entre a conta do Discord do usuário e o seu `profileId` no jogo.
+- Realiza a ponte entre a conta do Discord do usuário e o seu `profileId` no jogo (`POST /api/sync-role`, chamado pelo painel web na aprovação/rejeição de whitelist).
+- **Canais de voz temporários** (`voiceChannels.js`, comandos `/voz-criar <nome>` e `/voz-fechar`, staff-only): alternativa prática de voz enquanto o VOIP nativo in-game (`/voz`, ver 1.4.4) depende de um patch de client ainda não aplicado (`docs/technical/VOICE_CLIENT_PATCH.md`). Canal é apagado automaticamente ~30s depois de ficar vazio. Comandos precisam ser registrados manualmente com `npm run deploy-commands` sempre que mudarem.
+- Envio de logs pra canais de moderação **não está implementado** — apesar de ter sido a intenção original documentada aqui, hoje o bot só expõe o endpoint interno de sync de cargo e os comandos de voz acima.
 
 ### 1.4 Servidor Nativo SkyMP (Gamemode)
 Localizado em `skymp/gamemode/`.

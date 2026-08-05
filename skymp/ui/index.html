@@ -746,8 +746,24 @@
       state.audioCtx = new AudioContext();
       console.log('[voip] Microphone initialized.');
     } catch (err) {
-      setStatus('error', 'SEM MICROFONE');
       console.error('[voip] Mic error:', err);
+
+      if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+        // Limitação conhecida do client SkyMP oficial: o CEF embutido (Chromium
+        // ~70) recusa getUserMedia por padrão — falta um patch em
+        // MyChromiumApp.cpp que nunca foi mergeado upstream (ver
+        // docs/technical/VOICE_CLIENT_PATCH.md). Não adianta reconectar, o
+        // resultado vai ser o mesmo até esse client ser trocado.
+        setStatus('error', 'VOZ INDISPONÍVEL NESTE CLIENT — use o Discord');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setStatus('error', 'NENHUM MICROFONE ENCONTRADO');
+      } else {
+        setStatus('error', 'SEM MICROFONE');
+      }
+
+      // Sem microfone não há como publicar nem faz sentido manter a sinalização
+      // aberta — fecha em vez de deixar uma conexão pela metade.
+      if (state.ws) state.ws.close();
     }
   }
 
