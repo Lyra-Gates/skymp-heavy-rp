@@ -13,6 +13,15 @@ const DiscordStrategy = require('passport-discord').Strategy;
 const app  = express();
 const PORT = process.env.PANEL_PORT || 3001;
 const INTERNAL_API_SECRET = requireEnv('INTERNAL_API_SECRET');
+// O bot escuta em 127.0.0.1 (ver apps/bot-discord/index.js). Configurável porque
+// nem sempre painel e bot rodam no mesmo host.
+const BOT_INTERNAL_URL = process.env.BOT_INTERNAL_URL || 'http://127.0.0.1:3002';
+// Allowlist dos redirect_uri aceitos em /api/launcher/oauth/exchange. O launcher
+// sobe um servidor de callback local em 127.0.0.1:19847 (ver electron/main.ts).
+const LAUNCHER_REDIRECT_URIS = (process.env.LAUNCHER_REDIRECT_URIS || 'http://localhost:19847/callback,http://127.0.0.1:19847/callback')
+  .split(',')
+  .map((uri) => uri.trim())
+  .filter(Boolean);
 const CRASH_REPORT_DIR = path.join(__dirname, 'crash-reports');
 
 function requireEnv(name) {
@@ -193,8 +202,41 @@ function detectsStrongConcept(...texts) {
   return STRONG_CONCEPT_PATTERN.test(combined);
 }
 
+// Limites alinhados com o schema (VARCHAR/TEXT) e com a rubrica de whitelist:
+// um campo vazio ou de 1 caractere não é uma ficha, e um campo maior que o
+// tipo da coluna estoura no INSERT e vira 500 sem explicação pro jogador.
+const APPLY_FIELDS = {
+  first_name:  { required: true,  min: 2, max: 60,   label: 'Nome' },
+  last_name:   { required: true,  min: 2, max: 60,   label: 'Sobrenome' },
+  biography:   { required: true,  min: 80, max: 5000, label: 'Biografia' },
+  // Obrigatórios também no servidor, não só no `required` do apply.html — o
+  // formulário é só a UI, e a rubrica de whitelist trata ficha sem motivação,
+  // fraqueza ou laço social como reprovada de saída.
+  motivations: { required: true,  min: 30, max: 2000, label: 'Motivações' },
+  weaknesses:  { required: true,  min: 30, max: 2000, label: 'Fraquezas' },
+  social_ties: { required: true,  min: 30, max: 2000, label: 'Laços sociais' }
+};
+
+function validateApplication(body) {
+  const clean = {};
+  for (const [field, rule] of Object.entries(APPLY_FIELDS)) {
+    const value = typeof body[field] === 'string' ? body[field].trim() : '';
+    if (!value) {
+      if (rule.required) return { error: `${rule.label} é obrigatório.` };
+      clean[field] = null;
+      continue;
+    }
+    if (value.length < rule.min) return { error: `${rule.label} precisa de pelo menos ${rule.min} caracteres.` };
+    if (value.length > rule.max) return { error: `${rule.label} passa do limite de ${rule.max} caracteres.` };
+    clean[field] = value;
+  }
+  return { clean };
+}
+
 app.post('/api/apply', requireAuth, async (req, res) => {
-    const { first_name, last_name, biography, motivations, weaknesses, social_ties } = req.body;
+    const { error: validationError, clean } = validateApplication(req.body || {});
+    if (validationError) return res.status(400).json({ error: validationError });
+    const { first_name, last_name, biography, motivations, weaknesses, social_ties } = clean;
     try {
         const existing = await db('SELECT status FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
         if (existing.length > 0 && (existing[0].status === 'pending' || existing[0].status === 'approved')) {
@@ -207,7 +249,7 @@ app.post('/api/apply', requireAuth, async (req, res) => {
             `INSERT INTO characters
                (account_id, first_name, last_name, biography, motivations, weaknesses, social_ties, needs_extra_review, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [req.user.accountId, first_name, last_name, biography, motivations || null, weaknesses || null, social_ties || null, needsExtraReview, 'pending']
+            [req.user.accountId, first_name, last_name, biography, motivations, weaknesses, social_ties, needsExtraReview, 'pending']
         );
 
         await pool.execute(
@@ -275,7 +317,7 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
          INNER JOIN accounts a ON a.id = c.account_id
          INNER JOIN whitelist_applications wa ON wa.account_id = a.id
          SET c.extra_review_notes=?
-         WHERE wa.id=?`, [extra_review_notes.trim(), req.params.id]
+         WHERE wa.id=? AND c.status='pending'`, [extra_review_notes.trim(), req.params.id]
       );
     }
 
@@ -287,14 +329,20 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
        WHERE wa.id=?`, [req.params.id]
     );
 
-    // Se aprovado, aprova também o personagem
+    // Se aprovado, aprova também o personagem.
+    //
+    // `c.status='pending'` é obrigatório aqui: sem ele, o UPDATE varre TODOS os
+    // personagens da conta e reescreve o status de qualquer um deles — inclusive
+    // os que a staff aposentou com /permakill (`status='retired'`, ver
+    // admin-service.retireCharacter). Aprovar uma ficha nova ressuscitava o
+    // personagem morto permanentemente e apagava a consequência do permakill.
     if (status === 'approved') {
       await db(
         `UPDATE characters c
          INNER JOIN accounts a ON a.id = c.account_id
          INNER JOIN whitelist_applications wa ON wa.account_id = a.id
          SET c.status='approved'
-         WHERE wa.id=?`, [req.params.id]
+         WHERE wa.id=? AND c.status='pending'`, [req.params.id]
       );
     }
 
@@ -310,7 +358,7 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
     // Sincronizar com o Bot do Discord
     if (idRows.length > 0) {
         try {
-            await fetch('http://localhost:3002/api/sync-role', {
+            await fetch(`${BOT_INTERNAL_URL}/api/sync-role`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -497,20 +545,77 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
   }
 });
 
-// ── API: Launcher Manifesto ──────────────────────────────────────────────────
-app.get('/api/launcher/manifest', (req, res) => {
-    // Retorna o manifesto contendo a versão mínima requerida do cliente e arquivos
-    res.json({
-        version: "1.0.0-beta",
-        files: [
-            {
-                path: "Data/SkyMP.esp",
-                hash: "dummy_hash_for_testing",
-                url: "http://localhost:3001/download/SkyMP.esp" // Fake url for testing
-            }
-        ]
+// ── API: Launcher ────────────────────────────────────────────────────────────
+
+// Troca do `code` do OAuth do Discord por um perfil, feita pelo painel.
+//
+// O launcher é um app de desktop distribuído aos jogadores: qualquer segredo
+// embutido nele (era `VITE_DISCORD_CLIENT_SECRET`) pode ser extraído do
+// instalador por qualquer pessoa que baixe o jogo, e com o secret em mãos dá pra
+// se passar pela aplicação no Discord. O secret fica só aqui, no servidor.
+//
+// O launcher manda `{ code, redirect_uri }` e recebe de volta apenas os dados
+// públicos do usuário — nunca o access_token do Discord, que não tem uso do lado
+// dele e só aumentaria a superfície de vazamento.
+app.post('/api/launcher/oauth/exchange', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (isRateLimited(`oauth-exchange:${ip}`, 10, 60 * 1000)) {
+    return res.status(429).json({ error: 'Muitas tentativas, aguarde um minuto.' });
+  }
+
+  const { code, redirect_uri } = req.body || {};
+  if (typeof code !== 'string' || !code) return res.status(400).json({ error: 'code ausente' });
+  if (typeof redirect_uri !== 'string' || !redirect_uri) return res.status(400).json({ error: 'redirect_uri ausente' });
+
+  // Só aceitamos os redirect_uri que nós mesmos registramos. Sem isso, um code
+  // roubado poderia ser trocado apontando pra um endereço controlado por terceiro.
+  if (!LAUNCHER_REDIRECT_URIS.includes(redirect_uri)) {
+    return res.status(400).json({ error: 'redirect_uri não permitido' });
+  }
+
+  try {
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri
+      })
     });
+
+    if (!tokenRes.ok) return res.status(401).json({ error: 'Falha ao autenticar no Discord.' });
+    const token = await tokenRes.json();
+    if (!token.access_token) return res.status(401).json({ error: 'Falha ao autenticar no Discord.' });
+
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${token.access_token}` }
+    });
+    if (!userRes.ok) return res.status(401).json({ error: 'Falha ao ler o perfil do Discord.' });
+    const user = await userRes.json();
+    if (!user.id) return res.status(401).json({ error: 'Falha ao ler o perfil do Discord.' });
+
+    res.json({
+      discordId: user.id,
+      username: user.username,
+      globalName: user.global_name || user.username,
+      avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
+    });
+  } catch (err) {
+    console.error('[/api/launcher/oauth/exchange]', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
 });
+
+// Aqui existia um `GET /api/launcher/manifest` que devolvia um manifesto fixo
+// com `hash: "dummy_hash_for_testing"`. Nada o consumia: o launcher real
+// (apps/launcher/electron/main.ts) busca o manifesto de cliente e de mods em
+// GitHub Releases (VITE_GITHUB_DIST_REPO) e a paridade de modpack em
+// `http://<SERVER_IP>:<VITE_API_PORT>/mods.json`. Manter um stub com hash falso
+// num painel que também serve autenticação era só um convite a alguém apontar o
+// launcher pra ele. Ver docs/technical/LAUNCHER_DISTRIBUTION.md.
 
 // ── Catch-all: SPA ─────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
