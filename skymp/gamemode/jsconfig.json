@@ -1,0 +1,38 @@
+{
+  // O gamemode é JavaScript puro e continua sendo — o SkyMP carrega um .js
+  // direto, sem passo de build, e introduzir compilação aqui adicionaria uma
+  // etapa entre editar e testar em jogo, que é justamente o ciclo mais lento
+  // do projeto.
+  //
+  // Este jsconfig existe só pra dar ao editor (e ao `npm run typecheck`) a
+  // tipagem de `mp` que está em types/mp.d.ts. `checkJs` está LIGADO, mas o
+  // resultado é informativo: nada no fluxo de build ou de teste depende dele.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "node16",
+    // "node10" está deprecado no TS 6+; "node16" é o equivalente moderno pra
+    // CommonJS e é o que o resto do monorepo já usa.
+    "moduleResolution": "node16",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "checkJs": true,
+    "noEmit": true,
+    "allowJs": true,
+    // Sem isto, os .d.ts do `ws` e do `mysql2` dentro de node_modules entram na
+    // checagem e produzem dezenas de erros de dentro das bibliotecas, que
+    // afogam os erros do nosso código.
+    "skipLibCheck": true,
+    // Deliberadamente frouxo: o código existente não foi escrito com tipos em
+    // mente, e ligar strict de uma vez produziria centenas de erros que
+    // ninguém leria. O valor está em pegar erro de API do `mp` — nome de
+    // método errado, argumento a mais, ordem trocada.
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false
+  },
+  "include": ["**/*.js", "types/**/*.d.ts"],
+  // Os arquivos de teste ficam de fora: eles fazem monkeypatch deliberado de
+  // `Module._load` e de `global.mp` pra mockar o servidor, e o TypeScript
+  // (corretamente) reclama disso. Não é erro a corrigir, é a técnica do mock.
+  "exclude": ["node_modules", "**/*.test.js"]
+}

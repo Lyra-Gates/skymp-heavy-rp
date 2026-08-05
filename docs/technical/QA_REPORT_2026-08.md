@@ -17,6 +17,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 | `apps/web` | 29/29 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
 | `apps/game-api` | 24/24 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. |
+| Tipagem `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa a API do SkyMP (não há typings públicos upstream). Informativo, não trava build nem teste. Achou 2.13 e 2.14 na primeira execução. |
 | Schema / migrations | — | — | Consistente. Sem drift entre tabelas referenciadas e definidas. |
 
 ### O que efetivamente roda hoje
@@ -105,6 +106,33 @@ Isso significa que a verificação de paridade de mods — a coisa que sustenta 
 
 `/voz-criar` e `/voz-fechar` só existem depois de rodar `npm run deploy-commands` à mão. Não há nada que avise se isso foi esquecido; o comando simplesmente não aparece no Discord.
 
+### 2.13 🔴 **ABERTO** — duas formas incompatíveis de chamar Papyrus, e ninguém sabe qual funciona
+
+Achado ao tipar a API `mp` (`skymp/gamemode/types/mp.d.ts`). O parâmetro `self` de `mp.callPapyrusFunction('method', ...)` é passado de duas maneiras diferentes no mesmo código:
+
+| Forma | Onde |
+|---|---|
+| `{ type: 'form', desc: mp.getDescFromId(actorId) }` | `death-service.js`, `player-panel-service.js` — **2 arquivos** |
+| `actorId` cru (um `number`) | **22 pontos**, incluindo `core/transaction-service.js`, `inventory-service.js`, `npc-cleaner.js`, `governance-service.js`, `market-stalls-service.js` |
+
+As duas nasceram no **mesmo commit** (`82625d2`, 11/07/2026): não houve migração de uma para outra, é inconsistência desde a origem. A documentação do SkyMP não especifica o formato, e nenhuma das duas foi exercitada em jogo.
+
+**Por que isso é grave:** se só a forma de objeto for válida, 22 chamadas falham em silêncio — e entre elas está a entrega de item do `core/transaction-service.js`. O banco registraria a transação corretamente e o inventário do jogador ficaria vazio. O mesmo vale para remoção de NPC (`npc-cleaner`), sincronização de inventário no spawn (`inventory-service`) e as algemas da governança (`SetActorValue SpeedMult`).
+
+**Deliberadamente não corrigido.** Trocar 22 chamadas com base em palpite pode quebrar código que funciona. A tipagem aceita as duas formas de propósito, com o aviso registrado no próprio `mp.d.ts`.
+
+**É o item nº 1 a conferir no primeiro teste in-game** — e é barato conferir: entre um jogador e um `/additem`, dá para saber em minutos.
+
+### 2.14 🟡 **ABERTO** — módulos PARKED chamam `hasPermission` com número
+
+`admin-service.hasPermission(actorId, permission)` faz `staff.permissions.has(permission)`, onde `permissions` é um `Set` de **strings**. Doze chamadas passam um número (nível de staff: `10`, `20`):
+
+`crafting-service` (2), `disguise-service` (1), `economy-regional` (1), `faction-service` (4), `justice-service` (4)
+
+`Set.has(20)` num Set de strings é sempre `false`, então **toda** verificação de permissão nesses módulos nega sempre. Não há impacto hoje — os cinco estão PARKED — mas significa que eles estão mais quebrados do que "apenas não registrados": ligar a flag não os faria funcionar, apenas travaria toda ação de staff dentro deles.
+
+Reforça o item 2.3 do plano (decidir o destino dos serviços PARKED): é dívida que não compila com a realidade atual do `admin-service`, não código pronto esperando uma flag.
+
 ---
 
 ## 3. Plano de melhorias
@@ -121,6 +149,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 1.3 | ✅ **Feito** — `Start-AllServices.ps1` pré-checa cada serviço e reporta o que não subiu | |
 | 1.4 | ✅ **Feito** — 29 smoke tests em `apps/web/server.test.js` | |
 | 1.5 | **Rodar o plano de teste in-game que já existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) com as flags `ENABLE_*` ligadas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
+| 1.5a | **Primeiro teste do 1.5: resolver a ambiguidade do `self` do Papyrus (2.13).** Um `/additem` num jogador responde a pergunta | Decide se 22 chamadas funcionam ou falham em silêncio — incluindo a entrega de item do transaction-service. Barato de conferir, caro de ignorar. |
 | 1.6 | **Gamemode passa a validar o ticket de sessão** via `POST /internal/session/resolve`, em vez de confiar no `profileId` do cliente | Sem isso a fila controla quantos entram, mas não quem. Precisa de servidor real pra descobrir como o SkyMP expõe o ticket na conexão. |
 
 ### Fase 2 — Tirar a configuração-fantasma do caminho
