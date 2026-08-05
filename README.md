@@ -11,8 +11,9 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 2. **[Diretrizes de Modding (MODDING_GUIDELINES.md)](docs/MODDING_GUIDELINES.md):** A nossa Bíblia de arquitetura de mods. Explica as regras de ouro, as fases de lançamento (0A, 0B, 1, Alfa, Beta) e a Lista Negra de mods proibidos (como JK's Skyrim ou Survival Scripts no cliente).
 3. **[Contrato Mods × Gamemode (MODS_AND_GAMEMODE_CONTRACT.md)](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md):** O outro lado do anterior — o que tecnicamente acontece com um mod dentro de um cliente conectado, por que scripts Papyrus de mod não produzem estado, e o teste de 4 perguntas pra classificar um mod.
 4. **[Distribuição pelo Launcher (LAUNCHER_DISTRIBUTION.md)](docs/technical/LAUNCHER_DISTRIBUTION.md):** Como o cliente e o modpack são entregues e verificados, e por que não usamos Nexus Collections.
-5. **[Relatório de QA e Plano de Melhorias](docs/technical/QA_REPORT_2026-08.md):** Estado real de cada componente, o que é stub, o que está estacionado e o plano priorizado pra deixar o servidor funcional ponta a ponta. **Comece por aqui se você acabou de chegar no projeto.**
-6. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
+5. **[Referência do SkyMP Upstream (SKYMP_UPSTREAM_REFERENCE.md)](docs/technical/SKYMP_UPSTREAM_REFERENCE.md):** O que o SkyMP já entrega e nós não usamos — `mp.makeEventSource` (eventos no lugar do nosso polling de 2s), DevTools do navegador in-game em `localhost:9000`, live reload da UI, e o mapa de portas.
+6. **[Relatório de QA e Plano de Melhorias](docs/technical/QA_REPORT_2026-08.md):** Estado real de cada componente, o que é stub, o que está estacionado e o plano priorizado pra deixar o servidor funcional ponta a ponta. **Comece por aqui se você acabou de chegar no projeto.**
+7. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
 
 ## Status Atual do Projeto (Auditoria Recente)
 
@@ -38,8 +39,18 @@ Para facilitar a vida dos desenvolvedores, criamos um script de orquestração a
 3. Execute o script `Start-AllServices.ps1` com o PowerShell.
 
 Isso irá despachar simultaneamente:
-- O Painel Web do Staff (`apps/web`)
-- O Bot de Autenticação do Discord (`apps/bot-discord`)
-- O Gamemode SkyMP Nativo (`skymp/gamemode`)
+- O Painel Web do Staff (`apps/web`, porta 3001)
+- O Bot de Autenticação do Discord (`apps/bot-discord`, porta 3002)
+- A API do Jogo (`apps/game-api`, porta 7758 — paridade de modpack e fila)
+- O Servidor SkyMP Nativo (`skymp/gamemode`, porta 7777)
+
+O script pré-checa `.env` e `node_modules` de cada serviço e diz o que não vai subir, em vez de reportar sucesso com um serviço morto.
 
 *(Para testar como jogador, basta rodar o aplicativo de interface do Launcher na pasta `apps/launcher`).*
+
+### Ferramentas de debug que já existem
+
+- **`localhost:9000`** no seu navegador normal abre o **DevTools do navegador embutido do jogo** — console, inspetor e breakpoints da UI in-game (`skymp/ui/`). Sem isso a UI é depurada às cegas.
+- O servidor SkyMP faz **proxy da UI pra um dev server na porta 1234**, se houver um rodando — live reload de CSS/JS da UI sem reiniciar nada.
+
+Mais em [SKYMP_UPSTREAM_REFERENCE.md](docs/technical/SKYMP_UPSTREAM_REFERENCE.md).

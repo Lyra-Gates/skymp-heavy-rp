@@ -15,7 +15,9 @@ import { URL } from 'url';
 const DISCORD_CLIENT_ID = process.env.VITE_DISCORD_CLIENT_ID || '';
 const DISCORD_REDIRECT_URI = process.env.VITE_DISCORD_REDIRECT_URI || 'http://localhost:19847/callback';
 const SERVER_IP = process.env.VITE_SERVER_IP || '127.0.0.1';
-const SERVER_PORT = parseInt(process.env.VITE_SERVER_PORT || '7757', 10);
+// Default 7777 pra bater com o "port" de skymp/config/server-settings.*.json.
+// O default anterior era 7757, que nao existia em lugar nenhum do lado servidor.
+const SERVER_PORT = parseInt(process.env.VITE_SERVER_PORT || '7777', 10);
 const API_PORT = parseInt(process.env.VITE_API_PORT || '7758', 10);
 const DIST_REPO = process.env.VITE_GITHUB_DIST_REPO || '';
 const PANEL_URL = (process.env.VITE_PANEL_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
