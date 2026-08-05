@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS `characters` (
   `angle_z` FLOAT NOT NULL DEFAULT 180.0,
   `cell_id` VARCHAR(64) NOT NULL DEFAULT '0x162e2',
   `gold` INT NOT NULL DEFAULT 0 COMMENT 'Economia in-game (Septims)',
-  `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending, approved, rejected',
+  `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending, approved, rejected, retired (soft-delete, ver admin-service.retireCharacter)',
   `racemenu_presets` TEXT DEFAULT NULL COMMENT 'JSON string contendo presets de aparencia',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_character_account` FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`) ON DELETE CASCADE
