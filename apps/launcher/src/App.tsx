@@ -12,10 +12,17 @@ export default function App() {
 
   useEffect(() => {
     // Check initial auth status
-    window.electronAPI.getAuthStatus().then((status) => {
-      setAuth(status);
-      setLoading(false);
-    });
+    window.electronAPI.getAuthStatus()
+      .then((status) => {
+        setAuth(status);
+      })
+      .catch((err) => {
+        console.error('Failed to get auth status:', err);
+        setAuth(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {

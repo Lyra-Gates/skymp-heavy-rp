@@ -60,12 +60,40 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
+      webSecurity: true,
       backgroundThrottling: false,
     },
   });
 
   mainWindow.setMenuBarVisibility(false);
+
+  // ─── Navigation hardening ───
+  // The main window carries the full electronAPI preload, so it must never be
+  // allowed to navigate to (or open) an arbitrary/attacker-controlled origin.
+  const allowedOrigin = process.env.VITE_DEV_SERVER_URL
+    ? new URL(process.env.VITE_DEV_SERVER_URL).origin
+    : 'file://';
+
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    try {
+      const target = new URL(targetUrl);
+      const isAllowed = process.env.VITE_DEV_SERVER_URL
+        ? target.origin === allowedOrigin
+        : target.protocol === 'file:';
+      if (!isAllowed) {
+        event.preventDefault();
+      }
+    } catch {
+      event.preventDefault();
+    }
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    // No window.open/target=_blank navigation is allowed from the main window.
+    // The Discord OAuth popup is created explicitly by the discord-login
+    // handler via its own hardened BrowserWindow, not via window.open.
+    return { action: 'deny' };
+  });
 
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -432,15 +460,23 @@ function httpGetJson(url: string): Promise<any> {
 
 function downloadToFile(url: string, destPath: string, onProgress?: (percent: number) => void, redirectsLeft = 5): Promise<void> {
   return new Promise((resolve, reject) => {
-    const mod = url.startsWith('https:') ? https : http;
-    const req = mod.get(url, { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } }, (res) => {
+    if (!url.startsWith('https:')) {
+      reject(new Error(`Download bloqueado: esquema de URL nao seguro (${url})`));
+      return;
+    }
+    const req = https.get(url, { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } }, (res) => {
       if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
         res.resume();
         if (redirectsLeft <= 0) {
           reject(new Error('Muitos redirecionamentos'));
           return;
         }
-        downloadToFile(new URL(res.headers.location, url).toString(), destPath, onProgress, redirectsLeft - 1).then(resolve, reject);
+        const nextUrl = new URL(res.headers.location, url).toString();
+        if (!nextUrl.startsWith('https:')) {
+          reject(new Error(`Download bloqueado: redirecionamento para esquema inseguro (${nextUrl})`));
+          return;
+        }
+        downloadToFile(nextUrl, destPath, onProgress, redirectsLeft - 1).then(resolve, reject);
         return;
       }
       if (res.statusCode !== 200) {
@@ -594,16 +630,33 @@ function postJsonToApi(pathname: string, body: any): Promise<any> {
 
 ipcMain.handle('discord-login', async () => {
   return new Promise((resolve) => {
+    const oauthState = crypto.randomBytes(16).toString('hex');
+    let settled = false;
+    const finish = (value: any) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
     const callbackServer = http.createServer(async (req, res) => {
       try {
         const reqUrl = new URL(req.url || '', 'http://localhost:19847');
         const code = reqUrl.searchParams.get('code');
-        
+        const state = reqUrl.searchParams.get('state');
+
+        if (!state || state !== oauthState) {
+          res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end('<h1>Erro: parâmetro state inválido ou ausente.</h1>');
+          callbackServer.close();
+          finish(null);
+          return;
+        }
+
         if (!code) {
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end('<h1>Erro: código de autorização não recebido.</h1>');
           callbackServer.close();
-          resolve(null);
+          finish(null);
           return;
         }
 
@@ -619,7 +672,7 @@ ipcMain.handle('discord-login', async () => {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end('<h1>Erro ao trocar código por token.</h1>');
           callbackServer.close();
-          resolve(null);
+          finish(null);
           return;
         }
 
@@ -634,7 +687,7 @@ ipcMain.handle('discord-login', async () => {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
           res.end('<h1>Erro ao obter dados do usuário.</h1>');
           callbackServer.close();
-          resolve(null);
+          finish(null);
           return;
         }
 
@@ -667,21 +720,21 @@ ipcMain.handle('discord-login', async () => {
         if (authWindow && !authWindow.isDestroyed()) {
           authWindow.close();
         }
-        resolve(authData);
+        finish(authData);
       } catch (err) {
         console.error('OAuth2 callback error:', err);
         res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end('<h1>Erro interno.</h1>');
         callbackServer.close();
-        resolve(null);
+        finish(null);
       }
     });
 
-    callbackServer.listen(19847, () => {
-      console.log('OAuth2 callback server listening on port 19847');
+    callbackServer.listen(19847, '127.0.0.1', () => {
+      console.log('OAuth2 callback server listening on 127.0.0.1:19847');
     });
 
-    const authUrl = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&scope=identify`;
+    const authUrl = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&scope=identify&state=${oauthState}`;
 
     let authWindow: BrowserWindow | null = new BrowserWindow({
       width: 500,
@@ -692,6 +745,9 @@ ipcMain.handle('discord-login', async () => {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        webSecurity: true,
+        // No preload script: this window only performs the Discord OAuth
+        // flow and must never get access to electronAPI.
       }
     });
 
@@ -701,6 +757,9 @@ ipcMain.handle('discord-login', async () => {
     authWindow.on('closed', () => {
       authWindow = null;
       callbackServer.close(() => {});
+      // If the window was closed before the OAuth callback fired, don't leave
+      // the caller hanging until the 5 minute timeout below.
+      finish(null);
     });
 
     setTimeout(() => {
@@ -708,7 +767,7 @@ ipcMain.handle('discord-login', async () => {
       if (authWindow && !authWindow.isDestroyed()) {
         authWindow.close();
       }
-      resolve(null);
+      finish(null);
     }, 5 * 60 * 1000);
   });
 });
@@ -1016,15 +1075,17 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
     if (!manifest || !manifest.downloadUrl) return { success: false, error: 'Manifesto de cliente invalido.' };
     send('download', 0);
     await downloadToFile(manifest.downloadUrl, tmpZip, percent => send('download', percent));
-    if (manifest.sha256) {
-      send('verify', 0);
-      const actual = await sha256File(tmpZip);
-      if (actual.toLowerCase() !== String(manifest.sha256).toLowerCase()) {
-        try { fs.unlinkSync(tmpZip); } catch {}
-        return { success: false, error: 'SHA256 do cliente nao confere.' };
-      }
-      send('verify', 100);
+    if (!manifest.sha256) {
+      try { fs.unlinkSync(tmpZip); } catch {}
+      return { success: false, error: 'Manifesto de cliente sem SHA256: verificacao de integridade obrigatoria ausente.' };
     }
+    send('verify', 0);
+    const actual = await sha256File(tmpZip);
+    if (actual.toLowerCase() !== String(manifest.sha256).toLowerCase()) {
+      try { fs.unlinkSync(tmpZip); } catch {}
+      return { success: false, error: 'SHA256 do cliente nao confere.' };
+    }
+    send('verify', 100);
     await killGameProcesses();
     await new Promise(resolve => setTimeout(resolve, 900));
     send('extract', 0);
@@ -1096,13 +1157,15 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
       downloaded += 1;
       send('download', base);
       await downloadToFile(part.url, tmpZip, percent => send('download', Math.min(100, base + Math.round(percent * span / 100))));
-      if (part.sha256) {
-        send('verify', base);
-        const actual = await sha256File(tmpZip);
-        if (actual.toLowerCase() !== String(part.sha256).toLowerCase()) {
-          try { fs.unlinkSync(tmpZip); } catch {}
-          return { success: false, error: `SHA256 dos mods nao confere na parte ${index + 1}.` };
-        }
+      if (!part.sha256) {
+        try { fs.unlinkSync(tmpZip); } catch {}
+        return { success: false, error: `Parte ${index + 1} sem SHA256: verificacao de integridade obrigatoria ausente.` };
+      }
+      send('verify', base);
+      const actual = await sha256File(tmpZip);
+      if (actual.toLowerCase() !== String(part.sha256).toLowerCase()) {
+        try { fs.unlinkSync(tmpZip); } catch {}
+        return { success: false, error: `SHA256 dos mods nao confere na parte ${index + 1}.` };
       }
       send('extract', base);
       await extractZip(tmpZip, gamePath);

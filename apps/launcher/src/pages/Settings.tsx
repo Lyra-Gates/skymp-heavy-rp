@@ -53,73 +53,102 @@ export function Settings() {
   const handleRepairIni = async () => {
     if (!requirePath()) return;
     setBusy('repair-ini');
-    const result = await window.electronAPI.ensureSkyrimIni({ mode: 'borderless' });
-    setBusy('');
-    if (result.ok) setSuccess(result.skipped ? 'INI ja estava valido.' : `INI reparado: ${result.width}x${result.height} ${result.mode}.`);
-    else setError(result.error || 'Falha ao reparar INI.');
+    try {
+      const result = await window.electronAPI.ensureSkyrimIni({ mode: 'borderless' });
+      if (result.ok) setSuccess(result.skipped ? 'INI ja estava valido.' : `INI reparado: ${result.width}x${result.height} ${result.mode}.`);
+      else setError(result.error || 'Falha ao reparar INI.');
+    } catch (e: any) {
+      setError(e.message || 'Falha ao reparar INI.');
+    } finally {
+      setBusy('');
+    }
   };
 
   const handleAnalyze = async () => {
     if (!requirePath()) return;
     setBusy('analyze-mods');
-    const verify = await window.electronAPI.verifyMods(gamePath);
-    if (!verify.success) {
+    try {
+      const verify = await window.electronAPI.verifyMods(gamePath);
+      if (!verify.success) {
+        setError(verify.error || 'Falha ao verificar mods.');
+        return;
+      }
+      if (verify.loadOrder) await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
+      const analysis = await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder || []);
+      if (analysis.ok) {
+        setSuccess(`Mods e load order OK. Plugins analisados: ${analysis.plugins.length}.`);
+      } else {
+        setError('Problemas encontrados no load order.');
+        setReport(analysis.problems.slice(0, 8).join('\n'));
+      }
+    } catch (e: any) {
+      setError(e.message || 'Falha ao analisar mods.');
+    } finally {
       setBusy('');
-      setError(verify.error || 'Falha ao verificar mods.');
-      return;
-    }
-    if (verify.loadOrder) await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
-    const analysis = await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder || []);
-    setBusy('');
-    if (analysis.ok) {
-      setSuccess(`Mods e load order OK. Plugins analisados: ${analysis.plugins.length}.`);
-    } else {
-      setError('Problemas encontrados no load order.');
-      setReport(analysis.problems.slice(0, 8).join('\n'));
     }
   };
 
   const handleCheckUpdates = async () => {
     if (!requirePath()) return;
     setBusy('check-updates');
-    const client = await window.electronAPI.checkClientUpdate(gamePath);
-    const mods = await window.electronAPI.checkModsUpdate(gamePath);
-    setBusy('');
-    setReport([
-      `Cliente: ${client.error || (client.updateAvailable ? `update ${client.installedVersion || 'nenhum'} -> ${client.version}` : `atual ${client.installedVersion || client.version || 'desconhecido'}`)}`,
-      `Mods: ${mods.error || (mods.updateAvailable ? `update ${mods.installedVersion || 'nenhum'} -> ${mods.version}` : `atual ${mods.installedVersion || mods.version || 'desconhecido'}`)}`
-    ].join('\n'));
+    try {
+      const client = await window.electronAPI.checkClientUpdate(gamePath);
+      const mods = await window.electronAPI.checkModsUpdate(gamePath);
+      setReport([
+        `Cliente: ${client.error || (client.updateAvailable ? `update ${client.installedVersion || 'nenhum'} -> ${client.version}` : `atual ${client.installedVersion || client.version || 'desconhecido'}`)}`,
+        `Mods: ${mods.error || (mods.updateAvailable ? `update ${mods.installedVersion || 'nenhum'} -> ${mods.version}` : `atual ${mods.installedVersion || mods.version || 'desconhecido'}`)}`
+      ].join('\n'));
+    } catch (e: any) {
+      setError(e.message || 'Falha ao checar updates.');
+    } finally {
+      setBusy('');
+    }
   };
 
   const handleInstallClient = async () => {
     if (!requirePath()) return;
     if (!confirm('Atualizar cliente SkyMP agora? Feche o jogo antes de continuar.')) return;
     setBusy('client-update');
-    const result = await window.electronAPI.installClientUpdate(gamePath);
-    setBusy('');
-    if (result.success) setSuccess(`Cliente atualizado para ${result.version}.`);
-    else setError(result.error || 'Falha ao atualizar cliente.');
+    try {
+      const result = await window.electronAPI.installClientUpdate(gamePath);
+      if (result.success) setSuccess(`Cliente atualizado para ${result.version}.`);
+      else setError(result.error || 'Falha ao atualizar cliente.');
+    } catch (e: any) {
+      setError(e.message || 'Falha ao atualizar cliente.');
+    } finally {
+      setBusy('');
+    }
   };
 
   const handleInstallMods = async () => {
     if (!requirePath()) return;
     if (!confirm('Atualizar modpack agora? Feche o jogo antes de continuar.')) return;
     setBusy('mods-update');
-    const result = await window.electronAPI.installModsUpdate(gamePath, false);
-    setBusy('');
-    if (result.success) setSuccess(`Mods atualizados para ${result.version}.`);
-    else setError(result.error || 'Falha ao atualizar mods.');
+    try {
+      const result = await window.electronAPI.installModsUpdate(gamePath, false);
+      if (result.success) setSuccess(`Mods atualizados para ${result.version}.`);
+      else setError(result.error || 'Falha ao atualizar mods.');
+    } catch (e: any) {
+      setError(e.message || 'Falha ao atualizar mods.');
+    } finally {
+      setBusy('');
+    }
   };
 
   const handleReportCrashes = async () => {
     resetMessages();
     setBusy('crash-report');
-    const result = await window.electronAPI.reportRecentCrashes();
-    setBusy('');
-    if (result.ok) {
-      setSuccess(result.sent ? `Crash report enviado (${result.sent} arquivo(s)).` : 'Nenhum crash recente encontrado.');
-    } else {
-      setError(result.error || 'Falha ao enviar crash report.');
+    try {
+      const result = await window.electronAPI.reportRecentCrashes();
+      if (result.ok) {
+        setSuccess(result.sent ? `Crash report enviado (${result.sent} arquivo(s)).` : 'Nenhum crash recente encontrado.');
+      } else {
+        setError(result.error || 'Falha ao enviar crash report.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Falha ao enviar crash report.');
+    } finally {
+      setBusy('');
     }
   };
 

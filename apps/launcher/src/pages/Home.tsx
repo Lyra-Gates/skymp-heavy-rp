@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthData } from '../types/electron';
 import { Play, Settings as SettingsIcon, LogOut } from 'lucide-react';
@@ -8,12 +8,52 @@ interface HomeProps {
   setAuth: (auth: AuthData | null) => void;
 }
 
+const QUEUE_POLL_INTERVAL_MS = 4000;
+
 export function Home({ auth, setAuth }: HomeProps) {
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
   const [status, setStatus] = useState<string>('');
+  const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopQueuePolling = () => {
+    if (queuePollRef.current !== null) {
+      clearInterval(queuePollRef.current);
+      queuePollRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => stopQueuePolling();
+  }, []);
+
+  const startQueuePolling = (gamePath: string) => {
+    stopQueuePolling();
+    queuePollRef.current = setInterval(async () => {
+      try {
+        const pollRes = await window.electronAPI.pollQueue();
+        if (pollRes.status === 'queued') {
+          setStatus(`Na fila (posicao: ${pollRes.position})`);
+          return;
+        }
+        stopQueuePolling();
+        if (pollRes.status === 'success') {
+          setStatus('Iniciando Skyrim...');
+          setIsPlaying(true);
+          await window.electronAPI.launchGame(gamePath, pollRes.ticket);
+          setIsPlaying(false);
+          return;
+        }
+        setStatus(`Erro: ${pollRes.message || 'fila indisponivel'}`);
+      } catch (e: any) {
+        stopQueuePolling();
+        setStatus(`Erro: ${e.message}`);
+      }
+    }, QUEUE_POLL_INTERVAL_MS);
+  };
 
   const handleLogout = async () => {
+    stopQueuePolling();
     await window.electronAPI.discordLogout();
     setAuth(null);
   };
@@ -59,6 +99,7 @@ export function Home({ auth, setAuth }: HomeProps) {
       const queueRes = await window.electronAPI.joinQueue();
       if (queueRes.status === 'queued') {
         setStatus(`Na fila (posicao: ${queueRes.position})`);
+        startQueuePolling(gamePath);
         return;
       }
       if (queueRes.status === 'success') {
