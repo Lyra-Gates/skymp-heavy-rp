@@ -33,7 +33,8 @@ const DEATH_PENALTY_PERCENTAGE = 0.1; // 10% do ouro atual, o que for maior
 const BLEED_OUT_MS = 4 * 60 * 1000; // janela de socorro: 4 minutos
 const RESPAWN_DELAY_MS = 5000; // pausa dramática entre "morreu" e respawn
 const RESCUE_RANGE = 300;
-const DEATH_CONTEXT_RANGE = 1200; // mesmo raio de "say" do rp-chat-service
+// Mesmo raio da fala normal: quem podia ouvir a cena é quem entra na evidência.
+const DEATH_CONTEXT_RANGE = require('./core/proximity-ranges').RANGES.say;
 const STABILIZE_HEALTH = 25;
 const INITIATE_RANGE = 800;
 const DAMAGE_SPIKE_THRESHOLD = 25; // heurística: pontos de vida perdidos num único tick de 2s

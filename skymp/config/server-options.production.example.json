@@ -1,4 +1,5 @@
 {
+  "_aviso": "AINDA NAO IMPLEMENTADO: nenhum codigo do gamemode le este arquivo hoje. Editar estes valores nao muda nada em jogo. Ver docs/technical/SERVER_OPTIONS_SCHEMA.md e docs/technical/QA_REPORT_2026-08.md.",
   "environment": "production",
   "rp": {
     "heavyRpEnabled": true,
@@ -8,9 +9,9 @@
     "permadeathEnabled": false
   },
   "chat": {
-    "localRange": 1400,
-    "whisperRange": 350,
-    "shoutRange": 3000,
+    "localRange": 1200,
+    "whisperRange": 450,
+    "shoutRange": 3500,
     "oocEnabled": true,
     "oocRateLimitSeconds": 10,
     "logAllChannels": true

@@ -5,13 +5,8 @@ const DEFAULT_LIMITS = {
   reportCooldownMs: 60000
 };
 
-const RANGES = {
-  whisper: 450,
-  say: 1200,
-  emote: 1500,
-  ooc: 2000,
-  shout: 3500
-};
+// Raios vivem em core/proximity-ranges.js pra que chat e voz não divirjam.
+const { RANGES } = require('./core/proximity-ranges');
 
 function createRpChatService(options) {
   const limits = Object.assign({}, DEFAULT_LIMITS, options && options.limits);

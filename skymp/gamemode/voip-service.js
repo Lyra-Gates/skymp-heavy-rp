@@ -29,12 +29,9 @@ const voipClients = new Map();
 const _pendingTickets = new Map();
 const TICKET_TTL_MS = 30 * 1000;
 
-// Distancias de voz (em unidades SkyMP) — mesmos nomes de modo do rp-chat-service.
-const VOICE_RANGES = {
-  whisper: 200,    // Sussurro
-  normal:  1200,   // Conversa normal
-  shout:   3000,   // Grito
-};
+// Distancias de voz — derivadas dos raios do chat em core/proximity-ranges.js,
+// pra que falar e escrever cheguem exatamente nas mesmas pessoas.
+const { VOICE_RANGES } = require('./core/proximity-ranges');
 
 let wss = null;
 let _proximityTimer = null;
