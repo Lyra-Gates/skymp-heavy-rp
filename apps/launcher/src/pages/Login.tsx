@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { AuthData } from '../types/electron';
 import { LogIn } from 'lucide-react';
 

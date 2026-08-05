@@ -26,6 +26,12 @@ Desenvolvido em **discord.js**.
 - **Canais de voz temporários** (`voiceChannels.js`, comandos `/voz-criar <nome>` e `/voz-fechar`, staff-only): alternativa prática de voz enquanto o VOIP nativo in-game (`/voz`, ver 1.4.4) depende de um patch de client ainda não aplicado (`docs/technical/VOICE_CLIENT_PATCH.md`). Canal é apagado automaticamente ~30s depois de ficar vazio. Comandos precisam ser registrados manualmente com `npm run deploy-commands` sempre que mudarem.
 - Envio de logs pra canais de moderação **não está implementado** — apesar de ter sido a intenção original documentada aqui, hoje o bot só expõe o endpoint interno de sync de cargo e os comandos de voz acima.
 
+### 1.3.1 API do Jogo (`apps/game-api`)
+Express, porta `GAME_API_PORT` (7758) — a porta que o launcher sempre chamou e para a qual não havia servidor. Detalhes em `docs/technical/LAUNCHER_DISTRIBUTION.md`.
+- **`GET /mods.json`**: manifesto de paridade de modpack (`{mods, loadOrder}`), gerado offline por `scripts/generate-mods-manifest.js` a partir da pasta `Data/` de referência. Manifesto ausente ou corrompido responde **503**, nunca lista vazia — lista vazia passaria na verificação do launcher e deixaria qualquer modpack entrar.
+- **Fila** (`POST /api/queue/join`, `GET /api/queue/status`): capacidade fixa, FIFO, com expiração de reserva pra que quem fecha o launcher depois de admitido não segure o slot para sempre. Autenticada por ticket de uso único emitido pelo painel (`launch_tickets`, migration v6) — `discordId` é público e não serve como prova de identidade.
+- **`POST /internal/session/resolve` / `/release`** (`X-Internal-Secret`): pro gamemode confirmar quem entrou e devolver o slot na desconexão. ⚠️ O gamemode **ainda não chama** esses endpoints — hoje `whitelist.js` confia no `profileId` informado pelo cliente, então a fila controla *quantos* entram, não *quem*.
+
 ### 1.4 Servidor Nativo SkyMP (Gamemode)
 Localizado em `skymp/gamemode/`.
 - Executado em Node.js usando as bibliotecas internas do SkyMP (`mp.events`, `mp.players`).

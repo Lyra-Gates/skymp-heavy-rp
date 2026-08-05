@@ -25,7 +25,9 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 - **Launcher App**: Um Launcher em React + Electron (Vite) em `apps/launcher`, controlando autenticação, configurações e boot da build. Na auditoria de agosto ele estava quebrado ponta a ponta (nenhuma variável de ambiente era carregada) e o client secret do Discord ia embutido no instalador — ambos corrigidos, mas ainda sem validação em runtime. Ver [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) 2.1 e 2.2.
 - **Fase Inicial (Fase 0)**: As fundações locais (conexão, persistência base em banco MariaDB via scripts SQL migrados) já foram garantidas em ambiente de laboratório.
 
-> ⚠️ **O servidor ainda não está pronto pra receber jogadores.** O maior bloqueio aberto é que o serviço de paridade de modpack (porta 7758, `/mods.json` e a fila) **não existe neste repositório** — sem ele o launcher não consegue verificar que todos os clientes têm os mesmos mods, que é a base da regra de Autoridade do Servidor. O plano priorizado está em [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) §3.
+- **API do Jogo (`apps/game-api`)**: serve a porta 7758 que o launcher sempre chamou e que não existia — `/mods.json` (paridade de modpack, a base do contrato de FormID) e a fila de entrada com capacidade e expiração de reserva. A fila é autenticada por ticket emitido pelo painel, nunca pelo `discordId` que o cliente informa. Manifesto gerado por `scripts/generate-mods-manifest.js`.
+
+> ⚠️ **O servidor ainda não foi validado com jogadores reais.** Todo o gamemode está verificado só por teste unitário com `mp` mockado — o próximo passo é rodar o [plano de teste in-game](docs/technical/GOVERNANCE_MARKET_STALLS_TEST_PLAN.md) com as flags `ENABLE_*` ligadas. Continua aberto também que o gamemode ainda deriva identidade do `profileId` do cliente em vez de validar o ticket de sessão. Plano completo em [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) §3.
 
 ## Como Executar o Servidor (Desenvolvimento)
 

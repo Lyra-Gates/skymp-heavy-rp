@@ -1,0 +1,7 @@
+node_modules/
+*.log
+
+# Gerado por scripts/generate-mods-manifest.js a partir da pasta Data/ de cada
+# instalacao. Contem caminhos absolutos da maquina e hashes que so valem pra
+# aquele modpack — versionar traria um manifesto errado pra todo mundo.
+mods.json

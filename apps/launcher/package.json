@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "typecheck": "tsc -b",
+    "//build": "`tsc -b` e nao `tsc`: o tsconfig.json da raiz e um solution file com `files: []`, entao `tsc` sozinho nao checava projeto nenhum — o build passava com erro de tipo em src/ e em electron/.",
+    "build": "tsc -b && vite build && electron-builder",
     "start": "electron .",
     "lint": "oxlint",
     "preview": "vite preview"

@@ -547,6 +547,29 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
 
 // ── API: Launcher ────────────────────────────────────────────────────────────
 
+// Tempo de vida do ticket de lançamento: ele só precisa sobreviver do clique em
+// "Jogar" até a entrada na fila. Curto porque nada nele exige durar mais.
+const LAUNCH_TICKET_TTL_MS = 5 * 60 * 1000;
+
+function hashTicket(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Emite um ticket de uso único ligado a uma conta. Guarda só o hash — se o
+ * banco vazar, os tickets em voo não viram credencial utilizável.
+ */
+async function issueLaunchTicket(accountId, discordId, issuedIp) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await db(
+    `INSERT INTO launch_tickets (token_hash, account_id, discord_id, expires_at, issued_ip)
+     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?)`,
+    [hashTicket(token), accountId, discordId, Math.floor(LAUNCH_TICKET_TTL_MS / 1000), issuedIp || null]
+  );
+  return token;
+}
+
+
 // Troca do `code` do OAuth do Discord por um perfil, feita pelo painel.
 //
 // O launcher é um app de desktop distribuído aos jogadores: qualquer segredo
@@ -597,12 +620,26 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
     const user = await userRes.json();
     if (!user.id) return res.status(401).json({ error: 'Falha ao ler o perfil do Discord.' });
 
-    res.json({
+    // A conta precisa existir antes de emitir ticket — quem nunca passou pelo
+    // painel não tem whitelist, então não tem o que fazer na fila.
+    const accountRows = await db('SELECT account_id FROM discord_identities WHERE discord_id = ?', [user.id]);
+    const accountId = accountRows.length > 0 ? accountRows[0].account_id : null;
+
+    const profile = {
       discordId: user.id,
       username: user.username,
       globalName: user.global_name || user.username,
       avatar: user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : null
-    });
+    };
+
+    // Só o painel tem o client secret, logo só ele consegue provar que aquele
+    // Discord de fato autenticou. O ticket carrega essa prova até a fila
+    // (apps/game-api), que não teria como verificar nada sozinha.
+    if (accountId) {
+      profile.launchTicket = await issueLaunchTicket(accountId, user.id, ip);
+    }
+
+    res.json(profile);
   } catch (err) {
     console.error('[/api/launcher/oauth/exchange]', err);
     res.status(500).json({ error: 'Erro interno do servidor' });
@@ -622,6 +659,13 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`[staff-panel] Painel rodando em http://localhost:${PORT}`);
-});
+// Só escuta quando executado direto. Sob `require` (testes), exporta o app pra
+// ser montado num servidor efêmero — sem isso, importar este arquivo num teste
+// abriria a porta 3001 de verdade.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`[staff-panel] Painel rodando em http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app, validateApplication, issueLaunchTicket, hashTicket };

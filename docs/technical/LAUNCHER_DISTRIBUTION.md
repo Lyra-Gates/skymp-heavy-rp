@@ -11,7 +11,7 @@ O launcher fala com quatro endereços diferentes. Confundi-los é a origem da ma
 | Canal | Endereço | Serve pra | Existe hoje? |
 |---|---|---|---|
 | **Releases do GitHub** | `https://github.com/<VITE_GITHUB_DIST_REPO>/releases/...` | Baixar e atualizar o cliente SkyMP e o modpack | Depende de um repo de distribuição configurado |
-| **API do servidor de jogo** | `http://<VITE_SERVER_IP>:<VITE_API_PORT>` (7758) | Paridade de mods (`/mods.json`), fila (`/api/queue/*`) | ❌ **Nenhum serviço deste repositório escuta nessa porta** |
+| **API do servidor de jogo** | `http://<VITE_SERVER_IP>:<VITE_API_PORT>` (7758) | Paridade de mods (`/mods.json`), fila (`/api/queue/*`) | ✅ `apps/game-api` |
 | **Painel web** | `<VITE_PANEL_URL>` (3001, `apps/web`) | Concluir o login do Discord, receber crash reports | ✅ |
 | **Servidor de jogo** | `<VITE_SERVER_IP>:<VITE_SERVER_PORT>` (7757) | A sessão em si, via SKSE | ✅ (SkyMP) |
 
@@ -42,7 +42,25 @@ Antes de jogar, o launcher roda dois passos:
 
 Os dois juntos é que fecham o contrato de FormID descrito em `docs/technical/MODS_AND_GAMEMODE_CONTRACT.md` seção 3: o (1) garante conteúdo igual, o (2) garante ordem igual.
 
-> ⚠️ **Nada neste repositório serve `/mods.json` nem `/api/queue/status` na porta 7758.** Hoje `verify-mods` sempre retorna *"Servidor pode estar offline"* e a fila nunca responde. Construir esse serviço é pré-requisito pra qualquer teste com mais de um jogador — está no plano de melhorias (`docs/technical/QA_REPORT_2026-08.md`).
+Quem serve esses endpoints é o **`apps/game-api`**.
+
+### Gerando o `mods.json`
+
+O manifesto não é gerado sob demanda — hashear dezenas de GB dentro de uma requisição HTTP seria lento e daria margem a servir um manifesto inconsistente enquanto alguém copia arquivos pra pasta. Gere offline, a partir da pasta `Data/` de referência do servidor:
+
+```bash
+cd apps/game-api && node scripts/generate-mods-manifest.js "D:/SteamLibrary/steamapps/common/Skyrim Special Edition/Data" --plugins-txt "%LOCALAPPDATA%/Skyrim Special Edition/plugins.txt"
+```
+
+`--plugins-txt` importa: sem ele o script infere a load order pela ordem alfabética do diretório, que **não** é a load order real do Skyrim. Serve pra teste local, mas em produção geraria um manifesto que reprova clientes corretos. O script avisa alto quando isso acontece.
+
+Se o manifesto estiver ausente ou corrompido, `/mods.json` responde **503**, nunca uma lista vazia — lista vazia passaria na verificação de paridade do launcher e deixaria qualquer modpack entrar, que é o oposto do propósito.
+
+### A fila
+
+Capacidade fixa de slots (`QUEUE_CAPACITY`). Quem chega e encontra slot livre entra direto; quem não, fica numa fila FIFO e é promovido quando um slot vaga — por desconexão (o gamemode avisa em `/internal/session/release`) ou por **expiração de reserva**. A expiração é o que impede a fila de travar: sem ela, alguém que fecha o launcher depois de ser admitido seguraria o slot para sempre.
+
+**A fila é autenticada por ticket, não por `discordId`.** `discordId` é público — mandá-lo como prova de identidade deixaria qualquer um entrar na fila no lugar de outro jogador. O ticket inicial é emitido pelo painel na troca de OAuth (seção 4), porque só o painel tem o client secret e portanto só ele pode provar que aquele Discord autenticou de fato. Cada consulta consome o ticket atual e recebe o próximo, então um ticket interceptado já está gasto quando chega em outras mãos.
 
 ## 4. Login
 
@@ -51,6 +69,10 @@ O launcher abre o consentimento do Discord, sobe um servidor de callback local e
 O motivo é simples: tudo que é `VITE_*` é embutido no instalador em tempo de build, e o instalador é distribuído aos jogadores. Um client secret ali dentro pode ser extraído por qualquer pessoa que baixe o jogo. O launcher recebe de volta só o perfil público (`discordId`, `username`, `globalName`, `avatar`) — nem o access token, que ele não tem uso pra guardar.
 
 O painel valida o `redirect_uri` contra uma allowlist (`LAUNCHER_REDIRECT_URIS`) pra que um `code` interceptado não possa ser trocado apontando pra um endereço de terceiro.
+
+Junto com o perfil, o painel devolve um **`launchTicket`** (`launch_tickets`, migration v6) — de uso único, TTL de 5 min, guardado como hash SHA-256 pra que um vazamento do banco não vire credencial utilizável. É esse ticket que a fila exige.
+
+> ⚠️ **Ponta ainda solta:** o `launch-game` grava o ticket de sessão em `skymp_config.json`, mas o **gamemode nunca o lê** — `whitelist.js` confia no `profileId` que o cliente informa. Enquanto isso não mudar, a fila controla *quantos* entram, não *quem* entra. O `apps/game-api` já expõe `/internal/session/resolve` pro gamemode fechar esse laço.
 
 ---
 

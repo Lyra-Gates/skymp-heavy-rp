@@ -4,6 +4,8 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 **Método e limite:** tudo aqui foi verificado por leitura de código, execução de testes automatizados e checagem estática. **Nada foi validado numa sessão de jogo real** — nenhuma afirmação sobre comportamento in-game deve ser tomada como testada.
 
+*Atualizado depois da primeira rodada de correções: os itens marcados "corrigido"/"resolvido" já estão no código; os marcados **ABERTO** continuam pendentes.*
+
 ---
 
 ## 1. Estado por componente
@@ -12,8 +14,9 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 |---|---|---|---|
 | `skymp/gamemode` | 105/105 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
 | `apps/bot-discord` | 13/13 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
-| `apps/web` | ❌ nenhum | ⚠️ `node_modules` ausente | **Funcional em código**, mas nunca exercitado por teste automatizado. |
+| `apps/web` | 29/29 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
+| `apps/game-api` | 24/24 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. |
 | Schema / migrations | — | — | Consistente. Sem drift entre tabelas referenciadas e definidas. |
 
 ### O que efetivamente roda hoje
@@ -76,11 +79,15 @@ Aceitava nome vazio, biografia de um caractere ou texto maior que a coluna (vira
 
 **Corrigido:** validação server-side com mínimos e máximos por campo.
 
-### 2.9 🔴 **ABERTO** — não existe servidor na porta 7758
+### 2.9 🔴 não existia servidor na porta 7758 — *resolvido, com uma ponta solta*
 
 O launcher chama `http://<SERVER_IP>:7758/mods.json` (paridade de modpack) e `/api/queue/status` + `/api/queue/join` (fila). **Nenhum serviço deste repositório escuta nessa porta.**
 
-Isso significa que a verificação de paridade de mods — a coisa que sustenta todo o contrato de FormID e a regra de autoridade do servidor — **nunca rodou**. É o maior buraco funcional aberto do projeto.
+Isso significa que a verificação de paridade de mods — a coisa que sustenta todo o contrato de FormID e a regra de autoridade do servidor — **nunca rodou**.
+
+**Resolvido:** `apps/game-api` serve os três endpoints, com gerador de manifesto (`scripts/generate-mods-manifest.js`) e 24 testes. Detalhes em `LAUNCHER_DISTRIBUTION.md`. Junto veio 1.1b: a fila passou a exigir ticket emitido pelo painel em vez do `discordId` que o cliente informa.
+
+**Ponta solta (🟠 ABERTO):** o gamemode ainda **não lê o ticket de sessão**. `whitelist.js` deriva a identidade do `profileId` que o cliente informa, e o `launcherTicket` que o launcher grava em `skymp_config.json` não é verificado por ninguém. Ou seja, a fila hoje controla *quantos* entram, não *quem* entra. `/internal/session/resolve` já existe pro gamemode fechar o laço — falta descobrir como o SkyMP expõe o ticket ao gamemode no momento da conexão, o que precisa de teste com servidor real.
 
 ### 2.10 🟡 **ABERTO** — `server-options.json` não é lido por ninguém
 
@@ -88,9 +95,11 @@ Isso significa que a verificação de paridade de mods — a coisa que sustenta 
 
 **Mitigado nesta rodada:** aviso no topo do schema e chave `_aviso` nos exemplos. **A implementação continua pendente.**
 
-### 2.11 🟡 **ABERTO** — `apps/web` sem dependências instaladas e sem testes
+### 2.11 🟡 `apps/web` sem dependências instaladas e sem testes — *resolvido*
 
-`node_modules` ausente. `Start-AllServices.ps1` só checa a existência do `.env`, então o painel morre no `require('dotenv')` numa janela separada e a orquestração reporta sucesso. É também o único serviço com lógica de negócio (autorização de staff, aprovação de whitelist, troca de OAuth) **sem nenhum teste**.
+`node_modules` ausente. `Start-AllServices.ps1` só checava a existência do `.env`, então o painel morria no `require('dotenv')` numa janela separada e a orquestração reportava sucesso. Era também o único serviço com lógica de negócio (autorização de staff, aprovação de whitelist, troca de OAuth) **sem nenhum teste**.
+
+**Resolvido:** dependências instaladas; 29 smoke tests em `server.test.js` (guard de autenticação em 12 rotas, validação da ficha, allowlist de `redirect_uri`, hash do ticket); `Start-AllServices.ps1` agora pré-checa entrada, `.env` e `node_modules` de cada serviço e reporta o que não subiu em vez de mentir "concluída".
 
 ### 2.12 🟡 **ABERTO** — bot do Discord não registra comandos automaticamente
 
@@ -106,12 +115,13 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 
 | # | Item | Por quê |
 |---|---|---|
-| 1.1 | **Construir o serviço da porta 7758** (`/mods.json`, `/api/queue/status`, `/api/queue/join`) | Sem ele a paridade de modpack nunca é verificada e a fila nunca responde. Bloqueia 2.9. |
-| 1.1b | **Autenticar a fila de verdade.** Com a remoção do access token do launcher (2.2), `/api/queue/join` passou a mandar `{ discordId, password }` — e `discordId` é público, qualquer um pode alegar ser qualquer um. Como o serviço ainda não existe, o desenho correto é emitir um ticket curto no painel (que é quem autenticou o Discord) e a fila validar esse ticket | Se a fila nascer confiando no `discordId` do cliente, nasce com um bypass de whitelist. |
-| 1.2 | **Gerar `mods.json` a partir da pasta `Data/` do servidor** (script que hasheia e emite `{mods, loadOrder}`) | O endpoint sem um gerador vira outro stub com hash falso. |
-| 1.3 | **`npm ci` no `Start-AllServices.ps1`**, ou pelo menos falhar alto se faltar `node_modules` | Hoje a orquestração reporta sucesso com o painel morto. Resolve 2.11 (parte). |
-| 1.4 | **Smoke test de `apps/web`** (`supertest`): auth exigida, staff exigida, `/api/apply` valida, aprovação não toca `retired` | É o serviço com mais regra de negócio e zero teste. Trava as correções 2.3 e 2.8. |
-| 1.5 | **Rodar o plano de teste in-game que já existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) com as flags `ENABLE_*` ligadas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. |
+| 1.1 | ✅ **Feito** — `apps/game-api` serve `/mods.json`, `/api/queue/join` e `/api/queue/status` | |
+| 1.1b | ✅ **Feito** — a fila exige ticket emitido pelo painel (`launch_tickets`, migration v6), de uso único e guardado como hash | |
+| 1.2 | ✅ **Feito** — `apps/game-api/scripts/generate-mods-manifest.js` | |
+| 1.3 | ✅ **Feito** — `Start-AllServices.ps1` pré-checa cada serviço e reporta o que não subiu | |
+| 1.4 | ✅ **Feito** — 29 smoke tests em `apps/web/server.test.js` | |
+| 1.5 | **Rodar o plano de teste in-game que já existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) com as flags `ENABLE_*` ligadas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
+| 1.6 | **Gamemode passa a validar o ticket de sessão** via `POST /internal/session/resolve`, em vez de confiar no `profileId` do cliente | Sem isso a fila controla quantos entram, mas não quem. Precisa de servidor real pra descobrir como o SkyMP expõe o ticket na conexão. |
 
 ### Fase 2 — Tirar a configuração-fantasma do caminho
 

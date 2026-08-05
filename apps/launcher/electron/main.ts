@@ -672,6 +672,11 @@ ipcMain.handle('discord-login', async () => {
           username: user.username,
           globalName: user.globalName || user.username,
           avatar: user.avatar || null,
+          // Prova de que este Discord autenticou de fato, emitida pelo painel.
+          // É o que a fila (apps/game-api) exige — `discordId` sozinho é público
+          // e não prova nada. Vem ausente se a conta ainda não existe no painel
+          // (jogador que nunca pediu whitelist).
+          launchTicket: user.launchTicket || null,
           loginDate: new Date().toISOString(),
         };
 
@@ -763,53 +768,59 @@ ipcMain.handle('get-auth-status', async () => {
 });
 
 // ─── Queue System ───
-ipcMain.handle('join-queue', async (_event, password) => {
-  const auth = readAuthFile();
-  if (!auth || !auth.discordId) return { status: 'error', message: 'not_authenticated' };
+//
+// A fila é autenticada por ticket, não por `discordId`: discordId é público, e
+// mandá-lo como prova de identidade deixaria qualquer um entrar na fila no
+// lugar de outro jogador. O ticket inicial vem do painel no login; cada consulta
+// consome o ticket atual e recebe o próximo (`pollTicket`), então um ticket
+// interceptado já está gasto quando chega em outras mãos.
 
-  try {
-    return await new Promise((resolve) => {
-      const postData = JSON.stringify({ discordId: auth.discordId, password: password || "" });
-      const req = http.request({
-        hostname: SERVER_IP,
-        port: API_PORT,
-        path: '/api/queue/join',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
-      }, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch {
-            resolve({ status: 'error', message: 'invalid_response' });
-          }
-        });
-      });
-      req.on('error', () => {
-        resolve({ status: 'error', message: 'connection_failed' });
-      });
-      req.write(postData);
-      req.end();
-    });
-  } catch {
-    return { status: 'error', message: 'connection_failed' };
+/**
+ * Guarda o ticket da próxima consulta de fila. Vive só em memória de propósito:
+ * é de uso único e curto, não faz sentido persistir entre execuções.
+ */
+let currentQueueTicket: string | null = null;
+
+function nextQueueTicket(): string | null {
+  const auth = readAuthFile();
+  return currentQueueTicket || (auth && auth.launchTicket) || null;
+}
+
+function rememberQueueTicket(response: any) {
+  if (response && typeof response.pollTicket === 'string') {
+    currentQueueTicket = response.pollTicket;
+    delete response.pollTicket; // o renderer não precisa nem deve ver o ticket
   }
+  return response;
+}
+
+ipcMain.handle('join-queue', async () => {
+  const ticket = nextQueueTicket();
+  if (!ticket) return { status: 'error', message: 'not_authenticated' };
+
+  const response = await postJsonToUrl(
+    `http://${SERVER_IP}:${API_PORT}/api/queue/join`,
+    { ticket }
+  );
+
+  if (response.status === 0) return { status: 'error', message: 'connection_failed' };
+  if (!response.data) return { status: 'error', message: 'invalid_response' };
+  return rememberQueueTicket(response.data);
 });
 
 ipcMain.handle('poll-queue', async () => {
-  const auth = readAuthFile();
-  if (!auth || !auth.discordId) return { status: 'error', message: 'not_authenticated' };
+  const ticket = nextQueueTicket();
+  if (!ticket) return { status: 'error', message: 'not_authenticated' };
 
   try {
     return await new Promise((resolve) => {
-      http.get(`http://${SERVER_IP}:${API_PORT}/api/queue/status?discordId=${auth.discordId}`, (res) => {
+      const url = `http://${SERVER_IP}:${API_PORT}/api/queue/status?ticket=${encodeURIComponent(ticket)}`;
+      http.get(url, (res) => {
         let data = '';
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
           try {
-            resolve(JSON.parse(data));
+            resolve(rememberQueueTicket(JSON.parse(data)));
           } catch {
             resolve({ status: 'error', message: 'invalid_response' });
           }

@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, Minus } from 'lucide-react';
 
 export function TitleBar() {
