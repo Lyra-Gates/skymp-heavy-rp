@@ -1,6 +1,6 @@
 # Servidor SkyMP Heavy RP Publico - Plano de Desenvolvimento
 
-> **Status Atual (Ativo):** A Fase 0 de fundação técnica foi validada e expandida. Estamos atuando nas Fases 3, 4 e 5. Sistemas críticos como o Governance (prisões, multas, mandados), Market Stalls (barracas de jogadores) com integração total via UI CEF, Economia Regional (NPCs atuando como sumidouros punitivos para incentivar trocas entre jogadores) e o Launcher oficial em React/Electron já foram implementados e testados em laboratório.
+> **Status Atual (Ativo):** A Fase 0 de fundação técnica foi validada e expandida. Estamos atuando nas Fases 3, 4 e 5. Sistemas críticos como o Governance (prisões, multas, mandados), Market Stalls (barracas de jogadores) com integração total via UI CEF, Economia Regional (NPCs atuando como sumidouros punitivos para incentivar trocas entre jogadores), o Painel do Jogador in-game (`/painel` — status, governança, economia, social, ver ARCHITECTURE.md 1.4.2) e o Launcher oficial em React/Electron já foram implementados e testados em laboratório.
 
 ## 1. Visao
 
