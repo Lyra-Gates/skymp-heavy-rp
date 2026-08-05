@@ -385,17 +385,31 @@
 </div>
 <div id="interaction-toast" class="interaction-toast"></div>
 
-<!-- Painel do Jogador (Status | Governanca | Economia | Social) -->
+<!-- Painel do Jogador -->
 <div id="player-panel" aria-hidden="true">
   <div class="pp-head">
-    <div class="pp-title">Painel do Jogador</div>
+    <div class="pp-head-text">
+      <div class="pp-eyebrow">Painel do Jogador</div>
+      <div class="pp-title" id="pp-char-name">—</div>
+    </div>
+    <div class="pp-status-chip" id="pp-status-chip">
+      <span class="pp-status-dot"></span><span id="pp-status-text">Em ordem</span>
+    </div>
     <button id="pp-close" class="pp-close" aria-label="Fechar">×</button>
   </div>
   <div class="pp-tabs">
-    <button type="button" class="pp-tab active" data-tab="status">Status</button>
-    <button type="button" class="pp-tab" data-tab="governance">Governanca</button>
-    <button type="button" class="pp-tab" data-tab="economy">Economia</button>
-    <button type="button" class="pp-tab" data-tab="social">Social</button>
+    <button type="button" class="pp-tab active" data-tab="status">
+      <span class="pp-rune">ᛊ</span>Status
+    </button>
+    <button type="button" class="pp-tab" data-tab="governance">
+      <span class="pp-rune">ᛟ</span>Lei
+    </button>
+    <button type="button" class="pp-tab" data-tab="economy">
+      <span class="pp-rune">ᚠ</span>Bens
+    </button>
+    <button type="button" class="pp-tab" data-tab="social">
+      <span class="pp-rune">ᛗ</span>Social
+    </button>
   </div>
   <div class="pp-body">
     <div id="pp-section-status" class="pp-section active"></div>

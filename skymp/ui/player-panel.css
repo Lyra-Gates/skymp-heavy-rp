@@ -1,173 +1,260 @@
 /* ============================================================================
  * player-panel.css
- * Painel do jogador: Status | Governança | Economia | Social
- * Segue a mesma linguagem visual do #interaction-menu (dourado/escuro).
+ * Identidade visual emprestada do próprio Prisma UI (prismaui.dev): preto puro,
+ * glass card com glow violeta, tipografia geométrica (Geist Sans / fallback
+ * system-ui), pílulas, hairlines com brilho, marca d'água rúnica ambiente.
+ * Nada de parchment/wax — é "next-gen dev tool", não cancelaria medieval.
  * ==========================================================================*/
 
 #player-panel {
+  --pp-black: #000000;
+  --pp-panel: rgba(9, 9, 12, 0.82);
+  --pp-panel-2: rgba(255, 255, 255, 0.035);
+  --pp-text: #f5f5f8;
+  --pp-text-dim: rgba(245, 245, 248, 0.52);
+  --pp-text-faint: rgba(245, 245, 248, 0.28);
+  --pp-border: rgba(255, 255, 255, 0.09);
+  --pp-accent: #8b7cf6;
+  --pp-accent-bright: #b3a8ff;
+  --pp-accent-dim: rgba(139, 124, 246, 0.14);
+  --pp-danger: #ff6b6b;
+  --pp-danger-dim: rgba(255, 107, 107, 0.14);
+  --pp-success: #34d399;
+  --pp-success-dim: rgba(52, 211, 153, 0.14);
+  --pp-font: 'Segoe UI Variable', 'Segoe UI', -apple-system, system-ui, sans-serif;
+
   position: fixed;
   top: 50%;
-  right: 24px;
+  right: 22px;
   transform: translateY(-50%);
-  width: min(420px, calc(100vw - 48px));
-  max-height: calc(100vh - 80px);
+  width: min(400px, calc(100vw - 44px));
+  max-height: calc(100vh - 72px);
   display: none;
   flex-direction: column;
-  background: rgba(10, 10, 13, 0.93);
-  border: 1px solid rgba(187, 161, 107, 0.65);
-  border-radius: 10px;
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.75);
-  color: #f5f1e8;
+  background:
+    radial-gradient(ellipse 140% 90% at 100% -10%, rgba(139, 124, 246, 0.16), transparent 60%),
+    var(--pp-panel);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--pp-border);
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 1px rgba(139, 124, 246, 0.08),
+    0 24px 70px rgba(0, 0, 0, 0.65),
+    0 0 60px rgba(139, 124, 246, 0.06);
+  color: var(--pp-text);
+  font-family: var(--pp-font);
   z-index: 200;
   overflow: hidden;
 }
 #player-panel.open { display: flex; }
 
+/* Marca d'água rúnica ambiente — eco do emblema fantasma do site do Prisma. */
+#player-panel::before {
+  content: 'ᛟ';
+  position: absolute;
+  top: -60px;
+  right: -30px;
+  font-size: 220px;
+  line-height: 1;
+  color: rgba(139, 124, 246, 0.05);
+  pointer-events: none;
+  animation: pp-drift 22s linear infinite;
+}
+@keyframes pp-drift {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(6deg) scale(1.04); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #player-panel::before { animation: none; }
+}
+
+/* ── Cabecalho ──────────────────────────────────────────────────────────── */
 .pp-head {
-  padding: 14px 16px 10px;
-  border-bottom: 1px solid rgba(187, 161, 107, 0.28);
+  position: relative;
+  padding: 18px 18px 14px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--pp-border);
+  flex: none;
 }
-.pp-title {
-  font-size: 14px;
+.pp-head-text { flex: 1; min-width: 0; }
+.pp-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.6px;
-  color: #d8bf82;
+  color: var(--pp-accent-bright);
 }
+.pp-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--pp-text);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chip de status "ao vivo" — ponto pulsante + rotulo, no lugar de um selo/badge generico */
+.pp-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: var(--pp-success-dim);
+  color: var(--pp-success);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  white-space: nowrap;
+}
+.pp-status-chip.warn {
+  background: var(--pp-danger-dim);
+  color: var(--pp-danger);
+  border-color: rgba(255, 107, 107, 0.3);
+}
+.pp-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: pp-pulse 1.8s ease-in-out infinite;
+}
+@keyframes pp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pp-status-dot { animation: none; }
+}
+
 .pp-close {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.04);
-  color: #f5f1e8;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--pp-border);
+  background: var(--pp-panel-2);
+  color: var(--pp-text-dim);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
 }
-.pp-close:hover { background: rgba(255,255,255,0.1); }
+.pp-close:hover { color: var(--pp-text); border-color: rgba(255,255,255,0.18); }
 
+/* ── Navegacao em pilulas (segmented control), como no site do Prisma ────── */
 .pp-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
   gap: 4px;
-  padding: 10px 12px 0;
+  padding: 12px 14px 0;
+  flex: none;
 }
 .pp-tab {
-  border: 1px solid rgba(128,128,128,0.4);
-  border-radius: 6px 6px 0 0;
-  background: rgba(0,0,0,0.5);
-  color: rgba(245,241,232,0.7);
-  padding: 8px 4px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--pp-text-dim);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.1px;
   cursor: pointer;
-  text-align: center;
 }
+.pp-tab .pp-rune { font-size: 13px; color: var(--pp-text-faint); }
+.pp-tab:hover { color: var(--pp-text); background: var(--pp-panel-2); }
 .pp-tab.active {
-  background: rgba(187,161,107,0.16);
-  border-color: rgba(216,191,130,0.75);
-  color: #d8bf82;
+  background: var(--pp-accent-dim);
+  border-color: rgba(139, 124, 246, 0.35);
+  color: var(--pp-accent-bright);
 }
+.pp-tab.active .pp-rune { color: var(--pp-accent-bright); }
 
 .pp-body {
-  padding: 14px 16px 16px;
+  padding: 16px 18px 18px;
   overflow-y: auto;
 }
 .pp-section { display: none; }
 .pp-section.active { display: block; }
 
 .pp-empty {
-  color: rgba(245,241,232,0.5);
-  font-size: 13px;
-  text-align: center;
-  padding: 18px 8px;
+  color: var(--pp-text-dim);
+  font-size: 12.5px;
+  padding: 14px 2px 4px;
 }
 
-/* --- Status --- */
-.pp-vitals {
-  display: grid;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.pp-bar-row {
-  display: grid;
-  grid-template-columns: 70px 1fr 46px;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-}
-.pp-bar-track {
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.08);
-  overflow: hidden;
-}
-.pp-bar-fill { height: 100%; transition: width 0.3s; }
-.pp-bar-fill.health { background: #b23b3b; }
-.pp-bar-fill.magicka { background: #3f6fbf; }
-.pp-bar-fill.stamina { background: #4c9a4c; }
-
-.pp-stat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.pp-stat-card {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px;
-  padding: 8px 10px;
-}
-.pp-stat-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: rgba(245,241,232,0.55);
-}
-.pp-stat-value { font-size: 15px; font-weight: 600; margin-top: 2px; }
-.pp-stat-value.gold { color: #d8bf82; }
-
-.pp-badge {
-  display: inline-block;
-  padding: 3px 9px;
-  border-radius: 12px;
+.pp-h {
   font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
-  background: rgba(76,154,76,0.18);
-  color: #7fd47f;
-  border: 1px solid rgba(76,154,76,0.4);
+  letter-spacing: 1.2px;
+  color: var(--pp-text-faint);
+  margin: 18px 0 8px;
 }
-.pp-badge.warn {
-  background: rgba(178,59,59,0.18);
-  color: #e08585;
-  border-color: rgba(178,59,59,0.4);
-}
+.pp-h:first-child { margin-top: 0; }
 
-/* --- Listas genéricas (governança / economia / social) --- */
-.pp-list { display: grid; gap: 8px; }
-.pp-list-item {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 12px;
+/* ── Linhas de dado (lista limpa, nao "livro-razao") ──────────────────────── */
+.pp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--pp-border);
+  font-size: 13px;
+}
+.pp-row:last-child { border-bottom: none; }
+.pp-row .label { color: var(--pp-text-dim); }
+.pp-row .sub { display: block; color: var(--pp-text-faint); font-size: 11px; margin-top: 1px; }
+.pp-row .value {
+  color: var(--pp-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pp-row .value.accent { color: var(--pp-accent-bright); }
+.pp-row .value.warn { color: var(--pp-danger); }
+
+/* ── Medidores de vitalidade — barra fina com glow, nao gauge gravado ──────── */
+.pp-gauge { margin-bottom: 12px; }
+.pp-gauge-label {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  align-items: center;
+  font-size: 11px;
+  color: var(--pp-text-dim);
+  margin-bottom: 5px;
 }
-.pp-list-item .main { color: #f5f1e8; }
-.pp-list-item .sub { color: rgba(245,241,232,0.5); font-size: 11px; }
+.pp-gauge-label .value { font-weight: 600; color: var(--pp-text); font-variant-numeric: tabular-nums; }
+.pp-gauge-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.pp-gauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+.pp-gauge-fill.health { background: linear-gradient(90deg, #ff6b6b, #ff9d9d); box-shadow: 0 0 10px rgba(255,107,107,0.5); }
+.pp-gauge-fill.magicka { background: linear-gradient(90deg, #6b9cff, #a8c4ff); box-shadow: 0 0 10px rgba(107,156,255,0.5); }
+.pp-gauge-fill.stamina { background: linear-gradient(90deg, #34d399, #86e8c3); box-shadow: 0 0 10px rgba(52,211,153,0.5); }
 
 .pp-hint {
-  margin-top: 10px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--pp-border);
   font-size: 11px;
-  color: rgba(245,241,232,0.45);
+  color: var(--pp-text-faint);
   line-height: 1.5;
 }
