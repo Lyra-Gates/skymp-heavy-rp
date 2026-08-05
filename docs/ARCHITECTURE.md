@@ -8,7 +8,8 @@ A infraestrutura é dividida nos seguintes módulos:
 
 ### 1.1 Banco de Dados (MariaDB/MySQL)
 O **MariaDB** é a fonte absoluta de verdade. Todos os serviços se conectam a ele.
-- **Tabelas Principais:** `characters`, `factions`, `houses`, `economy`, `crafting_recipes`, `crafting_ingredients`.
+- **Tabelas Principais:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. O schema completo está em `skymp/packages/database/schema.sql` mais as migrations `v2`–`v5`.
+- Algumas tabelas existem no schema mas ainda não são lidas por nenhum código ativo (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — pertencem a módulos PARKED (ver 1.4).
 - **Regra Restrita:** Nenhuma alteração de estado no jogo (dinheiro, posições, itens) acontece sem ser gravada ou lida do MariaDB. O Node.js não confia em dados soltos na memória por períodos longos sem persistência.
 
 ### 1.2 Aplicativo Web e API (`apps/web`)
@@ -61,7 +62,7 @@ Módulo `death` (`ENABLE_DEATH_SERVICE`), fase `lab`. Existe pra que "morrer" te
 **Morte permanente (soft-delete):** `admin-service.retireCharacter(actorId, targetActorId, reason)`, comando `/permakill` (permissão `retire_character`, tiers `admin`/`owner` apenas — nunca moderador). Nunca faz `DELETE` — só `UPDATE characters SET status='retired'`, motivo obrigatório e audit log. `whitelist.js` só permite spawn com `status='approved'`, então um personagem `retired` nunca mais entra em jogo sem precisar de nenhuma outra mudança.
 
 #### 1.4.4 Voz por Proximidade (`voip-service.js`)
-Módulo `voip` (`ENABLE_VOIP_SERVICE`), fase `lab`. Sinalização WebRTC (offer/answer/ICE) por WebSocket próprio (porta `VOIP_PORT`, padrão 7778) — o áudio em si é P2P entre clientes depois do handshake, o servidor só troca a sinalização e calcula volume por distância a cada 2s (raios espelham os do `rp-chat-service.js`: sussurro 200, normal 1200, grito 3000).
+Módulo `voip` (`ENABLE_VOIP_SERVICE`), fase `lab`. Sinalização WebRTC (offer/answer/ICE) por WebSocket próprio (porta `VOIP_PORT`, padrão 7778) — o áudio em si é P2P entre clientes depois do handshake, o servidor só troca a sinalização e calcula volume por distância a cada 2s. Os raios vêm de `core/proximity-ranges.js`, que é a fonte única de chat **e** voz — antes as duas tabelas divergiam (voz sussurrava a 200, chat a 450), então o mesmo gesto de chegar perto pra falar baixo funcionava ou não dependendo do canal escolhido.
 
 **Antes desta revisão o recurso existia só no papel** — nada em `phase0-basic.js` chamava `startVoipServer()`, e o listener `mp.events.add('voip:connect', ...)` no cliente nunca disparava porque nenhum código do servidor faz `mp.trigger`/emit desse evento em lugar nenhum do gamemode. Não era um indicador visível quebrado (o chip de status é `display:none` até `setStatus()` rodar, e isso nunca acontecia) — a feature estava simplesmente ausente, silenciosamente.
 
@@ -71,9 +72,11 @@ Módulo `voip` (`ENABLE_VOIP_SERVICE`), fase `lab`. Sinalização WebRTC (offer/
 - `VOIP_BIND_HOST` (padrão `127.0.0.1`) controla em quais interfaces o `WebSocketServer` escuta — não confundir com `VOIP_PUBLIC_HOST`, que é o que o cliente recebe pra conectar.
 
 ### 1.5 Launcher do Cliente (`apps/launcher`)
-Desenvolvido em **Electron / React**.
-- Lê o Manifesto da API Web e faz a validação criptográfica (Hashes) da *Load Order* do jogador.
-- Garante que a versão dos ESMs, texturas aprovadas, e SKSE estejam idênticas à do servidor.
+Desenvolvido em **Electron / React**. Detalhes completos em `docs/technical/LAUNCHER_DISTRIBUTION.md`.
+- **Atualização** de cliente e modpack vem de **GitHub Releases** (`VITE_GITHUB_DIST_REPO`), com SHA-256 obrigatório — manifesto sem hash aborta a instalação em vez de instalar sem verificar. Não vem do `apps/web`: o `GET /api/launcher/manifest` que existia lá era um stub com hash falso que ninguém consumia, e foi removido.
+- **Paridade em tempo de conexão** (`verify-mods` + `analyze-plugins`) compara hash de cada arquivo em `Data/` e valida masters/load order contra `http://<SERVER_IP>:<VITE_API_PORT>/mods.json`. ⚠️ **Esse serviço ainda não existe neste repositório** — hoje o passo sempre falha como "servidor offline".
+- **Login**: o launcher só captura o `code` do Discord; a troca por token é feita pelo painel web (`POST /api/launcher/oauth/exchange`), porque qualquer segredo embutido num app distribuído aos jogadores pode ser extraído do instalador.
+- Configuração vem de variáveis `VITE_*` embutidas em **tempo de build** pelo `define` do `vite.config.ts` — não existe `.env` do lado do app empacotado.
 
 ## 2. Fluxo de Decisão (A Regra de Ouro)
 
@@ -85,3 +88,5 @@ No nosso servidor, a autoridade nunca é delegada ao cliente.
 3. O Servidor altera o banco, salva o novo item.
 4. O Servidor dispara o `mp.callPapyrusFunction` apenas para o cliente fazer a animação e receber o aviso visual de sucesso.
 *(Se um mod local tentar pular a etapa 2, ele falha silenciosamente, protegendo a economia).*
+
+O detalhamento técnico dessa regra — o que um mod consegue e não consegue tocar, por que scripts Papyrus de mod não produzem estado, e o contrato de FormID que obriga paridade de load order — está em `docs/technical/MODS_AND_GAMEMODE_CONTRACT.md`.

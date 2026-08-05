@@ -1,5 +1,10 @@
 # Schema de Server Options RP
 
+> **Estado: projetado, não implementado.**
+> `Initialize-LocalConfig.ps1` gera `skymp/config/server-options.local.json` a partir do exemplo, mas **nenhum código do gamemode lê esse arquivo**. Todas as opções abaixo são um contrato de design, não configuração viva: mexer nelas hoje não muda nada em jogo.
+> As regras que este documento descreve estão hoje espalhadas como constantes em código — raios de chat/voz em `skymp/gamemode/core/proximity-ranges.js`, flags de módulo em `ENABLE_*` no `.env`, permissões de staff em `admin-service.js`/`governance-service.js`.
+> Ligar este schema de verdade (carregar, validar e aplicar) está no plano de melhorias — ver `docs/technical/QA_REPORT_2026-08.md`.
+
 ## 1. Objetivo
 
 Definir um `server-options` proprio para o servidor Heavy RP, com validacao, perfis por ambiente e protecoes contra configuracoes perigosas.

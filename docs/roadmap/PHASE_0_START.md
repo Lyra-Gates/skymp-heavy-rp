@@ -23,7 +23,7 @@ Ao final da Fase 0, precisamos responder:
 
 ## 3. Preparacao Local
 
-Antes de copiar builds ou masters do Skyrim, leia `docs/technical/PHASE_0_FILE_LAYOUT.md`.
+Antes de copiar builds ou masters do Skyrim, confira o `.gitignore` da raiz — ele é a fonte de verdade sobre o que nunca entra no repositório (build do servidor, masters oficiais, `.esm`/`.esp`/`.bsa` sem permissão de redistribuição, `data/`, `world/`, configs locais e qualquer `.env`).
 
 ### Ferramentas
 

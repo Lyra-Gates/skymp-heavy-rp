@@ -9,7 +9,10 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 
 1. **[Arquitetura do Sistema (ARCHITECTURE.md)](docs/ARCHITECTURE.md):** Contém a explicação de como o Banco de Dados, o Bot do Discord, o Painel Web, o Launcher e o Gamemode nativo conversam entre si.
 2. **[Diretrizes de Modding (MODDING_GUIDELINES.md)](docs/MODDING_GUIDELINES.md):** A nossa Bíblia de arquitetura de mods. Explica as regras de ouro, as fases de lançamento (0A, 0B, 1, Alfa, Beta) e a Lista Negra de mods proibidos (como JK's Skyrim ou Survival Scripts no cliente).
-3. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
+3. **[Contrato Mods × Gamemode (MODS_AND_GAMEMODE_CONTRACT.md)](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md):** O outro lado do anterior — o que tecnicamente acontece com um mod dentro de um cliente conectado, por que scripts Papyrus de mod não produzem estado, e o teste de 4 perguntas pra classificar um mod.
+4. **[Distribuição pelo Launcher (LAUNCHER_DISTRIBUTION.md)](docs/technical/LAUNCHER_DISTRIBUTION.md):** Como o cliente e o modpack são entregues e verificados, e por que não usamos Nexus Collections.
+5. **[Relatório de QA e Plano de Melhorias](docs/technical/QA_REPORT_2026-08.md):** Estado real de cada componente, o que é stub, o que está estacionado e o plano priorizado pra deixar o servidor funcional ponta a ponta. **Comece por aqui se você acabou de chegar no projeto.**
+6. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
 
 ## Status Atual do Projeto (Auditoria Recente)
 
@@ -19,8 +22,10 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 - **Voz por Proximidade (`/voz`)**: sinalização WebRTC opt-in com autenticação por ticket de uso único (corrige um bug de sequestro de sessão de voz) e host/porta enviados dinamicamente pelo servidor. Antes existia só como código morto — nada disparava a conexão. Ver `docs/ARCHITECTURE.md` 1.4.4.
 - **UI CEF / Menu de Interação Integrados**: A UI CEF e o gamemode Node.js agora possuem comunicação de eventos bi-direcional via um roteador central de eventos (`core/ui-event-router.js`). Jogadores podem interagir com outros jogadores e NPCs clicando através de um menu contextual para inspecionar, prender, multar ou abrir o painel de mercado, abandonando a necessidade de comandos de chat engessados.
 - **Painel do Jogador (in-game)**: Comando `/painel` abre um HUD in-game com 4 abas — Status (vida/magicka/stamina/ouro/estado RP), Governança (cargo, mandados, multas), Economia (barracas, imposto local) e Social (rostos conhecidos). Agrega dados dos serviços existentes sem duplicar lógica de negócio; ativado via `ENABLE_PLAYER_PANEL_SERVICE=true`. Ver [player-panel-service.js](skymp/gamemode/player-panel-service.js).
-- **Launcher App**: Um Launcher em React + Electron (Vite) funcional foi adicionado em `apps/launcher`, controlando autenticação, configurações e boot da build.
+- **Launcher App**: Um Launcher em React + Electron (Vite) em `apps/launcher`, controlando autenticação, configurações e boot da build. Na auditoria de agosto ele estava quebrado ponta a ponta (nenhuma variável de ambiente era carregada) e o client secret do Discord ia embutido no instalador — ambos corrigidos, mas ainda sem validação em runtime. Ver [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) 2.1 e 2.2.
 - **Fase Inicial (Fase 0)**: As fundações locais (conexão, persistência base em banco MariaDB via scripts SQL migrados) já foram garantidas em ambiente de laboratório.
+
+> ⚠️ **O servidor ainda não está pronto pra receber jogadores.** O maior bloqueio aberto é que o serviço de paridade de modpack (porta 7758, `/mods.json` e a fila) **não existe neste repositório** — sem ele o launcher não consegue verificar que todos os clientes têm os mesmos mods, que é a base da regra de Autoridade do Servidor. O plano priorizado está em [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) §3.
 
 ## Como Executar o Servidor (Desenvolvimento)
 
