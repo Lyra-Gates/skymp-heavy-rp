@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>SkyMP Heavy RP - UI</title>
+  <link rel="stylesheet" href="player-panel.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -383,6 +384,26 @@
   </div>
 </div>
 <div id="interaction-toast" class="interaction-toast"></div>
+
+<!-- Painel do Jogador (Status | Governanca | Economia | Social) -->
+<div id="player-panel" aria-hidden="true">
+  <div class="pp-head">
+    <div class="pp-title">Painel do Jogador</div>
+    <button id="pp-close" class="pp-close" aria-label="Fechar">×</button>
+  </div>
+  <div class="pp-tabs">
+    <button type="button" class="pp-tab active" data-tab="status">Status</button>
+    <button type="button" class="pp-tab" data-tab="governance">Governanca</button>
+    <button type="button" class="pp-tab" data-tab="economy">Economia</button>
+    <button type="button" class="pp-tab" data-tab="social">Social</button>
+  </div>
+  <div class="pp-body">
+    <div id="pp-section-status" class="pp-section active"></div>
+    <div id="pp-section-governance" class="pp-section"></div>
+    <div id="pp-section-economy" class="pp-section"></div>
+    <div id="pp-section-social" class="pp-section"></div>
+  </div>
+</div>
 
 <script>
   // ── Mock mp para testes fora do SkyMP ─────────────────────────────────────
@@ -1033,5 +1054,6 @@
     }
   });
 </script>
+<script src="player-panel.js"></script>
 </body>
 </html>

@@ -911,6 +911,52 @@ async function showCriminalRecord(actorId, targetActorId) {
   notify(actorId, summary);
 }
 
+/**
+ * Resumo de governança do próprio personagem, para o painel do jogador.
+ * Não altera nenhum estado — apenas leitura.
+ * @param {number} actorId
+ * @returns {Promise<object|null>}
+ */
+async function getMyGovernanceSummary(actorId) {
+  const character = getCharacter(actorId);
+  if (!character) return null;
+
+  const [memberships, warrant, recentFines, recentCrimes] = await Promise.all([
+    db.query(
+      `SELECT gm.scope_type, gm.scope_id, gm.on_duty, gr.name AS role_name, gr.label, gr.weight
+       FROM governance_memberships gm
+       INNER JOIN governance_roles gr ON gr.id = gm.role_id
+       WHERE gm.character_id = ? AND gm.status = 'active'
+       ORDER BY gr.weight DESC`,
+      [character.characterId]
+    ).catch(() => []),
+    hasActiveWarrant(character.characterId),
+    db.query(
+      `SELECT amount, reason, created_at FROM fines WHERE target_character_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [character.characterId]
+    ).catch(() => []),
+    db.query(
+      `SELECT crime, bounty, hold, resolved, created_at FROM criminal_records WHERE character_id = ? ORDER BY created_at DESC LIMIT 5`,
+      [character.characterId]
+    ).catch(() => [])
+  ]);
+
+  return {
+    memberships: memberships.map(m => ({
+      scopeType: m.scope_type,
+      scopeId: m.scope_id,
+      role: m.role_name,
+      label: m.label,
+      onDuty: Boolean(m.on_duty)
+    })),
+    activeWarrant: warrant ? { severity: warrant.severity, reason: warrant.reason, status: warrant.status } : null,
+    recentFines: recentFines.map(f => ({ amount: f.amount, reason: f.reason, at: f.created_at })),
+    recentCrimes: recentCrimes.map(c => ({
+      crime: c.crime, bounty: c.bounty, hold: c.hold, resolved: Boolean(c.resolved), at: c.created_at
+    }))
+  };
+}
+
 async function setTax(actorId, scopeType, scopeId, rateRaw) {
   if (!await requirePermission(actorId, PERMISSIONS.MANAGE_TAXES, { scopeType, scopeId })) return;
   const rate = Number.parseFloat(rateRaw);
@@ -1152,6 +1198,7 @@ module.exports = {
   handleUiEvent,
   getInteractionActions,
   handleInteractionAction,
+  getMyGovernanceSummary,
   hasPermission,
   createRealm,
   createCity,

@@ -8,8 +8,10 @@ const db            = require(path.join(gamemodeDir, 'database'));
 const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
 const commands      = require(path.join(gamemodeDir, 'commands'));
 const moduleRegistry = require(path.join(gamemodeDir, 'core', 'module-registry'));
+const uiEventRouter  = require(path.join(gamemodeDir, 'core', 'ui-event-router'));
 const governance    = require(path.join(gamemodeDir, 'governance-service'));
 const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
+const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -51,8 +53,10 @@ moduleRegistry.register({
   commands: governance.commandDefs(),
   initialize: async () => {
     await governance.initGovernanceService();
+    uiEventRouter.register('governance', governance.handleUiEvent);
   },
   shutdown: async () => {
+    uiEventRouter.unregister('governance');
     governance.shutdownGovernanceService();
   }
 });
@@ -68,6 +72,23 @@ moduleRegistry.register({
   },
   shutdown: async () => {
     marketStalls.shutdownMarketStallsService();
+  }
+});
+
+// LAB: Painel do jogador (status, governança, economia, social)
+moduleRegistry.register({
+  id: 'player-panel',
+  enabledBy: 'ENABLE_PLAYER_PANEL_SERVICE',
+  phase: 'lab',
+  dependencies: ['governance'],
+  commands: playerPanel.commandDefs(),
+  initialize: async () => {
+    await playerPanel.initPlayerPanelService();
+    uiEventRouter.register('panel', playerPanel.handleUiEvent);
+  },
+  shutdown: async () => {
+    uiEventRouter.unregister('panel');
+    playerPanel.shutdownPlayerPanelService();
   }
 });
 
@@ -137,14 +158,26 @@ if (typeof mp !== "undefined") {
     `,
     updateNeighbor: ''
   });
-  
+  // Canal dedicado ao painel do jogador (não interfere no browserModal acima,
+  // usado por modais pontuais como o menu de interação da governança).
+  mp.makeProperty('panelData', {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: `
+      if (ctx.value && ctx.sp && ctx.sp.browser && ctx.sp.browser.executeJavaScript) {
+        const payload = JSON.stringify(ctx.value);
+        ctx.sp.browser.executeJavaScript('window.handlePanelData && window.handlePanelData(' + payload + ')');
+      }
+    `,
+    updateNeighbor: ''
+  });
+
   mp.onUiEvent = (pcFormId, uiEvent) => {
     try {
       console.log(`[phase0] onUiEvent callback from ${pcFormId.toString(16)}:`, uiEvent);
-      const governanceResult = governance.handleUiEvent(pcFormId, uiEvent);
-      if (governanceResult instanceof Promise) {
-        governanceResult.catch(err => console.error('[phase0] governance UI event failed:', err.message));
-      }
+      uiEventRouter.dispatch(pcFormId, uiEvent).catch(err =>
+        console.error('[phase0] ui-event-router dispatch failed:', err.message)
+      );
       if (uiEvent.type === 'cef::chat:send') {
         const text = uiEvent.data;
         commands.handleChatInput(pcFormId, text);
@@ -195,6 +228,7 @@ setInterval(() => {
                   console.log(`[phase0] User ${userId} was rejected and kicked by database check.`);
                   activeUsers.delete(userId);
                   commands.removeActiveCharacter(actorId);
+                  playerPanel.cleanup(actorId);
                 }
               })
               .catch((err) => {
@@ -202,6 +236,7 @@ setInterval(() => {
                 if (typeof mp !== 'undefined') mp.kick(userId);
                 activeUsers.delete(userId);
                 commands.removeActiveCharacter(actorId);
+                playerPanel.cleanup(actorId);
               });
           } else {
             console.log(`[phase0] User ${userId} actor ${actorId.toString(16)} has no associated profileId in server registry.`);
@@ -218,6 +253,7 @@ setInterval(() => {
         const actorId = mp.getUserActor(userId);
         if (actorId) {
           commands.removeActiveCharacter(actorId);
+          playerPanel.cleanup(actorId);
         }
       } catch (err) {
         // O ator pode já ter sido destruído na desconexão

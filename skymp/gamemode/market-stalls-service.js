@@ -911,6 +911,41 @@ async function expireStalls() {
   return expired.length;
 }
 
+/**
+ * Resumo de economia/mercado do próprio personagem, para o painel do jogador.
+ * Não altera nenhum estado — apenas leitura.
+ * @param {number} actorId
+ * @returns {Promise<object|null>}
+ */
+async function getMyEconomySummary(actorId) {
+  const character = getCharacter(actorId);
+  if (!character) return null;
+
+  const myStalls = await db.query(
+    `SELECT ms.id, ms.name, ms.status, COUNT(msi.id) AS items
+     FROM market_stalls ms
+     LEFT JOIN market_stall_items msi ON msi.stall_id = ms.id AND msi.status = 'listed' AND msi.count > 0
+     WHERE ms.owner_character_id = ? AND ms.status = 'active'
+     GROUP BY ms.id
+     ORDER BY ms.updated_at DESC`,
+    [character.characterId]
+  ).catch(() => []);
+
+  let localTax = DEFAULT_TAX_RATE;
+  try {
+    const loc = getLoc(actorId);
+    const cityId = await getNearestCityId(loc);
+    localTax = await getCityTaxRate(cityId);
+  } catch (err) {
+    console.error('[market-stalls] Falha ao resolver imposto local para painel:', err.message);
+  }
+
+  return {
+    stalls: myStalls.map(s => ({ id: s.id, name: s.name, status: s.status, items: Number(s.items) || 0 })),
+    localTaxRate: localTax
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Comandos
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1125,6 +1160,7 @@ module.exports = {
   removeItem,
   listStalls,
   listItems,
+  getMyEconomySummary,
   buyItem,
   issueLicense,
   inspectStall,

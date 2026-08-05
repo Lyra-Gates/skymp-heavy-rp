@@ -1,0 +1,173 @@
+/* ============================================================================
+ * player-panel.css
+ * Painel do jogador: Status | Governança | Economia | Social
+ * Segue a mesma linguagem visual do #interaction-menu (dourado/escuro).
+ * ==========================================================================*/
+
+#player-panel {
+  position: fixed;
+  top: 50%;
+  right: 24px;
+  transform: translateY(-50%);
+  width: min(420px, calc(100vw - 48px));
+  max-height: calc(100vh - 80px);
+  display: none;
+  flex-direction: column;
+  background: rgba(10, 10, 13, 0.93);
+  border: 1px solid rgba(187, 161, 107, 0.65);
+  border-radius: 10px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.75);
+  color: #f5f1e8;
+  z-index: 200;
+  overflow: hidden;
+}
+#player-panel.open { display: flex; }
+
+.pp-head {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(187, 161, 107, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pp-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1.6px;
+  color: #d8bf82;
+}
+.pp-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.04);
+  color: #f5f1e8;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.pp-close:hover { background: rgba(255,255,255,0.1); }
+
+.pp-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 10px 12px 0;
+}
+.pp-tab {
+  border: 1px solid rgba(128,128,128,0.4);
+  border-radius: 6px 6px 0 0;
+  background: rgba(0,0,0,0.5);
+  color: rgba(245,241,232,0.7);
+  padding: 8px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+  text-align: center;
+}
+.pp-tab.active {
+  background: rgba(187,161,107,0.16);
+  border-color: rgba(216,191,130,0.75);
+  color: #d8bf82;
+}
+
+.pp-body {
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+}
+.pp-section { display: none; }
+.pp-section.active { display: block; }
+
+.pp-empty {
+  color: rgba(245,241,232,0.5);
+  font-size: 13px;
+  text-align: center;
+  padding: 18px 8px;
+}
+
+/* --- Status --- */
+.pp-vitals {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.pp-bar-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 46px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.pp-bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+  overflow: hidden;
+}
+.pp-bar-fill { height: 100%; transition: width 0.3s; }
+.pp-bar-fill.health { background: #b23b3b; }
+.pp-bar-fill.magicka { background: #3f6fbf; }
+.pp-bar-fill.stamina { background: #4c9a4c; }
+
+.pp-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.pp-stat-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+.pp-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(245,241,232,0.55);
+}
+.pp-stat-value { font-size: 15px; font-weight: 600; margin-top: 2px; }
+.pp-stat-value.gold { color: #d8bf82; }
+
+.pp-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  background: rgba(76,154,76,0.18);
+  color: #7fd47f;
+  border: 1px solid rgba(76,154,76,0.4);
+}
+.pp-badge.warn {
+  background: rgba(178,59,59,0.18);
+  color: #e08585;
+  border-color: rgba(178,59,59,0.4);
+}
+
+/* --- Listas genéricas (governança / economia / social) --- */
+.pp-list { display: grid; gap: 8px; }
+.pp-list-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+.pp-list-item .main { color: #f5f1e8; }
+.pp-list-item .sub { color: rgba(245,241,232,0.5); font-size: 11px; }
+
+.pp-hint {
+  margin-top: 10px;
+  font-size: 11px;
+  color: rgba(245,241,232,0.45);
+  line-height: 1.5;
+}
