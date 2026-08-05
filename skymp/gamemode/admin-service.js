@@ -12,8 +12,8 @@ const commands = require('./commands');
 // Roles e permissões por nível
 const ROLE_PERMISSIONS = {
   moderator: ['kick', 'teleport', 'view_audit', 'manage_whitelist'],
-  admin:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold'],
-  owner:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'manage_staff']
+  admin:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'retire_character'],
+  owner:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'manage_staff', 'retire_character']
 };
 
 // Cache em memória: actorId → { role, permissions: Set<string> }
@@ -212,6 +212,51 @@ async function setGold(actorId, targetActorId, amount) {
   console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) set gold=${amount} for char ${targetChar.characterId}`);
 }
 
+/**
+ * /permakill [actorId] [motivo] - Aposenta (soft-delete) um personagem permanentemente.
+ * Permissão: 'retire_character' (nível admin+, nunca moderador — morte permanente
+ * exige revisão da staff sênior, não decisão de linha de frente).
+ *
+ * Nunca faz DELETE — characters.status vira 'retired'. whitelist.js só permite
+ * spawn com status='approved', então um personagem retired nunca mais entra em
+ * jogo, sem precisar de nenhuma outra mudança. O jogador precisa criar um
+ * personagem novo (nova aplicação de whitelist).
+ */
+async function retireCharacter(actorId, targetActorId, reason) {
+  if (!hasPermission(actorId, 'retire_character')) {
+    sendDenied(actorId);
+    return;
+  }
+  if (!reason || !reason.trim()) {
+    commands.sendNotification(actorId, 'Motivo obrigatorio: /permakill <actorId> <motivo>');
+    return;
+  }
+
+  const targetChar = commands.getActiveCharacterData(targetActorId);
+  if (!targetChar) {
+    commands.sendNotification(actorId, 'Alvo nao encontrado ou personagem nao carregado.');
+    return;
+  }
+
+  await db.query('UPDATE characters SET status = ? WHERE id = ?', ['retired', targetChar.characterId]);
+
+  const charData = commands.getActiveCharacterData(actorId);
+  await auditLog(
+    charData?.accountId, targetChar.accountId,
+    'staff:retireCharacter',
+    `role=${getRole(actorId)} characterId=${targetChar.characterId} reason=${reason}`
+  );
+
+  commands.sendNotification(targetActorId, `Seu personagem foi permanentemente encerrado pela staff. Motivo: ${reason}`);
+  console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) retired character ${targetChar.characterId}: ${reason}`);
+
+  if (typeof mp !== 'undefined') {
+    setTimeout(() => {
+      if (typeof mp !== 'undefined') mp.kick(targetActorId);
+    }, 3000);
+  }
+}
+
 function sendDenied(actorId) {
   commands.sendNotification(actorId, '[Staff] Permissão negada.');
 }
@@ -226,5 +271,6 @@ module.exports = {
   giveItemAdmin,
   teleportTo,
   kickPlayer,
-  setGold
+  setGold,
+  retireCharacter
 };

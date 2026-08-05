@@ -302,22 +302,39 @@
       font-weight: 700;
     }
     .detail-btn:hover { filter: brightness(1.08); }
-    .interaction-toast {
+    /* Log de chat/notificações — empilha linhas (mais recente embaixo) em vez de
+       sobrescrever uma única linha. Ancorado embaixo com column-reverse: novas
+       linhas viram o último filho do DOM, que column-reverse renderiza no fim
+       visual (embaixo); o excesso é cortado no topo (linhas mais antigas) por
+       overflow:hidden. Substitui o antigo toast de linha única, que apagava a
+       mensagem anterior antes de dar tempo de ler quando 2+ pessoas falavam. */
+    .chat-log {
       position: fixed;
-      left: 50%;
+      left: 24px;
       bottom: 34px;
-      transform: translateX(-50%);
-      display: none;
-      max-width: min(540px, calc(100vw - 32px));
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: 1px solid rgba(187,161,107,0.55);
-      background: rgba(10,10,13,0.92);
-      color: #f5f1e8;
-      font-size: 13px;
+      width: min(480px, calc(100vw - 48px));
+      max-height: 34vh;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 4px;
+      overflow: hidden;
+      pointer-events: none;
       z-index: 260;
     }
-    .interaction-toast.visible { display: block; }
+    .chat-line {
+      padding: 6px 12px;
+      border-radius: 7px;
+      border: 1px solid rgba(187,161,107,0.4);
+      background: rgba(10,10,13,0.88);
+      color: #f5f1e8;
+      font-size: 13px;
+      line-height: 1.4;
+      opacity: 1;
+      transition: opacity 1.1s ease;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    .chat-line.fade { opacity: 0; }
 
     @media (max-width: 720px) {
       .interaction-shell {
@@ -383,7 +400,7 @@
     </div>
   </div>
 </div>
-<div id="interaction-toast" class="interaction-toast"></div>
+<div id="chat-log" class="chat-log" aria-live="polite"></div>
 
 <!-- Painel do Jogador -->
 <div id="player-panel" aria-hidden="true">
@@ -622,23 +639,41 @@
     sendUiEvent('cef::chat:send', command);
   }
 
+  const CHAT_LOG_MAX_LINES = 40;
+  const CHAT_LOG_FADE_AFTER_MS = 18000;
+  const CHAT_LOG_REMOVE_AFTER_MS = 1200;
+
   function showInteractionToast(message) {
-    const el = document.getElementById('interaction-toast');
-    el.textContent = message;
-    el.classList.add('visible');
-    clearTimeout(showInteractionToast._timer);
-    showInteractionToast._timer = setTimeout(() => el.classList.remove('visible'), 2400);
+    const log = document.getElementById('chat-log');
+    if (!log || !message) return;
+
+    const line = document.createElement('div');
+    line.className = 'chat-line';
+    line.textContent = message;
+    log.appendChild(line);
+
+    while (log.children.length > CHAT_LOG_MAX_LINES) {
+      log.removeChild(log.firstChild);
+    }
+
+    setTimeout(() => {
+      line.classList.add('fade');
+      setTimeout(() => line.remove(), CHAT_LOG_REMOVE_AFTER_MS);
+    }, CHAT_LOG_FADE_AFTER_MS);
   }
 
   // ── WebSocket Signaling ───────────────────────────────────────────────────
-  function connectVoip(actorId) {
+  // Conecta ao voip-service com um ticket de uso único emitido pelo servidor
+  // (comando /voz → property 'voipTicket' → window.handleVoipTicket abaixo).
+  // O servidor informa host/porta porque este arquivo é estático — sem isso
+  // só funcionaria com o jogador na mesma máquina do servidor.
+  function connectVoip(actorId, ticket, host, port) {
     state.actorId = actorId;
-    const wsUrl = 'ws://127.0.0.1:7778';
+    const wsUrl = `ws://${host || '127.0.0.1'}:${port || 7778}`;
     state.ws = new WebSocket(wsUrl);
 
     state.ws.onopen = () => {
-      state.ws.send(JSON.stringify({ type: 'auth', actorId }));
-      setStatus('ok', 'VOZ ATIVA');
+      state.ws.send(JSON.stringify({ type: 'auth', actorId, ticket }));
     };
 
     state.ws.onmessage = async (e) => {
@@ -653,7 +688,13 @@
   async function handleSignal(msg) {
     switch (msg.type) {
       case 'auth_ok':
+        setStatus('ok', 'VOZ ATIVA');
         await initMicrophone();
+        break;
+
+      case 'auth_failed':
+        setStatus('error', 'FALHA NA VOZ — tente /voz de novo');
+        if (state.ws) state.ws.close();
         break;
 
       case 'proximity_update':
@@ -1035,13 +1076,17 @@
     }
   };
 
+  // Disparado pela property SkyMP 'voipTicket' quando o jogador roda /voz.
+  // (Substitui um listener mp.events.add('voip:connect', ...) que nunca
+  // funcionou de verdade — nada no servidor jamais dava mp.trigger nele.)
+  window.handleVoipTicket = (payload) => {
+    const msg = normalizePayload(payload);
+    if (!msg || !msg.actorId || !msg.ticket) return;
+    connectVoip(msg.actorId, msg.ticket, msg.host, msg.port);
+  };
+
   // ── Eventos vindos do backend Node.js ────────────────────────────────────
   if (mp && mp.events) {
-    mp.events.add('voip:connect', (data) => {
-      const d = typeof data === 'string' ? JSON.parse(data) : data;
-      connectVoip(d.actorId);
-    });
-
     mp.events.add('showTradeUI', () => {
       document.getElementById('trade-overlay').classList.add('open');
     });

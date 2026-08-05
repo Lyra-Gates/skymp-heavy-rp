@@ -12,6 +12,8 @@ const uiEventRouter  = require(path.join(gamemodeDir, 'core', 'ui-event-router')
 const governance    = require(path.join(gamemodeDir, 'governance-service'));
 const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
+const deathService  = require(path.join(gamemodeDir, 'death-service'));
+const voipService   = require(path.join(gamemodeDir, 'voip-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -33,15 +35,15 @@ moduleRegistry.register({
   }
 });
 
-// LAB: Serviço de morte (aguardando reengenharia completa)
+// LAB: Serviço de morte — DOWNED com janela de socorro, penalidade e respawn
 moduleRegistry.register({
   id: 'death',
   enabledBy: 'ENABLE_DEATH_SERVICE',
   phase: 'lab',
   dependencies: [],
-  commands: [],
+  commands: deathService.commandDefs(),
   initialize: async () => {
-    require(path.join(gamemodeDir, 'death-service')).initDeathService();
+    deathService.initDeathService();
   }
 });
 
@@ -92,9 +94,20 @@ moduleRegistry.register({
   }
 });
 
+// LAB: Voz por proximidade (opt-in via /voz — ver voip-service.js)
+moduleRegistry.register({
+  id: 'voip',
+  enabledBy: 'ENABLE_VOIP_SERVICE',
+  phase: 'lab',
+  dependencies: [],
+  commands: voipService.commandDefs(),
+  initialize: async () => {
+    voipService.startVoipServer();
+  }
+});
+
 // PARKED — Os seguintes módulos NÃO são registrados até passarem por reengenharia:
 // - justice-service   (ENABLE_JUSTICE_SERVICE)
-// - voip-service      (ENABLE_VOIP_SERVICE)
 // - survival-service  (ENABLE_SURVIVAL_SERVICE)
 // - economy-regional  (ENABLE_REGIONAL_ECONOMY)
 // - faction-service   (ENABLE_FACTION_SERVICE)
@@ -167,6 +180,19 @@ if (typeof mp !== "undefined") {
       if (ctx.value && ctx.sp && ctx.sp.browser && ctx.sp.browser.executeJavaScript) {
         const payload = JSON.stringify(ctx.value);
         ctx.sp.browser.executeJavaScript('window.handlePanelData && window.handlePanelData(' + payload + ')');
+      }
+    `,
+    updateNeighbor: ''
+  });
+  // Ticket de conexão de voz (emitido pelo comando /voz) — o cliente recebe
+  // {actorId, ticket, host, port} e só então abre o WebSocket de sinalização.
+  mp.makeProperty('voipTicket', {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: `
+      if (ctx.value && ctx.sp && ctx.sp.browser && ctx.sp.browser.executeJavaScript) {
+        const payload = JSON.stringify(ctx.value);
+        ctx.sp.browser.executeJavaScript('window.handleVoipTicket && window.handleVoipTicket(' + payload + ')');
       }
     `,
     updateNeighbor: ''

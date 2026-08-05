@@ -27,7 +27,7 @@ Desenvolvido em **discord.js**.
 Localizado em `skymp/gamemode/`.
 - Executado em Node.js usando as bibliotecas internas do SkyMP (`mp.events`, `mp.players`).
 - Lida com o ciclo de vida do jogador: conexão, desconexão, spawn, combate, comandos de chat e persistência de itens em tempo real.
-- Delega regras de negócios a serviços internos (`survival-service.js`, `economy-service.js`, `crafting-service.js`, `jobs-service.js`).
+- Delega regras de negócio aos serviços ativos hoje (`governance-service.js`, `market-stalls-service.js`, `death-service.js`, `player-panel-service.js`, `voip-service.js`). Vários outros serviços existem no disco (`survival-service.js`, `economy-service.js`, `crafting-service.js`, `jobs-service.js`, `faction-service.js`, `housing-service.js`, `horse-service.js`, `trade-service.js`, `disguise-service.js`, `justice-service.js`, `economy-regional.js`) mas estão **PARKED** — nunca registrados em `core/module-registry.js`, logo nunca rodam em produção (ver comentário em `phase0-basic.js`). `justice-service.js` em especial é uma implementação anterior e redundante de algemas/prisão, superseded por `governance-service.js`.
 - Módulos são registrados e ligados/desligados via `core/module-registry.js` (flags `ENABLE_*` no `.env`), que também cuida de dependências entre módulos e do registro automático de comandos no `core/command-registry.js`.
 
 #### 1.4.1 Bridge de UI (CEF)
@@ -46,6 +46,26 @@ No sentido UI→servidor, `mp.onUiEvent` despacha todo evento através de `core/
 - UI em `skymp/ui/player-panel.css` / `player-panel.js`, com identidade visual espelhando o [Prisma UI](https://prismaui.dev) (glass card preto, glow violeta, chip de status, navegação em pílulas com runas Elder Futhark como ícone de cada aba).
 - **Atualização proativa**: `core/panel-refresh-bus.js` é um `EventEmitter` desacoplado — `governance-service.js` chama `panelRefreshBus.requestRefresh(actorId, 'governance'|'status')` após multa, mandado ou prisão, e o `player-panel-service.js` (assinante único, registrado em `initPlayerPanelService`) reenvia a seção correspondente **só se o painel daquele jogador já estiver aberto**. Existe pra evitar que `governance-service.js` precise depender de `player-panel-service.js` (que já depende dele), sem forçar o painel a abrir sozinho na tela do jogador.
 - **Ação direta na aba Social**: cada pessoa conhecida tem um botão "Apelidar" que abre um mini-formulário inline (`skymp/ui/player-panel.js`, `socialRow`/`bindSocialRenameHandlers`) e envia `panel:social:rename` com `{ targetCharacterId, alias }`. `player-panel-service.renameKnownPerson` chama `identity-service.upsertKnownIdentity` diretamente pelos characterIds — funciona mesmo com o alvo desconectado, já que `character_known_identities` não depende de um actorId ativo.
+
+#### 1.4.3 Morte e Consequência (`death-service.js`)
+Módulo `death` (`ENABLE_DEATH_SERVICE`), fase `lab`. Existe pra que "morrer" tenha peso mecânico e social, não seja um non-event — princípio central de Heavy RP do `SKYMP_RP_DEVELOPMENT_PLAN.md` (seção 8.1, "Morte e Consequências").
+- HP≤0 (detectado por polling de 2s, mesmo padrão de antes) → `core/character-state.js` vira `DOWNED`, o que já bloqueia gameplay/combate/fala via `core/action-policy.js` sem trabalho extra.
+- **Socorro**: `/socorrer <actorId>` (qualquer jogador, dentro de `RESCUE_RANGE`) cancela o sangramento e estabiliza o alvo de volta pra `NORMAL` com vida parcial (`STABILIZE_HEALTH`). Alcance validado por `core/range-utils.js` (extraído de `governance-service.js`, usado por ambos).
+- **Bleed-out**: se ninguém socorre dentro de `BLEED_OUT_MS` (4min), o personagem vira `DEAD`, uma penalidade de ouro é aplicada via `core/transaction-service.removeGold` (atômico — nunca deixa saldo negativo), e só então o respawn acontece no ponto seguro de sempre.
+- **Evidência anti-RDM**: no momento do bleed-out, `logDeathContext` grava em `audit_logs` (`action='death:context'`) um snapshot de quem estava por perto (mesmo raio de proximidade do chat `say`) — não é atribuição definitiva de "quem matou" (não há hook nativo confiável pra isso nesta base), mas dá à staff uma trilha real em vez de só a palavra dos jogadores.
+- Cada transição (`DOWNED`/socorrido/penalizado/respawnado) chama `panelRefreshBus.requestRefresh(actorId, 'status')`, refletindo em tempo real no `/painel`.
+
+**Morte permanente (soft-delete):** `admin-service.retireCharacter(actorId, targetActorId, reason)`, comando `/permakill` (permissão `retire_character`, tiers `admin`/`owner` apenas — nunca moderador). Nunca faz `DELETE` — só `UPDATE characters SET status='retired'`, motivo obrigatório e audit log. `whitelist.js` só permite spawn com `status='approved'`, então um personagem `retired` nunca mais entra em jogo sem precisar de nenhuma outra mudança.
+
+#### 1.4.4 Voz por Proximidade (`voip-service.js`)
+Módulo `voip` (`ENABLE_VOIP_SERVICE`), fase `lab`. Sinalização WebRTC (offer/answer/ICE) por WebSocket próprio (porta `VOIP_PORT`, padrão 7778) — o áudio em si é P2P entre clientes depois do handshake, o servidor só troca a sinalização e calcula volume por distância a cada 2s (raios espelham os do `rp-chat-service.js`: sussurro 200, normal 1200, grito 3000).
+
+**Antes desta revisão o recurso existia só no papel** — nada em `phase0-basic.js` chamava `startVoipServer()`, e o listener `mp.events.add('voip:connect', ...)` no cliente nunca disparava porque nenhum código do servidor faz `mp.trigger`/emit desse evento em lugar nenhum do gamemode. Não era um indicador visível quebrado (o chip de status é `display:none` até `setStatus()` rodar, e isso nunca acontecia) — a feature estava simplesmente ausente, silenciosamente.
+
+- **Opt-in via `/voz`** (não é forçado — "se voice chat é obrigatório" segue como decisão em aberto no `SKYMP_RP_DEVELOPMENT_PLAN.md`, seção 13). O comando chama `requestVoiceConnection`, que emite um ticket de uso único (`issueTicket`, TTL de 30s) e empurra `{actorId, ticket, host, port}` pro cliente via a property `voipTicket` (mesmo padrão comprovado de `browserModal`/`panelData`).
+- **Autenticação por ticket**: o handshake WebSocket (`{type:'auth', actorId, ticket}`) exige que o ticket bata com o que foi emitido pra aquele `actorId` — sem isso, qualquer processo que conectasse em `ws://127.0.0.1:7778` podia reivindicar o `actorId` de outro jogador e sequestrar o slot de voz dele. Ticket é consumido no primeiro uso (replay falha).
+- **Host dinâmico**: como `skymp/ui/index.html` é um arquivo estático sem templating, ele não tem como saber o IP público do servidor sozinho — por isso o servidor manda `host`/`port` no próprio payload do ticket (`VOIP_PUBLIC_HOST`/`VOIP_PORT` no `.env`), em vez do cliente ter `ws://127.0.0.1:7778` fixo no código (o que só funcionava com jogador e servidor na mesma máquina).
+- `VOIP_BIND_HOST` (padrão `127.0.0.1`) controla em quais interfaces o `WebSocketServer` escuta — não confundir com `VOIP_PUBLIC_HOST`, que é o que o cliente recebe pra conectar.
 
 ### 1.5 Launcher do Cliente (`apps/launcher`)
 Desenvolvido em **Electron / React**.

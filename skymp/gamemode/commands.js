@@ -271,6 +271,14 @@ function registerCoreCommands() {
     }
   }, { module: 'admin', phase: 'core', description: '[Staff] Expulsa jogador', usage: '/kick <actorId> <motivo>' });
 
+  commandRegistry.register('/permakill', (actorId, args) => {
+    if (args) {
+      const parts = args.split(' ');
+      const reason = parts.slice(1).join(' ');
+      require('./admin-service').retireCharacter(actorId, parseInt(parts[0], 16), reason);
+    }
+  }, { module: 'admin', phase: 'core', description: '[Staff] Encerra um personagem permanentemente (soft-delete)', usage: '/permakill <actorId> <motivo>' });
+
   commandRegistry.register('/setgold', (actorId, args) => {
     if (args) {
       const parts = args.split(' ');
