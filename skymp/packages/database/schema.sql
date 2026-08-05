@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS `characters` (
   `first_name` VARCHAR(64) NOT NULL,
   `last_name` VARCHAR(64) NOT NULL,
   `biography` TEXT DEFAULT NULL,
+  `motivations` TEXT DEFAULT NULL COMMENT 'Objetivos do personagem em jogo (rubrica de whitelist Heavy RP)',
+  `weaknesses` TEXT DEFAULT NULL COMMENT 'Falhas/limites do personagem (rubrica de whitelist Heavy RP)',
+  `social_ties` TEXT DEFAULT NULL COMMENT 'Laços sociais/relações pretendidas (rubrica de whitelist Heavy RP)',
+  `needs_extra_review` TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Conceito forte (nobre, mago poderoso, vampiro, lobisomem, lider de faccao) — exige aprovacao extra da staff antes de approved',
+  `extra_review_notes` TEXT DEFAULT NULL COMMENT 'Notas da staff sobre a revisao extra do conceito',
   -- Coordenadas de Logout (Default: The Bannered Mare Whiterun)
   `pos_x` FLOAT NOT NULL DEFAULT 35.0,
   `pos_y` FLOAT NOT NULL DEFAULT -165.0,

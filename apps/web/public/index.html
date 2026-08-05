@@ -211,26 +211,51 @@ async function renderWhitelist(el) {
   if (pending > 0) { badge.textContent=pending; badge.style.display=''; }
   else badge.style.display='none';
 
+  window._whitelistRows = rows; // cache pra toggleAppDetails/saveExtraReviewNotes sem re-fetch
   el.innerHTML = `<div class="card">
     <div class="card-header">Aplicações de Whitelist <span style="color:var(--muted);font-weight:400">${rows.length} total</span></div>
     <table>
       <thead><tr><th>Discord</th><th>Personagem</th><th>Status</th><th>Data</th><th>Ações</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td>${escapeHtml(r.discord_name) || '—'}</td>
-        <td>${r.first_name ? escapeHtml(r.first_name)+' '+escapeHtml(r.last_name) : '—'}</td>
+        <td>${r.first_name ? escapeHtml(r.first_name)+' '+escapeHtml(r.last_name) : '—'}${r.needs_extra_review ? ' <span class="pill pill-rejected" title="Conceito forte — revisar com atenção">⚠ Revisão extra</span>' : ''}</td>
         <td><span class="pill pill-${r.status}">${r.status}</span></td>
         <td style="color:var(--muted)">${fmt(r.created_at)}</td>
         <td style="display:flex;gap:6px;padding-top:8px">
+          <button class="btn btn-sm" onclick="toggleAppDetails(${r.id})">Detalhes</button>
           ${r.status==='pending' ? `
             <button class="btn btn-success btn-sm" onclick="reviewApp(${r.id},'approved')">✓ Aprovar</button>
             <button class="btn btn-danger btn-sm"  onclick="reviewApp(${r.id},'rejected')">✕ Rejeitar</button>
-          ` : '—'}
+          ` : ''}
         </td>
-      </tr>`).join('')}
+      </tr>
+      <tr id="app-details-${r.id}" style="display:none"><td colspan="5">
+        <div style="padding:10px 4px;color:var(--muted);font-size:13px;line-height:1.6">
+          <div><strong style="color:var(--text)">Motivações:</strong> ${escapeHtml(r.motivations) || '—'}</div>
+          <div><strong style="color:var(--text)">Fraquezas:</strong> ${escapeHtml(r.weaknesses) || '—'}</div>
+          <div><strong style="color:var(--text)">Laços sociais:</strong> ${escapeHtml(r.social_ties) || '—'}</div>
+          <div><strong style="color:var(--text)">Biografia:</strong> ${escapeHtml(r.biography) || '—'}</div>
+          ${r.needs_extra_review ? `<div style="margin-top:6px"><strong style="color:var(--warning)">Nota de revisão extra:</strong> ${escapeHtml(r.extra_review_notes) || '(sem nota ainda)'} <button class="btn btn-sm" onclick="saveExtraReviewNotes(${r.id})">Editar nota</button></div>` : ''}
+        </div>
+      </td></tr>`).join('')}
       ${rows.length===0?'<tr><td colspan="5" class="empty">Nenhuma aplicação</td></tr>':''}
       </tbody>
     </table>
   </div>`;
+}
+
+function toggleAppDetails(id) {
+  const row = document.getElementById(`app-details-${id}`);
+  if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+}
+
+async function saveExtraReviewNotes(id) {
+  const row = (window._whitelistRows || []).find(r => r.id === id);
+  const notes = prompt('Nota da revisão extra deste conceito:', row?.extra_review_notes || '');
+  if (notes === null) return;
+  await apiPatch(`/api/whitelist/${id}`, { status: row.status, extra_review_notes: notes });
+  toast('Nota salva.', 'success');
+  renderPage('whitelist');
 }
 
 async function reviewApp(id, status) {

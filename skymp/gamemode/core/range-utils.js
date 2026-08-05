@@ -55,4 +55,45 @@ function assertRange(sourceActorId, targetActorId, maxRange) {
   return { ok: true };
 }
 
-module.exports = { getLoc, getCell, getPos, distanceBetween, assertRange };
+/**
+ * Lista atores próximos de actorId dentro de maxRange, na mesma célula.
+ * Usado pra montar contexto de evidência (ex: quem estava por perto na
+ * hora de uma morte ou de um pico de dano) — não é rastreamento contínuo,
+ * só um snapshot no momento da chamada.
+ * @param {number} actorId
+ * @param {number} maxRange
+ * @returns {{actorId: number, distance: number}[]}
+ */
+function nearbyActors(actorId, maxRange) {
+  if (typeof mp === 'undefined') return [];
+  const results = [];
+  try {
+    const neighbors = mp.get(actorId, 'neighbors') || [];
+    const loc = getLoc(actorId);
+    const pos = getPos(loc);
+    const cell = getCell(loc);
+    if (!pos) return [];
+
+    for (const neighborId of neighbors) {
+      if (neighborId === actorId) continue;
+      if (mp.get(neighborId, 'type') !== 'MpActor') continue;
+
+      const nLoc = getLoc(neighborId);
+      const nPos = getPos(nLoc);
+      if (!nPos) continue;
+      const nCell = getCell(nLoc);
+      if (cell && nCell && cell !== nCell) continue;
+
+      const dx = pos[0] - nPos[0];
+      const dy = pos[1] - nPos[1];
+      const dz = pos[2] - nPos[2];
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (distance <= maxRange) results.push({ actorId: neighborId, distance });
+    }
+  } catch (err) {
+    console.error('[range-utils] Falha ao calcular vizinhos:', err.message);
+  }
+  return results;
+}
+
+module.exports = { getLoc, getCell, getPos, distanceBetween, assertRange, nearbyActors };

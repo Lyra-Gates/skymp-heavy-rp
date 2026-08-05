@@ -74,8 +74,12 @@ async function checkWhitelist(userId, profileId, actorId) {
     }
 
     // 4. Verificar se possui personagem ativo e aprovado
+    // ORDER BY + LIMIT 1: hoje só existe 1 personagem approved por conta (a
+    // aplicação bloqueia reenvio com pendente/aprovada ativa), mas sem isso
+    // a query pega uma linha arbitrária do banco se isso mudar no futuro
+    // (ex: suporte a personagem principal + alt).
     let charRows = await db.query(
-      `SELECT * FROM characters WHERE account_id = ? AND status = 'approved'`,
+      `SELECT * FROM characters WHERE account_id = ? AND status = 'approved' ORDER BY id DESC LIMIT 1`,
       [account.id]
     );
 

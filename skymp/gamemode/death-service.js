@@ -35,9 +35,13 @@ const RESPAWN_DELAY_MS = 5000; // pausa dramática entre "morreu" e respawn
 const RESCUE_RANGE = 300;
 const DEATH_CONTEXT_RANGE = 1200; // mesmo raio de "say" do rp-chat-service
 const STABILIZE_HEALTH = 25;
+const INITIATE_RANGE = 800;
+const DAMAGE_SPIKE_THRESHOLD = 25; // heurística: pontos de vida perdidos num único tick de 2s
 
 // characterId -> { actorId, downedAt, timer }
 const _downedPlayers = new Map();
+// actorId -> última leitura de Health (pra detectar picos de dano)
+const _lastHealth = new Map();
 
 function initDeathService() {
   if (typeof mp === 'undefined') return;
@@ -62,6 +66,8 @@ function initDeathService() {
           } else if (!currentlyDead && wasDead) {
             mp.set(actorId, '_wasDead', false);
           }
+
+          checkDamageSpike(actorId, health);
         }
       }
     } catch (err) {
@@ -209,43 +215,17 @@ async function executeRespawn(actorId, characterId, penalty = 0) {
  * arbitrar denúncias de RDM, em vez de só a palavra dos jogadores.
  */
 async function logDeathContext(actorId, characterId, cause) {
-  const nearby = [];
-
-  try {
-    if (typeof mp !== 'undefined') {
-      const neighbors = mp.get(actorId, 'neighbors') || [];
-      const loc = mp.get(actorId, 'locationalData');
-      const pos = loc && loc.pos;
-      const cell = loc && (loc.cellOrWorldSpaceId || loc.cellId || loc.worldOrCell);
-
-      for (const neighborId of neighbors) {
-        if (neighborId === actorId) continue;
-        if (mp.get(neighborId, 'type') !== 'MpActor') continue;
-
-        const neighborChar = commands.getActiveCharacterData(neighborId);
-        if (!neighborChar) continue;
-
-        const neighborLoc = mp.get(neighborId, 'locationalData');
-        if (!pos || !neighborLoc || !neighborLoc.pos) continue;
-        const neighborCell = neighborLoc.cellOrWorldSpaceId || neighborLoc.cellId || neighborLoc.worldOrCell;
-        if (cell && neighborCell && cell !== neighborCell) continue;
-
-        const dx = pos[0] - neighborLoc.pos[0];
-        const dy = pos[1] - neighborLoc.pos[1];
-        const dz = pos[2] - neighborLoc.pos[2];
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (distance <= DEATH_CONTEXT_RANGE) {
-          nearby.push({
-            characterId: neighborChar.characterId,
-            name: `${neighborChar.firstName} ${neighborChar.lastName}`,
-            distance: Math.round(distance)
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[death-service] Falha ao coletar contexto de morte:', err.message);
-  }
+  const nearby = rangeUtils.nearbyActors(actorId, DEATH_CONTEXT_RANGE)
+    .map(({ actorId: neighborId, distance }) => {
+      const neighborChar = commands.getActiveCharacterData(neighborId);
+      if (!neighborChar) return null;
+      return {
+        characterId: neighborChar.characterId,
+        name: `${neighborChar.firstName} ${neighborChar.lastName}`,
+        distance: Math.round(distance)
+      };
+    })
+    .filter(Boolean);
 
   try {
     await db.query(
@@ -257,6 +237,79 @@ async function logDeathContext(actorId, characterId, cause) {
   }
 
   return nearby;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Camada mínima de RP pro combate
+//
+// Não há hook nativo confiável de "quem atacou quem" nesta base (mesma
+// limitação do contexto de morte acima). Em vez de simular enforcement que
+// não dá pra garantir, isso cobre duas coisas honestamente buildáveis:
+//   (a) /iniciar — marcação explícita de abertura de conflito IC, criada
+//       pelo próprio jogador, pra dar à staff evidência de que houve (ou
+//       não houve) RP de abertura antes de um confronto;
+//   (b) detecção automática de picos de dano via o mesmo polling de HP já
+//       usado pra morte, registrando quem estava por perto — funciona
+//       mesmo se ninguém usar /iniciar.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * /iniciar <actorId> <motivo> — registra em audit_logs uma marcação
+ * explícita de início de conflito IC entre dois jogadores próximos.
+ */
+async function logCombatInitiation(actorId, targetActorId, reason) {
+  const initiator = commands.getActiveCharacterData(actorId);
+  const target = commands.getActiveCharacterData(targetActorId);
+  if (!initiator || !target || actorId === targetActorId) {
+    commands.sendNotification(actorId, 'Alvo invalido.');
+    return;
+  }
+  if (!reason || !reason.trim()) {
+    commands.sendNotification(actorId, 'Uso: /iniciar <actorId> <motivo>');
+    return;
+  }
+
+  const range = rangeUtils.assertRange(actorId, targetActorId, INITIATE_RANGE);
+  if (!range.ok) {
+    commands.sendNotification(actorId, range.reason);
+    return;
+  }
+
+  try {
+    await db.query(
+      'INSERT INTO audit_logs (action, actor_account_id, target_account_id, details) VALUES (?, ?, ?, ?)',
+      [
+        'combat:initiate',
+        initiator.accountId,
+        target.accountId,
+        JSON.stringify({ initiatorCharacterId: initiator.characterId, targetCharacterId: target.characterId, reason })
+      ]
+    );
+  } catch (err) {
+    console.error('[death-service] Falha ao registrar inicio de combate:', err.message);
+  }
+
+  commands.sendNotification(actorId, 'Inicio de combate registrado.');
+  commands.broadcastProximityMessage(actorId, '* A tensao sobe visivelmente entre os dois.', 800);
+}
+
+/**
+ * Detecta uma queda brusca de vida (heurística: >= DAMAGE_SPIKE_THRESHOLD
+ * pontos num único tick de 2s) e registra o mesmo tipo de contexto de
+ * proximidade usado na morte — cria um rastro mesmo sem /iniciar.
+ */
+function checkDamageSpike(actorId, health) {
+  const previous = _lastHealth.has(actorId) ? _lastHealth.get(actorId) : health;
+  _lastHealth.set(actorId, health);
+
+  if (health <= 0 || previous - health < DAMAGE_SPIKE_THRESHOLD) return;
+
+  const character = commands.getActiveCharacterData(actorId);
+  if (!character) return;
+
+  logDeathContext(actorId, character.characterId, 'damage_spike').catch(
+    err => console.error('[death-service] Falha ao registrar pico de dano:', err.message)
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,6 +333,24 @@ function commandDefs() {
           commands.sendNotification(actorId, 'Nao foi possivel prestar socorro.');
         });
       }
+    },
+    {
+      name: ['/iniciar', '/initiate'],
+      description: 'Marca o início explícito de um conflito IC (evidência pra staff)',
+      usage: '/iniciar <actorId> <motivo>',
+      handler: (actorId, args) => {
+        const parts = String(args || '').split(' ');
+        const targetActorId = Number.parseInt(parts[0].replace(/^0x/i, ''), 16);
+        const reason = parts.slice(1).join(' ');
+        if (!Number.isFinite(targetActorId)) {
+          commands.sendNotification(actorId, 'Uso: /iniciar <actorId> <motivo>');
+          return;
+        }
+        logCombatInitiation(actorId, targetActorId, reason).catch(err => {
+          console.error('[death-service] Falha ao registrar inicio de combate:', err.message);
+          commands.sendNotification(actorId, 'Nao foi possivel registrar o inicio do conflito.');
+        });
+      }
     }
   ];
 }
@@ -291,8 +362,11 @@ module.exports = {
   bleedOut,
   executeRespawn,
   logDeathContext,
+  logCombatInitiation,
+  checkDamageSpike,
   isDowned: (characterId) => _downedPlayers.has(characterId),
   // Exposto só pra testes: evita depender de setTimeout real pra exercitar o fluxo.
   _handlePlayerDowned: handlePlayerDowned,
-  _downedPlayers
+  _downedPlayers,
+  _lastHealth
 };

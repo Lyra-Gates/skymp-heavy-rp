@@ -116,9 +116,29 @@
             </div>
 
             <div class="form-group">
-                <label for="biography">Biografia e Motivções</label>
-                <textarea id="biography" name="biography" required placeholder="Conte a história do seu personagem, seus objetivos e fraquezas..."></textarea>
+                <label for="biography">Biografia</label>
+                <textarea id="biography" name="biography" required placeholder="Conte a história do seu personagem: de onde veio, o que já viveu..."></textarea>
             </div>
+
+            <div class="form-group">
+                <label for="motivations">Motivações</label>
+                <textarea id="motivations" name="motivations" required placeholder="O que seu personagem busca em jogo? Objetivos concretos, não genéricos."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="weaknesses">Fraquezas e Limites</label>
+                <textarea id="weaknesses" name="weaknesses" required placeholder="Medos, vícios, limitações físicas ou sociais. Personagem sem fraqueza é rejeitado."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="social_ties">Laços Sociais</label>
+                <textarea id="social_ties" name="social_ties" required placeholder="Que tipo de relações seu personagem pretende construir em jogo (família, facção, rivais)?"></textarea>
+            </div>
+
+            <p style="font-size:13px; color:#999; margin-top:-10px;">
+                Conceitos fortes (nobreza, magia poderosa, vampirismo, lycanthropia, Daedra, liderança de facção)
+                exigem aprovação extra da staff e podem demorar mais pra revisar.
+            </p>
 
             <button type="submit">Enviar Aplicação</button>
         </form>
@@ -171,12 +191,15 @@
         const first_name = document.getElementById('first_name').value;
         const last_name = document.getElementById('last_name').value;
         const biography = document.getElementById('biography').value;
+        const motivations = document.getElementById('motivations').value;
+        const weaknesses = document.getElementById('weaknesses').value;
+        const social_ties = document.getElementById('social_ties').value;
 
         try {
             const res = await fetch('/api/apply', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ first_name, last_name, biography })
+                body: JSON.stringify({ first_name, last_name, biography, motivations, weaknesses, social_ties })
             });
             const result = await res.json();
             if (res.ok) {

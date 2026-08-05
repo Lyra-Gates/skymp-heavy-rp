@@ -172,17 +172,42 @@ app.get('/api/me', requireAuth, async (req, res) => {
     } catch (err) { console.error('[/api/me]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
+// Heurística best-effort: sinaliza conceitos fortes pra staff olhar com mais
+// atenção antes de aprovar (rubrica de whitelist Heavy RP). Não é um gate
+// automático — só marca needs_extra_review pra staff decidir na revisão.
+const STRONG_CONCEPT_PATTERN = new RegExp(
+  [
+    'nobre', 'noble', 'jarl', 'th[aã]ne',
+    'vampir', 'vampire',
+    'lobisomem', 'werewolf',
+    'daedra', 'daedric',
+    'mago poderoso', 'archmage', 'arquimago',
+    'assassino', 'assassin',
+    'l[ií]der de fac[cç][aã]o', 'faction leader'
+  ].join('|'),
+  'i'
+);
+
+function detectsStrongConcept(...texts) {
+  const combined = texts.filter(Boolean).join(' ');
+  return STRONG_CONCEPT_PATTERN.test(combined);
+}
+
 app.post('/api/apply', requireAuth, async (req, res) => {
-    const { first_name, last_name, biography } = req.body;
+    const { first_name, last_name, biography, motivations, weaknesses, social_ties } = req.body;
     try {
         const existing = await db('SELECT status FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
         if (existing.length > 0 && (existing[0].status === 'pending' || existing[0].status === 'approved')) {
             return res.status(400).json({ error: 'Você já possui uma aplicação pendente ou aprovada.' });
         }
 
-        const [charRes] = await pool.execute(
-            'INSERT INTO characters (account_id, first_name, last_name, biography, status) VALUES (?, ?, ?, ?, ?)',
-            [req.user.accountId, first_name, last_name, biography, 'pending']
+        const needsExtraReview = detectsStrongConcept(biography, motivations, weaknesses, social_ties) ? 1 : 0;
+
+        await pool.execute(
+            `INSERT INTO characters
+               (account_id, first_name, last_name, biography, motivations, weaknesses, social_ties, needs_extra_review, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [req.user.accountId, first_name, last_name, biography, motivations || null, weaknesses || null, social_ties || null, needsExtraReview, 'pending']
         );
 
         await pool.execute(
@@ -220,7 +245,8 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
     const rows = await db(
       `SELECT wa.id, wa.status, wa.created_at, wa.reviewer_notes,
               d.username as discord_name, d.discord_id,
-              c.first_name, c.last_name
+              c.first_name, c.last_name, c.biography, c.motivations, c.weaknesses,
+              c.social_ties, c.needs_extra_review, c.extra_review_notes
        FROM whitelist_applications wa
        LEFT JOIN accounts a ON a.id = wa.account_id
        LEFT JOIN discord_identities d ON d.account_id = a.id
@@ -233,7 +259,7 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
 });
 
 app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
-  const { status, reviewer_notes } = req.body;
+  const { status, reviewer_notes, extra_review_notes } = req.body;
   const validStatuses = ['approved', 'rejected', 'pending'];
   if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Status inválido' });
   try {
@@ -241,7 +267,18 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
       'UPDATE whitelist_applications SET status=?, reviewer_notes=?, reviewed_at=NOW() WHERE id=?',
       [status, reviewer_notes || null, req.params.id]
     );
-    
+
+    // Notas da staff sobre o conceito sinalizado como needs_extra_review (opcional).
+    if (typeof extra_review_notes === 'string' && extra_review_notes.trim()) {
+      await db(
+        `UPDATE characters c
+         INNER JOIN accounts a ON a.id = c.account_id
+         INNER JOIN whitelist_applications wa ON wa.account_id = a.id
+         SET c.extra_review_notes=?
+         WHERE wa.id=?`, [extra_review_notes.trim(), req.params.id]
+      );
+    }
+
     // Buscar o discord_id e account_id relacionados para notificar o bot e auditar
     const idRows = await db(
       `SELECT d.discord_id, a.id as account_id FROM discord_identities d

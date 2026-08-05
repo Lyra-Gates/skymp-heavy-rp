@@ -195,4 +195,64 @@ describe('death-service', () => {
       assert.strictEqual(characterState.get(VICTIM_CHARACTER_ID), STATES.NORMAL);
     });
   });
+
+  describe('logCombatInitiation (/iniciar)', () => {
+    it('registra o início do conflito em audit_logs quando dentro de alcance', async () => {
+      await deathService.logCombatInitiation(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID, 'assalto na estrada');
+
+      const entry = auditEntries.find(p => p[0] === 'combat:initiate');
+      assert.ok(entry, 'deveria ter registrado combat:initiate');
+      const details = JSON.parse(entry[3]);
+      assert.strictEqual(details.initiatorCharacterId, RESCUER_CHARACTER_ID);
+      assert.strictEqual(details.targetCharacterId, VICTIM_CHARACTER_ID);
+      assert.strictEqual(details.reason, 'assalto na estrada');
+    });
+
+    it('bloqueia sem motivo', async () => {
+      auditEntries.length = 0;
+      await deathService.logCombatInitiation(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID, '');
+      assert.strictEqual(auditEntries.find(p => p[0] === 'combat:initiate'), undefined);
+    });
+
+    it('bloqueia fora de alcance', async () => {
+      auditEntries.length = 0;
+      setPos(RESCUER_ACTOR_ID, [50000, 0, 0]);
+      await deathService.logCombatInitiation(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID, 'motivo qualquer');
+      assert.strictEqual(auditEntries.find(p => p[0] === 'combat:initiate'), undefined);
+    });
+
+    it('bloqueia iniciar contra si mesmo', async () => {
+      auditEntries.length = 0;
+      await deathService.logCombatInitiation(VICTIM_ACTOR_ID, VICTIM_ACTOR_ID, 'motivo qualquer');
+      assert.strictEqual(auditEntries.find(p => p[0] === 'combat:initiate'), undefined);
+    });
+  });
+
+  describe('checkDamageSpike', () => {
+    beforeEach(() => {
+      deathService._lastHealth.clear();
+    });
+
+    it('registra death:context com cause=damage_spike numa queda brusca de vida', () => {
+      deathService.checkDamageSpike(VICTIM_ACTOR_ID, 100); // baseline
+      deathService.checkDamageSpike(VICTIM_ACTOR_ID, 50);  // queda de 50 (>= threshold de 25)
+
+      const entry = auditEntries.find(p => p[0] === 'death:context');
+      assert.ok(entry, 'deveria ter registrado contexto de dano');
+      const details = JSON.parse(entry[3]);
+      assert.strictEqual(details.cause, 'damage_spike');
+    });
+
+    it('não registra nada pra quedas pequenas de vida', () => {
+      deathService.checkDamageSpike(VICTIM_ACTOR_ID, 100);
+      deathService.checkDamageSpike(VICTIM_ACTOR_ID, 90); // queda de 10, abaixo do threshold
+      assert.strictEqual(auditEntries.find(p => p[0] === 'death:context'), undefined);
+    });
+
+    it('não registra nada quando a vida chega a 0 (é morte, não dano)', () => {
+      deathService.checkDamageSpike(VICTIM_ACTOR_ID, 100);
+      deathService.checkDamageSpike(VICTIM_ACTOR_ID, 0);
+      assert.strictEqual(auditEntries.find(p => p[0] === 'death:context'), undefined);
+    });
+  });
 });

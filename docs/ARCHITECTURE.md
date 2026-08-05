@@ -17,6 +17,7 @@ Desenvolvido em **Express.js / Node.js**.
 - Fornece os Endpoints da API para o **Launcher** (download de manifesto de mods, versões atualizadas, controle de acesso).
 - Autenticação obrigatória utilizando `passport-discord`.
 - Não confundir com o **Painel do Jogador in-game** (ver 1.4.2), que roda dentro do próprio HUD do SkyMP, não no navegador.
+- **Aplicação de personagem** (`/api/apply`, `apply.html`): além de nome/biografia, coleta `motivations`/`weaknesses`/`social_ties` (rubrica de whitelist Heavy RP — ver `SKYMP_RP_DEVELOPMENT_PLAN.md` 8.1). Uma heurística de palavras-chave (`detectsStrongConcept` em `server.js`) sinaliza `characters.needs_extra_review` pra conceitos fortes (nobreza, vampirismo, lycanthropia, Daedra, liderança de facção) — não é um gate automático, só um aviso pra staff prestar mais atenção na revisão; a staff pode anexar `extra_review_notes` pelo painel (`PATCH /api/whitelist/:id`). `skymp/gamemode/whitelist.js` lê `characters` com `ORDER BY id DESC LIMIT 1` ao liberar spawn.
 
 ### 1.3 Bot do Discord (`apps/bot-discord`)
 Desenvolvido em **discord.js**.
@@ -54,6 +55,7 @@ Módulo `death` (`ENABLE_DEATH_SERVICE`), fase `lab`. Existe pra que "morrer" te
 - **Bleed-out**: se ninguém socorre dentro de `BLEED_OUT_MS` (4min), o personagem vira `DEAD`, uma penalidade de ouro é aplicada via `core/transaction-service.removeGold` (atômico — nunca deixa saldo negativo), e só então o respawn acontece no ponto seguro de sempre.
 - **Evidência anti-RDM**: no momento do bleed-out, `logDeathContext` grava em `audit_logs` (`action='death:context'`) um snapshot de quem estava por perto (mesmo raio de proximidade do chat `say`) — não é atribuição definitiva de "quem matou" (não há hook nativo confiável pra isso nesta base), mas dá à staff uma trilha real em vez de só a palavra dos jogadores.
 - Cada transição (`DOWNED`/socorrido/penalizado/respawnado) chama `panelRefreshBus.requestRefresh(actorId, 'status')`, refletindo em tempo real no `/painel`.
+- **Camada mínima de RP pro combate**: sem hook nativo confiável de "quem atacou quem" nesta base, então o escopo é evidência, não enforcement. `/iniciar <actorId> <motivo>` grava uma marcação explícita de abertura de conflito IC em `audit_logs` (`combat:initiate`). Em paralelo, o mesmo polling de HP que detecta `DOWNED` também roda `checkDamageSpike` a cada tick — uma queda de vida `>= DAMAGE_SPIKE_THRESHOLD` (heurística, 25 pontos) num único tick de 2s dispara `logDeathContext(..., 'damage_spike')`, criando um rastro de proximidade mesmo quando ninguém usa `/iniciar`. `core/range-utils.js` ganhou `nearbyActors()` pra não duplicar a lógica de varredura de vizinhos entre o contexto de morte e o de dano.
 
 **Morte permanente (soft-delete):** `admin-service.retireCharacter(actorId, targetActorId, reason)`, comando `/permakill` (permissão `retire_character`, tiers `admin`/`owner` apenas — nunca moderador). Nunca faz `DELETE` — só `UPDATE characters SET status='retired'`, motivo obrigatório e audit log. `whitelist.js` só permite spawn com `status='approved'`, então um personagem `retired` nunca mais entra em jogo sem precisar de nenhuma outra mudança.
 
