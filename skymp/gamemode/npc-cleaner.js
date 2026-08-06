@@ -1,3 +1,4 @@
+const { actorRef } = require('./core/papyrus');
 // Serviço de Limpeza de NPCs Vanilla (World Cleaner)
 // Desativa a maioria dos NPCs vanilla para dar espaço ao RP, exceto mercadores vitais ou guardas essenciais (se configurado).
 
@@ -31,8 +32,8 @@ function startWorldCleaner() {
 
         // Tenta remover (disable)
         // Isso remove visualmente e da colisao o NPC
-        mp.callPapyrusFunction('method', 'ObjectReference', 'disable', actorId, [false]);
-        mp.callPapyrusFunction('method', 'ObjectReference', 'delete', actorId, []);
+        mp.callPapyrusFunction('method', 'ObjectReference', 'disable', actorRef(actorId), [false]);
+        mp.callPapyrusFunction('method', 'ObjectReference', 'delete', actorRef(actorId), []);
         removedCount++;
       }
 

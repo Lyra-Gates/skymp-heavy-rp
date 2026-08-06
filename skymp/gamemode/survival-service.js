@@ -11,6 +11,7 @@
 
 const db = require('./database');
 const commands = require('./commands');
+const { actorRef } = require('./core/papyrus');
 
 // Cache em memoria: characterId -> { hunger, thirst, fatigue, actorId }
 const survivalCache = new Map();
@@ -91,13 +92,13 @@ async function tickSurvival() {
 function applyPenalties(actorId, s) {
   // Stamina regeneration reduzida pela fadiga
   const staminaMult = 0.5 + (s.fatigue / 200); // 50%~100%
-  mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorId, ['StaminaRate', staminaMult * 5]);
+  mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(actorId), ['StaminaRate', staminaMult * 5]);
 
   // Carry weight reduzida pela fome
   if (s.hunger < 20) {
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorId, ['CarryWeight', 200]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(actorId), ['CarryWeight', 200]);
   } else {
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorId, ['CarryWeight', 300]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(actorId), ['CarryWeight', 300]);
   }
 }
 

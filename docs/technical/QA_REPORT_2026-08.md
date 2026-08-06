@@ -12,7 +12,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 127/127 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
+| `skymp/gamemode` | 132/132 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
 | `apps/web` | 33/33 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
@@ -110,7 +110,7 @@ O princípio adotado: só entra na `SPEC` opção que realmente muda comportamen
 
 **Resolvido:** `deploy-commands.js` virou módulo e roda no `ready` do bot. Falha ali **não derruba o bot** — o sync de whitelist é a função crítica e funciona sem os comandos de voz —, mas grita no log dizendo exatamente o que não vai aparecer. Continua funcionando standalone (`npm run deploy-commands`), onde aí sim sai com código de erro. 6 testes novos.
 
-### 2.13 🔴 **ABERTO** — duas formas incompatíveis de chamar Papyrus, e ninguém sabe qual funciona
+### 2.13 🔴 duas formas incompatíveis de chamar Papyrus — *resolvido por evidência upstream*
 
 Achado ao tipar a API `mp` (`skymp/gamemode/types/mp.d.ts`). O parâmetro `self` de `mp.callPapyrusFunction('method', ...)` é passado de duas maneiras diferentes no mesmo código:
 
@@ -123,9 +123,11 @@ As duas nasceram no **mesmo commit** (`82625d2`, 11/07/2026): não houve migraç
 
 **Por que isso é grave:** se só a forma de objeto for válida, 22 chamadas falham em silêncio — e entre elas está a entrega de item do `core/transaction-service.js`. O banco registraria a transação corretamente e o inventário do jogador ficaria vazio. O mesmo vale para remoção de NPC (`npc-cleaner`), sincronização de inventário no spawn (`inventory-service`) e as algemas da governança (`SetActorValue SpeedMult`).
 
-**Deliberadamente não corrigido.** Trocar 22 chamadas com base em palpite pode quebrar código que funciona. A tipagem aceita as duas formas de propósito, com o aviso registrado no próprio `mp.d.ts`.
+**Resolvido:** a pesquisa no upstream achou `misc/tests/` — nove testes de integração que rodam contra um servidor real. **Todos usam a forma de objeto, exclusivamente**, inclusive para argumentos que sejam referências. Isso deixou de ser palpite.
 
-**É o item nº 1 a conferir no primeiro teste in-game** — e é barato conferir: entre um jogador e um `/additem`, dá para saber em minutos.
+As 22 chamadas foram convertidas, com um helper (`core/papyrus.js`: `actorRef`/`baseRef`) pra não repetir a construção. Os testes existentes não exercitavam esses caminhos (os mocks não definem `mp`, então os guards `typeof mp === 'undefined'` protegiam) — por isso `core/papyrus.test.js` passou a olhar o **argumento** passado, não só o resultado. 5 testes novos.
+
+Ainda vale conferir in-game, mas agora como confirmação, não como investigação.
 
 ### 2.14 🟡 módulos PARKED chamam `hasPermission` com número — *resolvido na raiz*
 
@@ -155,8 +157,9 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 1.3 | ✅ **Feito** — `Start-AllServices.ps1` pré-checa cada serviço e reporta o que não subiu | |
 | 1.4 | ✅ **Feito** — 29 smoke tests em `apps/web/server.test.js` | |
 | 1.5 | **Rodar o plano de teste in-game que já existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) com as flags `ENABLE_*` ligadas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
-| 1.5a | **Primeiro teste do 1.5: resolver a ambiguidade do `self` do Papyrus (2.13).** Um `/additem` num jogador responde a pergunta | Decide se 22 chamadas funcionam ou falham em silêncio — incluindo a entrega de item do transaction-service. Barato de conferir, caro de ignorar. |
-| 1.6 | **Gamemode passa a validar o ticket de sessão** via `POST /internal/session/resolve`, em vez de confiar no `profileId` do cliente | Sem isso a fila controla quantos entram, mas não quem. Precisa de servidor real pra descobrir como o SkyMP expõe o ticket na conexão. |
+| 1.5a | ✅ **Resolvido sem servidor** — os testes oficiais do SkyMP responderam. As 22 chamadas foram convertidas. Confirmar in-game continua valendo, mas como checagem, não investigação | |
+| 1.6 | **Gamemode passa a confiar no `profileId`** — mas pelo caminho nativo, não pelo nosso. Ver `SKYMP_UPSTREAM_REFERENCE.md` 2.6: com `offlineMode: false`, o servidor resolve `gameData.session` contra um master API, e o `apps/web` pode ser esse master (um endpoint só). O `/internal/session/resolve` que construímos vira desnecessário | A pesquisa mudou a solução: em vez de inventar um caminho paralelo, usar o que o SkyMP já faz. |
+| 1.7 | **Trocar o polling do `death-service` por `mp.onDeath`** — que existe e entrega `killerId` | Substitui o polling de 2s **e** a heurística de proximidade do anti-RDM. Ver `SKYMP_UPSTREAM_REFERENCE.md` 2.5. |
 
 ### Fase 2 — Tirar a configuração-fantasma do caminho
 

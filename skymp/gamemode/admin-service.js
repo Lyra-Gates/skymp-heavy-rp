@@ -8,6 +8,7 @@
  */
 const db = require('./database');
 const commands = require('./commands');
+const { actorRef } = require('./core/papyrus');
 
 // Roles e permissões por nível
 const ROLE_PERMISSIONS = {
@@ -135,7 +136,7 @@ async function playAnimation(actorId, targetActorId, animName) {
     return;
   }
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('method', 'Actor', 'PlayIdle', targetActorId, [animName]);
+    mp.callPapyrusFunction('method', 'Actor', 'PlayIdle', actorRef(targetActorId), [animName]);
   }
   const charData = commands.getActiveCharacterData(actorId);
   const targetData = commands.getActiveCharacterData(targetActorId);

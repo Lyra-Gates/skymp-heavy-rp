@@ -147,35 +147,22 @@ interface Mp {
    * @param self Objeto alvo em 'method'; `null` em 'global'. VER AVISO ABAIXO.
    * @param args Argumentos
    *
-   * ⚠️ AMBIGUIDADE NÃO RESOLVIDA no parâmetro `self`.
+   * ⚠️ O parâmetro `self` PRECISA ser um objeto `{type, desc}`, nunca o FormID.
    *
-   * Este gamemode usa DUAS formas incompatíveis pro mesmo parâmetro:
+   * Isso foi confirmado pelos nove testes oficiais do SkyMP (`misc/tests/` no
+   * repositório upstream), que usam essa forma exclusivamente — inclusive para
+   * argumentos que sejam referências:
    *
-   *   objeto  `{ type: 'form', desc: mp.getDescFromId(actorId) }`
-   *           — death-service.js, player-panel-service.js (2 arquivos)
-   *   cru     `actorId` direto, um number
-   *           — outros 22 pontos, incluindo core/transaction-service.js,
-   *             inventory-service.js, npc-cleaner.js, governance-service.js
+   *     mp.callPapyrusFunction("method", "ObjectReference", "RemoveAllItems",
+   *         { type: "form", desc: mp.getDescFromId(actorId1) },
+   *         [{ type: "form", desc: mp.getDescFromId(actorId2) }, false, false]);
    *
-   * As duas nasceram no mesmo commit (82625d2, 11/07/2026) — não houve
-   * migração de uma pra outra, é inconsistência desde o início. A documentação
-   * do SkyMP não especifica, e **nada disso foi testado em jogo**.
+   * Use os helpers de `core/papyrus.js` (`actorRef`, `baseRef`) em vez de
+   * montar o objeto à mão.
    *
-   * Se a forma de objeto for a única válida, então 22 chamadas falham em
-   * silêncio — e entre elas está a entrega de item do transaction-service, ou
-   * seja, o banco ficaria certo e o inventário do jogador vazio.
-   *
-   * O tipo aceita as duas de propósito: transformar um palpite em erro de
-   * compilação faria alguém "consertar" 22 lugares que talvez estejam certos.
-   * Isto é o item nº 1 a conferir no primeiro teste in-game — ver
-   * docs/technical/QA_REPORT_2026-08.md 2.13.
-   *
-   * Vocabulário em uso hoje neste gamemode:
-   *   global  Debug.notification, Debug.SendAnimationEvent, Game.getFormEx
-   *   method  Actor.getActorValue, Actor.SetActorValue, Actor.GetItemCount,
-   *           Actor.PlayIdle, Actor.Resurrect,
-   *           ObjectReference.AddItem, ObjectReference.RemoveItem,
-   *           ObjectReference.disable, ObjectReference.delete
+   * O tipo ainda aceita `FormId` porque o SkyMP pode aceitar as duas formas —
+   * o que os testes provam é que a de objeto funciona, não que a outra falha.
+   * Mas todo código deste gamemode usa a de objeto, e código novo deve seguir.
    */
   callPapyrusFunction(
     callType: 'global' | 'method',
@@ -236,6 +223,38 @@ interface Mp {
 
   /** [USO] Atribua uma função aqui para receber eventos da UI CEF. */
   onUiEvent: (pcFormId: FormId, uiEvent: UiEvent) => void;
+
+  /**
+   * [TESTE OFICIAL] Morte de um ator — **com o FormID de quem matou**.
+   * `killerId` é `0` quando não há autor (queda, veneno, `set isDead`).
+   *
+   * Isto existe desde sempre e nós não usávamos: `death-service.js` faz
+   * polling de 2s lendo `getActorValue('Health')`, e a documentação de combate
+   * deste projeto chegou a registrar que "não há hook confiável de quem atacou
+   * quem". Há — para o momento da morte, que é o que importa pro anti-RDM.
+   *
+   * Fonte: `misc/tests/test_isdead.js` upstream.
+   */
+  onDeath: (actorId: FormId, killerId: FormId) => void;
+
+  /** [TESTE OFICIAL] Respawn de um ator. Fonte: `test_isdead.js`. */
+  onRespawn: (actorId: FormId) => void;
+
+  /**
+   * [TESTE OFICIAL] Alguém ativou (usou) um objeto ou ator.
+   * Fonte: `misc/tests/test_onactivate.js`.
+   */
+  onActivate: (targetId: FormId, casterId: FormId) => void;
+
+  /**
+   * [FONTE: skymp5-server/ts/systems/login.ts] Chamado antes de liberar o
+   * login, com o `profileId` já resolvido pelo master API. Retornar `false`
+   * recusa a conexão e o cliente recebe `loginFailedBanned`.
+   *
+   * É o ponto correto pra checagem de whitelist e ban — hoje `whitelist.js`
+   * faz isso por polling de conexão e `mp.kick` depois do fato.
+   */
+  onLoginAttempt: (profileId: number) => boolean;
 
   /**
    * Handlers de `makeEventSource`. Nomes customizados começam com underscore,

@@ -12,6 +12,7 @@
 const db = require('./database');
 const admin = require('./admin-service');
 const commands = require('./commands');
+const { actorRef } = require('./core/papyrus');
 
 // Holds do jogo com suas respectivas prisoes (cellId do SkyMP)
 const HOLD_PRISONS = {
@@ -83,7 +84,7 @@ async function restrain(officerActorId, targetActorId) {
 
   // Efeito visual: paralisa o movimento (SpeedMult = 0)
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 0]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(targetActorId), ['SpeedMult', 0]);
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['* Voce foi algemado.']);
   }
 
@@ -105,7 +106,7 @@ async function unrestrain(officerActorId, targetActorId) {
   restrainedPlayers.delete(targetChar.characterId);
 
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 100]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(targetActorId), ['SpeedMult', 100]);
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['* As algemas foram retiradas.']);
   }
 

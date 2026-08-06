@@ -20,6 +20,7 @@ const actionPolicy = require('./core/action-policy');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 const transactionService = require('./core/transaction-service');
 const rangeUtils = require('./core/range-utils');
+const { actorRef } = require('./core/papyrus');
 
 const { STATES } = characterState;
 
@@ -457,7 +458,7 @@ async function detainTarget(officerActorId, targetActorId, reason = 'detencao pr
     [target.characterId, officer.characterId]
   );
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 0]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(targetActorId), ['SpeedMult', 0]);
   }
   await audit(officerActorId, targetActorId, 'guard:detain', reason);
   notify(officerActorId, 'Alvo detido.');
@@ -479,7 +480,7 @@ async function releaseTarget(officerActorId, targetActorId, reason = 'liberado')
   await db.query('DELETE FROM character_restraints WHERE character_id = ?', [target.characterId]);
   characterState.set(target.characterId, STATES.NORMAL, {});
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 100]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(targetActorId), ['SpeedMult', 100]);
   }
   await audit(officerActorId, targetActorId, 'guard:release', reason);
   notify(officerActorId, 'Alvo liberado.');
@@ -711,7 +712,7 @@ async function arrestTarget(officerActorId, targetActorId, sentenceMinutes, crim
       rot: [0, 0, 0],
       cellOrWorldDesc: prison.cellId
     });
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetActorId, ['SpeedMult', 100]);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(targetActorId), ['SpeedMult', 100]);
   }
 
   await audit(officerActorId, targetActorId, 'guard:arrest', `sentence=${minutes} crime=${crime}`);
@@ -762,7 +763,7 @@ async function releaseExpiredPrisoners() {
     const releasedActorId = commands.getActiveActorByCharacterId(row.character_id);
     if (releasedActorId) {
       if (typeof mp !== 'undefined') {
-        mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', releasedActorId, ['SpeedMult', 100]);
+        mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(releasedActorId), ['SpeedMult', 100]);
       }
       notify(releasedActorId, 'Voce cumpriu sua pena e foi libertado.');
       panelRefreshBus.requestRefresh(releasedActorId, 'status');

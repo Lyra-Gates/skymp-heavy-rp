@@ -61,6 +61,136 @@ Esse exemplo é literalmente o da documentação oficial — e é exatamente o c
 
 ---
 
+## 2.5 A fonte que faltava: `misc/tests/` upstream
+
+A documentação em `docs/` descreve cinco métodos de `mp`. A API real é muito maior, e o lugar onde ela aparece **executando** é a pasta `misc/tests/` do repositório upstream — nove testes de integração que rodam contra um servidor de verdade.
+
+Isso os torna mais confiáveis que qualquer documentação: são código que precisa passar.
+
+```bash
+gh api repos/skyrim-multiplayer/skymp/contents/misc/tests --jq '.[].name'
+```
+
+### O que eles resolveram para nós
+
+**1. O formato do `self` do Papyrus — resolvido.** Todos os nove testes usam `{ type: 'form', desc: mp.getDescFromId(id) }`, nunca o FormID cru, inclusive para *argumentos* que sejam referências:
+
+```js
+mp.callPapyrusFunction("method", "ObjectReference", "RemoveAllItems",
+    { type: "form", desc: mp.getDescFromId(actorId1) },
+    [{ type: "form", desc: mp.getDescFromId(actorId2) }, false, false]);
+```
+
+Este projeto tinha 22 chamadas passando o FormID cru. Foram todas convertidas — ver `core/papyrus.js` (`actorRef`/`baseRef`).
+
+Também aparece a distinção `form` vs `espm`: o ator é `form`, o Gold001 que se adiciona ao inventário dele é `espm`.
+
+**2. `mp.onDeath` existe e traz o assassino.**
+
+```js
+mp.onDeath = (actorId, killerId) => { /* killerId é 0 quando não há autor */ };
+mp.onRespawn = (actorId) => {};
+```
+
+Nosso `death-service.js` faz polling de 2s lendo `getActorValue('Health')`, e a documentação de combate deste projeto chegou a registrar que "não há hook confiável de quem atacou quem". Para o momento da morte — que é o que importa no anti-RDM — **há**. Isso torna o `logDeathContext` por proximidade uma aproximação desnecessária.
+
+**3. Outros hooks e chamadas confirmados por teste:**
+
+| | |
+|---|---|
+| `mp.onActivate = (target, caster) => {}` | Alguém usou um objeto/ator |
+| `mp["onPapyrusEvent:OnItemAdded"] = fn` | Evento Papyrus arbitrário, por nome |
+| `mp.createActor(profileId, pos, angleZ, cellOrWorld)` | Criar ator pelo servidor |
+| `mp.set(id, "isDead", true)` | Matar diretamente, sem Papyrus |
+| `mp.set(id, "inventory", {entries:[{baseId,count}]})` | **Escrever o inventário inteiro de uma vez** |
+| `mp.get(id, "inventory").entries` | Ler o inventário |
+| `mp.set(id, "spawnDelay", 0)` | Controlar o atraso de respawn |
+| `mp.get(id, "spawnPoint")` | Ponto de spawn de um ator colocado |
+
+O par `get/set` de `inventory` é notável: hoje `inventory-service.js` sincroniza item por item via `AddItem`. Um `set` único seria mais simples e atômico do lado do cliente.
+
+---
+
+## 2.6 Identidade e login: como o SkyMP realmente resolve `profileId`
+
+Fonte: `skymp5-server/ts/systems/login.ts` e `skymp5-server/ts/settings.ts`.
+
+Isto responde a pergunta em aberto de "como o gamemode sabe quem é o jogador" — item 1.6 do nosso `QA_REPORT_2026-08.md`.
+
+**Existem dois modos, e a diferença é tudo:**
+
+**`offlineMode: true`** — o cliente manda `gameData.profileId` e o servidor **acredita**. É o modo de laboratório. Qualquer um edita o `skymp_config.json` e vira outra pessoa.
+
+**`offlineMode: false`** (padrão) — o cliente manda `gameData.session`, e o servidor **resolve a sessão contra um master API**:
+
+```
+GET  {master}/api/servers/{masterKey}/sessions/{session}
+  →  { user: { id: number, discordId: string } }
+```
+
+O `profileId` passa a vir do master, não do cliente. **É aqui que a identidade vira confiável.**
+
+O `master` padrão é `https://gateway.skymp.net`, mas é só uma string em `server-settings.json`.
+
+### O caminho para o nosso item 1.6
+
+Nós já temos tudo que esse endpoint precisa: OAuth do Discord, whitelist, e a tabela `launch_tickets` criada na migration v6. **O `apps/web` pode ser o nosso master API** — é um endpoint só:
+
+1. `apps/web` implementa `GET /api/servers/:masterKey/sessions/:session`, resolvendo o ticket para `{ user: { id: accountId, discordId } }`.
+2. `server-settings.json` aponta `master` para o nosso painel e define `masterKey`.
+3. `offlineMode: false`.
+4. O launcher já grava `config.session` — passa a gravar o ticket que o painel emitiu.
+
+Feito isso, `whitelist.js` para de confiar no `profileId` do cliente sem precisar de nenhuma mudança nele: o `profileId` que chega **já é** o `accountId` validado.
+
+Isso é bem mais simples do que o `/internal/session/resolve` que construímos no `apps/game-api`, e usa o mecanismo que o SkyMP já tem em vez de um paralelo.
+
+### `mp.onLoginAttempt`
+
+O `login.ts` chama, se existir:
+
+```js
+mp.onLoginAttempt = (profileId) => boolean;  // false recusa a conexão
+```
+
+É o ponto correto para whitelist e ban — o cliente recebe `loginFailedBanned`. Hoje fazemos isso por polling de conexão + `mp.kick` depois do fato.
+
+### `discordAuth` nativo no servidor
+
+`server-settings.json` aceita:
+
+```json
+{
+  "discordAuth": {
+    "botToken": "...",
+    "guilds": [{
+      "guildId": "...",
+      "banRoleId": "...",
+      "hideIpRoleId": "...",
+      "eventLogChannelId": "..."
+    }]
+  }
+}
+```
+
+O servidor então, sozinho: exige que o jogador esteja no Discord, recusa quem tiver o cargo de ban, esconde o IP de quem tiver `hideIpRoleId`, e **posta os logins num canal**. Os cargos do Discord ficam disponíveis no gamemode via a property `private.discordRoles`.
+
+Construímos parte disso no `apps/bot-discord`. Vale comparar antes de investir mais no nosso.
+
+Nota: properties com prefixo `private.` não são visíveis pelo cliente.
+
+---
+
+## 2.7 Outros servidores RP em SkyMP
+
+Encontrados por busca de código: `hijosdelasnieves/hijosdelasnieves-RP` (ativo em 29/07/2026), `reggiedroid/skymp-mop` (05/08/2026), `spike29011/Skymp-spike`.
+
+Todos são cópias do upstream sem gamemode próprio publicado — o código de RP deles não está aberto. Servem como sinal de que o projeto tem outros servidores sérios em construção, não como fonte de solução.
+
+O `sweettaffy-lib` (organização oficial) tem as **regras de RP** do servidor SweetTaffy em russo — útil como referência de design de regras, não de código.
+
+---
+
 ## 3. Ferramentas de desenvolvimento que já existem e não usamos
 
 Estas três são as que mais economizam tempo, e nenhuma exige escrever código:
@@ -124,7 +254,8 @@ Enquanto nenhuma das duas for feita, o `/iniciar` + `checkDamageSpike` continua 
 
 ## 6. O que procuramos e não existe
 
-- **Não há tipagem TypeScript pública da API `mp`.** O `skymp5-functions-lib` do upstream importa de um `src/` que não está no repositório — só o `index.ts` é público. Escrever nossos próprios typings (um `mp.d.ts` com JSDoc) é trabalho nosso, e seria útil: hoje `mp` é `any` implícito em todo o gamemode.
+- **Não há tipagem TypeScript pública da API `mp`.** O `skymp5-functions-lib` do upstream importa de um `src/` que não está no repositório — só o `index.ts` é público. Escrevemos a nossa em `skymp/gamemode/types/mp.d.ts`.
+- **Nenhum outro servidor RP publicou seu gamemode.** Os três forks ativos encontrados são cópias do upstream sem código de RP aberto.
 - **`skymp-ui-components`** (biblioteca de UI da org) está parada desde 2020. Não vale adotar.
 - **`sweettaffy-lib`** é o conjunto de regras de RP do servidor SweetTaffy (em russo), não código — mas serve como referência de *design* de regras de servidor RP.
 - **Releases**: a última é `sp-v2.6-beta`, de 2022. O projeto se desenvolve na branch `main`, não por release. Fixar em commit, não em tag.
@@ -135,14 +266,17 @@ Enquanto nenhuma das duas for feita, o `/iniciar` + `checkDamageSpike` continua 
 
 | | Ação | Esforço | Ganho |
 |---|---|---|---|
-| 1 | Abrir `localhost:9000` na próxima sessão de teste da UI | Zero | Para de depurar UI às cegas |
-| 2 | Alinhar as portas 7757/7777 nos exemplos | Minutos | Remove uma falha de conexão garantida no primeiro teste |
-| 3 | Escrever `skymp/gamemode/types/mp.d.ts` com o que a doc oficial define | Horas | Autocomplete e checagem em todo o gamemode |
-| 4 | Migrar `death-service` de polling pra `makeEventSource` | Um dia | Morte imediata em vez de até 2s; menos CPU |
-| 5 | Subir o WebPack dev server na 1234 pro fluxo de UI | Um dia | Live reload da UI |
-| 6 | Evento de hit por `makeEventSource` | Alguns dias | Troca proximidade por agressor/alvo declarado |
+| 1 | ✅ Alinhar as portas 7757/7777 nos exemplos | | Feito — era falha de conexão garantida |
+| 2 | ✅ Escrever `types/mp.d.ts` | | Feito |
+| 3 | ✅ Converter as 22 chamadas Papyrus pro formato de objeto | | Feito — ver 2.5 |
+| 4 | Abrir `localhost:9000` na próxima sessão de teste da UI | Zero | Para de depurar UI às cegas |
+| 5 | **Trocar o polling do `death-service` por `mp.onDeath`** | Horas | Morte no frame + `killerId` de graça. Substitui polling **e** a heurística de proximidade do anti-RDM |
+| 6 | **`apps/web` vira o master API de sessão** (ver 2.6) | Um dia | Resolve o item 1.6 usando o mecanismo nativo, em vez do nosso `/internal/session/resolve` paralelo |
+| 7 | `mp.onLoginAttempt` no lugar do polling de conexão + kick | Horas | Recusa no handshake, com mensagem correta pro cliente |
+| 8 | Avaliar o `discordAuth` nativo antes de investir mais no bot | Horas | Ban por cargo, log de login e IP oculto sem código nosso |
+| 9 | Subir o WebPack dev server na 1234 pro fluxo de UI | Um dia | Live reload da UI |
 
-Os itens 1 e 2 valem fazer antes do teste in-game da Fase 1 (`QA_REPORT_2026-08.md`), porque afetam justamente esse teste.
+O item 4 vale fazer antes do teste in-game da Fase 1 (`QA_REPORT_2026-08.md`), porque afeta justamente esse teste. Os itens 5 a 8 mudam decisões de arquitetura que já tomamos — vale reler 2.5 e 2.6 antes de continuar construindo em cima delas.
 
 ---
 

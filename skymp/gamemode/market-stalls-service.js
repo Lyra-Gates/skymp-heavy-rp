@@ -25,6 +25,7 @@ const inventory = require('./inventory-service');
 const actionPolicy = require('./core/action-policy');
 const admin = require('./admin-service');
 const governance = require('./governance-service');
+const { actorRef } = require('./core/papyrus');
 
 const MODULE = 'market_stalls';
 const MAX_STALLS_PER_CHARACTER = 2;
@@ -162,7 +163,7 @@ function distance(a, b) {
 function addItemToClient(actorId, baseId, count) {
   if (typeof mp === 'undefined') return;
   try {
-    mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorId, [baseId, count, true]);
+    mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [baseId, count, true]);
   } catch (err) {
     console.error(`[market-stalls] Failed to sync purchased item 0x${baseId.toString(16)}:`, err.message);
   }

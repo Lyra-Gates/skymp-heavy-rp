@@ -1,4 +1,5 @@
 const commands = require('./commands');
+const { actorRef } = require('./core/papyrus');
 
 // IDs Base de itens do Skyrim
 const ITEM_FIREWOOD = 0x00033760; // Lenha
@@ -26,7 +27,7 @@ function chopWood(actorId) {
   }
 
   // Opcionalmente: Checar pelo servidor se o jogador tem o machado
-  const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorId, [ITEM_WOODCUTTER_AXE]);
+  const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [ITEM_WOODCUTTER_AXE]);
   if (hasItem <= 0) {
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você precisa de um Machado de Lenhador.']);
     return;
@@ -51,7 +52,7 @@ function chopWood(actorId) {
       const woodAmount = Math.floor(Math.random() * 3) + 1; // 1 a 3 madeiras
       
       // Entrega o item via papyrus
-      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorId, [ITEM_FIREWOOD, woodAmount, false]);
+      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [ITEM_FIREWOOD, woodAmount, false]);
       
       mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você coletou ${woodAmount}x Lenha.`]);
       console.log(`[jobs-service] Actor ${actorId.toString(16)} successfully chopped ${woodAmount} wood.`);
@@ -67,7 +68,7 @@ function mineOre(actorId) {
     return;
   }
 
-  const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorId, [ITEM_PICKAXE]);
+  const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [ITEM_PICKAXE]);
   if (hasItem <= 0) {
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você precisa de uma Picareta.']);
     return;
@@ -95,7 +96,7 @@ function mineOre(actorId) {
 
       const amount = Math.floor(Math.random() * 2) + 1; 
       
-      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorId, [oreItem, amount, false]);
+      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [oreItem, amount, false]);
       mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você extraiu ${amount}x ${oreName}.`]);
       console.log(`[jobs-service] Actor ${actorId.toString(16)} successfully mined ${amount}x ${oreItem.toString(16)}.`);
     }
@@ -111,7 +112,7 @@ function catchFish(actorId) {
   }
 
   // TODO: Descomentar quando o ITEM_FISHING_ROD for configurado corretamente
-  // const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorId, [ITEM_FISHING_ROD]);
+  // const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [ITEM_FISHING_ROD]);
   // if (hasItem <= 0) {
   //   mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você precisa de uma Vara de Pescar.']);
   //   return;
@@ -141,7 +142,7 @@ function catchFish(actorId) {
       }
 
       if (fishItem) {
-          mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorId, [fishItem, 1, false]);
+          mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [fishItem, 1, false]);
           mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você pescou: ${fishName}.`]);
           console.log(`[jobs-service] Actor ${actorId.toString(16)} successfully caught fish ${fishItem.toString(16)}.`);
       } else {

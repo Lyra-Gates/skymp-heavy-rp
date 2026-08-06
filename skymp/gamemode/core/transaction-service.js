@@ -13,6 +13,7 @@
 
 const db = require('../database');
 const crypto = require('crypto');
+const { actorRef } = require('./papyrus');
 
 /**
  * Gera um UUID v4 simples usando o módulo nativo crypto.
@@ -125,9 +126,9 @@ function _applyToClient(actorId, baseId, delta) {
   if (typeof mp === 'undefined') return;
   try {
     if (delta > 0) {
-      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorId, [baseId, delta, true]);
+      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [baseId, delta, true]);
     } else {
-      mp.callPapyrusFunction('method', 'ObjectReference', 'RemoveItem', actorId, [baseId, Math.abs(delta), true, null]);
+      mp.callPapyrusFunction('method', 'ObjectReference', 'RemoveItem', actorRef(actorId), [baseId, Math.abs(delta), true, null]);
     }
   } catch (err) {
     // Log sem throw: BD já está correto. Reconciliação cuidará do cliente na próxima reconexão.
@@ -408,4 +409,9 @@ async function getGold(characterId) {
   return rows.length > 0 ? rows[0].gold : 0;
 }
 
-module.exports = { giveItem, removeItem, transfer, hasItem, getGold, addGold, removeGold };
+module.exports = {
+  giveItem, removeItem, transfer, hasItem, getGold, addGold, removeGold,
+  // Exposto só pra teste: garante que o `self` do Papyrus vai como objeto
+  // `{type,desc}` e não como FormID cru (ver core/papyrus.js).
+  _applyToClient
+};
