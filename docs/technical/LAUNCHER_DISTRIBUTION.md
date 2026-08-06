@@ -13,7 +13,7 @@ O launcher fala com quatro endereços diferentes. Confundi-los é a origem da ma
 | **Releases do GitHub** | `https://github.com/<VITE_GITHUB_DIST_REPO>/releases/...` | Baixar e atualizar o cliente SkyMP e o modpack | Depende de um repo de distribuição configurado |
 | **API do servidor de jogo** | `http://<VITE_SERVER_IP>:<VITE_API_PORT>` (7758) | Paridade de mods (`/mods.json`), fila (`/api/queue/*`) | ✅ `apps/game-api` |
 | **Painel web** | `<VITE_PANEL_URL>` (3001, `apps/web`) | Concluir o login do Discord, receber crash reports | ✅ |
-| **Servidor de jogo** | `<VITE_SERVER_IP>:<VITE_SERVER_PORT>` (7757) | A sessão em si, via SKSE | ✅ (SkyMP) |
+| **Servidor de jogo** | `<VITE_SERVER_IP>:<VITE_SERVER_PORT>` (7777) | A sessão em si, via SKSE | ✅ (SkyMP) |
 
 ---
 

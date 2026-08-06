@@ -2,6 +2,8 @@
 
 Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
+> **Última conferência contra o código: 06/08/2026.** Os 26 documentos foram lidos contra o estado real do repositório e as afirmações checadas uma a uma. O que estava desatualizado foi corrigido no mesmo commit. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
+
 ---
 
 ## Comece por aqui

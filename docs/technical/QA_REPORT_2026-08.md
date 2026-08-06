@@ -22,7 +22,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 ### O que efetivamente roda hoje
 
-Cinco módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
+Seis módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
 
 Sete serviços existem no disco e **nunca são registrados** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Outros quatro foram apagados em 06/08/2026 (`economy-service`, `justice`, `faction`, `survival`) por duplicarem sistema ativo ou serem inseguros — ver `PARKED_SERVICES_DECISION.md`. Os que ficaram e mexiam em ouro foram migrados pro `core/transaction-service`.
 
@@ -172,7 +172,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 |---|---|---|
 | 2.1 | ✅ **Feito** — `core/server-options.js` com 8 opções ligadas, validação que aborta o boot e aviso pras inertes | |
 | 2.2 | ✅ **Feito** — registro no `ready` do bot, sem derrubar o processo em caso de falha | |
-| 2.3 | 📋 **Análise entregue** — `PARKED_SERVICES_DECISION.md`. Recomendo apagar 3 (`justice`, `economy`, `survival`), decidir 1 (`faction`), manter 7. **Apagar é decisão sua** | O mais urgente é `economy-service.js`: mexe em ouro sem atomicidade nem ledger, e 6 módulos PARKED o importam — reativar qualquer um traria a economia insegura junto. |
+| 2.3 | ✅ **Feito** — quatro apagados (`economy-service`, `justice`, `faction`, `survival`), sete mantidos como PARKED. Registrado em `PARKED_SERVICES_DECISION.md` | O mais urgente era `economy-service.js`: mexia em ouro sem atomicidade nem ledger, e 6 módulos PARKED o importavam — reativar qualquer um traria a economia insegura junto. Os importadores foram migrados pro `core/transaction-service` **antes** da remoção. |
 | 2.4 | ✅ **Decidido** — manter e documentar como reservadas (`ARCHITECTURE.md` 1.1). Tabela vazia não tem caminho de execução nem duplica lógica; o custo de remover superaria o ganho | |
 
 ### Fase 3 — Endurecer para produção
