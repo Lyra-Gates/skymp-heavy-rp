@@ -14,7 +14,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 | Componente | Pruebas | Instalable | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 190/190 ✅ + 9/9 comprobaciones de sistema | ✅ | **Maduro.** La mejor parte del proyecto: transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. |
+| `skymp/gamemode` | 218/218 ✅ + 9/9 comprobaciones de sistema | ✅ | **Maduro.** La mejor parte del proyecto: transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
 | `apps/launcher` | ❌ ninguna | ✅ | **Estaba roto de punta a punta** (ver 2.1); corregido en esta ronda, pero sin validación en tiempo de ejecución. |

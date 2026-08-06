@@ -11,6 +11,10 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **`core/soul.js` — a camada de domínio da Afinidade da Alma**, com 28 testes. Função pura: gerador com orçamento fixo, bandas, semente derivada da ficha e resolução em quatro resultados. Não depende da Fase 0 porque não toca no jogo — o serviço, que toca, continua bloqueado.
+
+  O número que valida o desenho: **`surdo` com mestre e componente dá exatamente a mesma distribuição que `raro` sozinho** (25/40/25/10). A afinidade não fecha porta — ela decide de quanta gente você vai precisar.
+
 - **[Afinidade da Alma](docs/design/SOUL_AFFINITY.md) — desenho fechado**, e a **Constituição vai a v1.1** (a §8 deixa de ser "Soul DNA"). Sistema único que explica magia, encantamento, corrupção, vampirismo, licantropia e linhagem. Três partes: análise de 15 pontos, o desenho que preserva a diversão, e a especificação.
 
   As decisões que fecharam o desenho: **o dado nunca diz não** (Limpo/Caro/Complicado/Marcado — os quatro dão certo); **nenhuma alma é estritamente melhor**, garantido por orçamento fixo no gerador e não por boa vontade; **a alma vem da ficha aprovada**, o que mata o reroll-farming e faz a aplicação de whitelist valer mecanicamente; **as marcas são a progressão** — não há nível, há o que ficou em você; e **prazo em sessões, não em meses**.
@@ -26,7 +30,7 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
 - **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
 
-Total de testes: 273 (190 gamemode + 40 web + 24 game-api + 19 bot) + 9 checks de sistema.
+Total de testes: 301 (218 gamemode + 40 web + 24 game-api + 19 bot) + 9 checks de sistema.
 
 - **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
 

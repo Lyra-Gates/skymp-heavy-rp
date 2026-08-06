@@ -2,7 +2,9 @@
 
 **Proposta:** substituir Soul DNA por um sistema único de afinidades que explique magia, vampirismo, licantropia, bênçãos, maldições, corrupção, encantamento e linhagem nobre.
 
-**Estado: DESENHO FECHADO.** Um veto e quatro condições, todos incorporados. Emendou a §8 da Constituição (v1.1). **Nada disto vira código antes da Fase 0** (teste in-game).
+**Estado: DESENHO FECHADO. Domínio implementado e testado.** Um veto e quatro condições, todos incorporados. Emendou a §8 da Constituição (v1.1).
+
+`skymp/gamemode/core/soul.js` — gerador, bandas e resolução — **existe, com 28 testes** (§III.13). É função pura: não abre banco, não toca `mp`, não sabe que existe um jogo. **O serviço continua bloqueado pela Fase 0** — nada entrega sinal, grava marca ou avança árvore antes do teste in-game.
 
 O documento tem três partes. A **Parte I** é a análise de 15 pontos exigida pela Constituição §15 — o que a proposta resolve e o que ela quebra. A **Parte II** é o desenho que sai dela: como o sistema vira jogo bom sem perder jogabilidade nem diversão. A **Parte III** é a especificação — valores, fórmula, schema, eventos e testes.
 
@@ -483,7 +485,38 @@ Seguindo o `CONTRIBUTING.md` §6 — verificar o **argumento e o efeito**, nunca
 7. **A semente não vaza**: nenhum payload de `panelData` contém número de afinidade. Este é o teste que protege o sistema inteiro; escrever primeiro.
 8. **Marca visível respeita o firewall de identidade**: quem não conhece o portador não recebe descritor que revele nome civil.
 
-## III.13 Fora do v1, deliberadamente
+## III.13 Verificação — o domínio existe e os números fecham
+
+A camada de domínio (`skymp/gamemode/core/soul.js`) **já está implementada e testada**, com 28 testes. Ela é função pura: não abre banco, não toca `mp`, não tem efeito colateral. Por isso não depende da Fase 0 — o que depende é o *serviço*, que fala com o mundo.
+
+**Distribuição real** (20 000 almas, 80 000 afinidades):
+
+| Banda | Frequência |
+|---|---|
+| surdo | 0,8 % |
+| fraco | 14,3 % |
+| **comum** | **68,6 %** |
+| forte | 15,1 % |
+| raro | 1,2 % |
+
+Quase todo mundo é comum em quase tudo — que é o que faz `raro` significar alguma coisa. Um personagem tem ~5 % de chance de ter *alguma* afinidade rara.
+
+### O número que valida o desenho
+
+A pergunta que decide se o sistema é justo: **preparo compensa nascimento?**
+
+| Situação | limpo | caro | complicado | marcado |
+|---|---|---|---|---|
+| `surdo`, sozinho, ato difícil | 4 % | 27 % | 39 % | 30 % |
+| **`surdo` com mestre + componente + lugar** | **25 %** | **40 %** | **25 %** | **10 %** |
+| **`raro`, sozinho, ato difícil** | **25 %** | **40 %** | **25 %** | **10 %** |
+| `raro` com mestre + componente + lugar | 76 % | 12 % | 10 % | 2 % |
+
+**As duas linhas do meio são idênticas.** Quem nasceu sem dom nenhum, com um mestre e a preparação certa, chega exatamente onde o talentoso chega sozinho.
+
+Isso é a §II.5 provada em número, e não em promessa: a afinidade não fecha porta — ela decide **de quanta gente você vai precisar**. O talento continua valendo (o talentoso que também se prepara chega a 76 %), mas o caminho do sem-dom passa por outras pessoas, que é o loop central de Heavy RP.
+
+## III.14 Fora do v1, deliberadamente
 
 - **Linhagem nobre hereditária** — depende da árvore provada e toca sucessão, que hoje é staff-autorada.
 - **Afinidade marcial** — o combate é do cliente; o servidor não arbitra golpe. Entra quando houver um caminho confiável, não antes.

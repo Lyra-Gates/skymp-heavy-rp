@@ -14,7 +14,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 | Component | Tests | Installable | Real state |
 |---|---|---|---|
-| `skymp/gamemode` | 190/190 ✅ + 9/9 system checks | ✅ | **Mature.** The best part of the project: atomic transactions, a state machine, a module registry, real test coverage. |
+| `skymp/gamemode` | 218/218 ✅ + 9/9 system checks | ✅ | **Mature.** The best part of the project: atomic transactions, a state machine, a module registry, real test coverage. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
 | `apps/launcher` | ❌ none | ✅ | **Was broken end to end** (see 2.1); fixed this round, but with no runtime validation. |

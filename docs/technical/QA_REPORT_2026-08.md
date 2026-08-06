@@ -14,7 +14,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 190/190 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
+| `skymp/gamemode` | 218/218 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
