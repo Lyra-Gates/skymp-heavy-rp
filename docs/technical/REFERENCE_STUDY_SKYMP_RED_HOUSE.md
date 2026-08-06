@@ -245,9 +245,15 @@ A análise anterior (seção 4) olhou estrutura, config e comandos. Esta é a le
 
 O repositório está parado desde 16/11/2021 e é baseado num SkyMP daquela época, então nada aqui deve ser tratado como API atual. O valor é de **projeto**: eles resolveram problemas que ainda estão abertos pra nós.
 
+### O que a página do Nexus acrescenta
+
+A build publicada (v1.1-pub, 11/07/2021, 23 endorsements, 358 downloads únicos) declara conter: sincronização de morte, **sincronização de dano**, chat de texto + comandos, infobar, **janela de troca**, menu de interação com jogador, animações, select box, request panel e HUD (logo, ID do jogador, contador de online). **Todas as interfaces em russo.**
+
+Os autores convidam explicitamente ao reuso — *"You can take it as a basis for your development!"* — mas na mesma frase declaram: *"The server sources are distributed under the GPLv3 license."* O convite não dispensa a licença.
+
 ### ⚖️ Licença: GPL-3.0 — não dá pra copiar código
 
-O repositório é **GPL-3.0**. Copiar trechos para o nosso gamemode obrigaria a licenciar o nosso projeto sob GPL também.
+O repositório é **GPL-3.0**, confirmado tanto pelo arquivo `LICENSE` quanto pela própria página do Nexus. Copiar trechos para o nosso gamemode obrigaria a licenciar o nosso projeto sob GPL também.
 
 Isso não impede aprender: técnica e arquitetura não são protegidas por direito autoral, código específico é. Tudo abaixo é descrição do que eles fazem e por quê — qualquer implementação nossa precisa ser escrita do zero, e no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform de qualquer jeito.
 
@@ -305,6 +311,14 @@ Isso importa direto pra nós. O `death-service.js` varre até 50 profileIds a ca
 - **Módulos com hook `onHit`** — o sistema de módulos deles recebe eventos, não só `initialize`. O nosso `core/module-registry.js` só tem ciclo de vida; um dia pode valer distribuir eventos de jogo pra módulos ativos.
 - **`onCellChange`** por `makeEventSource` — saber quando alguém troca de célula é a base de zonas seguras, territórios e presença.
 - **`server-options.json` era deles.** As opções do nosso `SERVER_OPTIONS_SCHEMA.md` (`isVanillaSpawn`, `SpawnTimeToRespawn`, `spawnTimeToRespawnNPC`) são as do Red House. Isso explica por que o schema descrevia coisas que o nosso código nunca implementou: foi copiado como intenção e nunca ligado. Ver `QA_REPORT_2026-08.md` 2.10 — hoje o `core/server-options.js` diz claramente o que está ligado e o que não está.
+
+### O front-end deles não vale a pena
+
+`front/src/features` tem `client/{animList, chat}`, `systems/{interactionMenu, trade}` e `crafts` — React + Redux, de 2021, em russo.
+
+Comparando com o que já temos: chat de proximidade ✅, menu de interação ✅, e além disso um painel de 4 abas que eles não têm. O que eles têm e nós não é a **janela de troca** e a **lista de animações** — e o nosso `trade-service` está PARKED de qualquer forma.
+
+Ou seja: adotar o front deles seria trocar o que temos por algo equivalente ou menor, em outra stack, noutro idioma, sob GPL. O valor do Red House está no servidor, não na interface.
 
 ### O que NÃO copiar
 
