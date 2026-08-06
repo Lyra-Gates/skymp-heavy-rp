@@ -144,6 +144,20 @@ Todo lo que sea `VITE_*` en el launcher se **incrusta en el instalador en tiempo
 
 Por el mismo motivo: **ningún número de afinidad puede llegar al cliente.** El jugador recibe señales y consecuencias, nunca valores. Ver [`docs/design/SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) §III.12.7 (en portugués) — es la prueba que protege el sistema entero.
 
+### 3.11 Un carácter invisible en el fuente siempre es escape, nunca el byte crudo
+
+Escriba `'\u0000'`, `[\u0300-\u036f]`, `'\t'`. Nunca pegue el carácter.
+
+`core/soul.js` llevaba dos: la clase de marcas combinantes del `normalize()` y — el peor — un NUL como separador de los campos que entran en el HMAC del alma. NUL es la elección correcta ahí, porque no sobrevive al `normalize()` y por lo tanto ningún jugador logra escribirlo en la ficha; sin un separador imposible de teclear, `'ab'+'c'` y `'a'+'bc'` firmarían el mismo material y dos fichas distintas nacerían con la misma alma.
+
+El problema nunca fue la elección, sino que fuera invisible. Tres consecuencias, todas silenciosas:
+
+- **La línea le miente a quien lee.** `].join('<NUL>')` aparece en pantalla como `].join('')` — el revisor entiende "concatena sin separador", que es lo contrario de lo que ocurre.
+- **El archivo se vuelve binario.** `grep` responde `Binary file matches` en vez del fragmento, y `file` dice `data`. La herramienta que todos usan para encontrar código deja de funcionar en ese archivo.
+- **Un editor puede borrarlo al guardar.** Muchos limpian caracteres de control. En ese archivo eso reescribiría la semilla de **toda alma ya derivada**, sin que apareciera ningún error.
+
+Si un valor invisible va a cargar significado, merece una constante con nombre y un comentario que diga por qué es ese valor. `core/soul.test.js` tiene un guard estático contra los dos casos.
+
 ---
 
 ## 4. Estilo de código
