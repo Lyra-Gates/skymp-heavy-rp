@@ -1,6 +1,6 @@
 # Documentação
 
-Mapa dos 30 documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
+Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
 ---
 
@@ -11,6 +11,7 @@ Mapa dos 30 documentos do projeto. Se você acabou de chegar, leia na ordem da p
 | 1 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | **O estado real de cada componente**, incluindo o que não está pronto e o plano priorizado. É o documento mais honesto do projeto. |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | Como banco, painel web, bot, API do jogo, launcher e gamemode conversam. |
 | 3 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | As regras que não são óbvias lendo o código. Quase todas existem porque alguém já quebrou aquilo. |
+| 4 | [../CHANGELOG.md](../CHANGELOG.md) | O que mudou em cada versão — e o que sabidamente não está pronto. |
 
 ---
 
@@ -48,9 +49,6 @@ Mapa dos 30 documentos do projeto. Se você acabou de chegar, leia na ordem da p
 | Documento | Fonte |
 |---|---|
 | [REFERENCE_STUDY_SKYMP_RED_HOUSE.md](technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md) | O único gamemode RP público que existe (GPL-3.0, parado em 2021). A §4.1 é leitura do código-fonte. |
-| [REFERENCE_STUDY_KEIZAAL_ONLINE.md](technical/REFERENCE_STUDY_KEIZAAL_ONLINE.md) | Servidor RP de referência. |
-| [CURRENT_SERVER_REFERENCE_STUDY.md](technical/CURRENT_SERVER_REFERENCE_STUDY.md) | Estudo da instalação de referência. |
-| [CURRENT_SERVER_FEATURE_MATRIX.md](technical/CURRENT_SERVER_FEATURE_MATRIX.md) | Matriz do que foi confirmado por arquivo vs. inferido. |
 
 ### Planejamento
 
@@ -96,7 +94,6 @@ Mapa dos 30 documentos do projeto. Se você acabou de chegar, leia na ordem da p
 
 | Documento | Sobre |
 |---|---|
-| [roadmap/PHASE_0_START.md](roadmap/PHASE_0_START.md) | Objetivos e critérios da Fase 0. |
 | [roadmap/PHASE_0_TEST_LOG.md](roadmap/PHASE_0_TEST_LOG.md) | Evidências dos testes da Fase 0. |
 
 ---
@@ -104,6 +101,7 @@ Mapa dos 30 documentos do projeto. Se você acabou de chegar, leia na ordem da p
 ## Convenções desta documentação
 
 - **Português.** Termos técnicos consagrados ficam em inglês (`whitelist`, `commit`, `hash`).
+- **Sobre o idioma:** os documentos de entrada (`README`, `CONTRIBUTING`, `SECURITY`) são mantidos em português e inglês. A documentação técnica profunda fica **só em português**, de propósito: são muitos arquivos que mudam com frequência, e tradução desatualizada é pior que tradução ausente — é um texto em que as pessoas confiam e que mente em silêncio. Se algum documento específico bloquear alguém, traduzimos aquele sob demanda.
 - **Diga o que não funciona.** Documento que só descreve o caminho feliz vira mentira com o tempo. Quando algo está incompleto, o texto diz — e vários avisos aqui existem porque a documentação antiga afirmava coisas que o código nunca fez.
 - **Marque a procedência.** Ao afirmar algo sobre o SkyMP, diga se veio da documentação oficial, de teste real ou de leitura de código. As três têm confiabilidades diferentes.
 - **Ao mudar comportamento, atualize o documento no mesmo PR.** Documentação desatualizada custa mais caro que documentação ausente: ela é confiada.

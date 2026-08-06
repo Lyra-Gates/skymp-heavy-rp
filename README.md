@@ -1,5 +1,7 @@
 # SkyMP Heavy RP Ecosystem
 
+***Português** · [English](README.en.md)*
+
 Bem-vindo ao repositório principal do servidor SkyMP Heavy RP. 
 Este projeto é uma plataforma multijogador de *Roleplay Estrito* para Skyrim, focada em estabilidade, autoridade do servidor, e imersão sem comprometer a sincronização de rede.
 

@@ -552,7 +552,7 @@ Rodar o projeto de forma sustentavel.
 
 - Documento de regras publicas: `docs/rules/HEAVY_RP_RULES.md`.
 - Esboco consolidado de regras publicas: `docs/rules/PUBLIC_RULES_LAUNCH_OUTLINE.md`.
-- Roteiro de inicio da Fase 0: `docs/roadmap/PHASE_0_START.md`.
+- Evidencias dos testes da Fase 0: `docs/roadmap/PHASE_0_TEST_LOG.md`.
 - Modelo de aplicacao de personagem: `docs/rules/CHARACTER_APPLICATION_TEMPLATE.md`.
 - Rubrica de whitelist da staff: `docs/staff/WHITELIST_RUBRIC.md`.
 - Estudo de referencias tecnicas: `docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md`.

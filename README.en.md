@@ -1,0 +1,100 @@
+# SkyMP Heavy RP Ecosystem
+
+*[Português](README.md) · **English***
+
+An open, current server base for **strict roleplay** on [SkyMP](https://github.com/skyrim-multiplayer/skymp) (Skyrim Special Edition multiplayer).
+
+> **Why this exists:** as of August 2026, the SkyMP community has no open, maintained RP server base. The only public one — [Red House](https://github.com/alekcey0211/red-house-public) — has been unmaintained since 2021 and is Russian-only. This project aims to fill that gap.
+
+> ⚠️ **Not production-ready.** The gameplay code is verified only by unit tests against a mocked `mp` API — **nothing has been validated in a real game session yet**. See the [QA report](docs/technical/QA_REPORT_2026-08.md) for an honest component-by-component status.
+
+---
+
+## New here?
+
+| You want to | Start with |
+|---|---|
+| Understand the real project status | [QA Report](docs/technical/QA_REPORT_2026-08.md) — includes what is **not** ready |
+| Understand how the pieces talk | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Contribute code | [CONTRIBUTING.en.md](CONTRIBUTING.en.md) — the rules that aren't obvious from reading the code |
+| Know if a mod works on the server | [Mods × Gamemode Contract](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
+| Browse all documentation | [docs/README.md](docs/README.md) |
+| Report a security issue | [SECURITY.en.md](SECURITY.en.md) — **do not open a public issue** |
+
+**Language note:** entry-point documents (this README, contributing and security guides) are maintained in Portuguese and English. Deep technical documentation is **Portuguese only** — see [Documentation language](#documentation-language) below.
+
+---
+
+## What's in the box
+
+| Component | What it does |
+|---|---|
+| `skymp/gamemode` | Node.js gamemode: RP chat, governance (arrest, fines, taxes), player market stalls, death with consequence, in-game panel, proximity voice |
+| `skymp/ui` | In-game CEF interface |
+| `apps/web` | Staff panel, whitelist, Discord OAuth, and the **SkyMP master API** that makes player identity server-authoritative |
+| `apps/game-api` | Port 7758: modpack parity (`/mods.json`) and entry queue |
+| `apps/bot-discord` | Role sync and temporary voice channels |
+| `apps/launcher` | Electron + React launcher: client/modpack updates, integrity checks, queue |
+| `skymp/packages/database` | MariaDB schema and migrations |
+
+### Things you won't find elsewhere
+
+- **A typed `mp` API** ([`types/mp.d.ts`](skymp/gamemode/types/mp.d.ts)) — SkyMP publishes no typings.
+- **A map of the real SkyMP API** ([`SKYMP_UPSTREAM_REFERENCE.md`](docs/technical/SKYMP_UPSTREAM_REFERENCE.md)), including hooks the official docs never mention, sourced from upstream's own integration tests.
+- **Working session master API** — most test servers run in `offlineMode`, where the client declares its own identity and the server believes it.
+- **Atomic economy** with a ledger ([`core/transaction-service.js`](skymp/gamemode/core/transaction-service.js)).
+- **Modpack parity** with a manifest generator.
+
+---
+
+## Running it
+
+Requires **Node.js 20+**, **MariaDB/MySQL**, and **Skyrim SE/AE** for in-game testing.
+
+```bash
+git clone https://github.com/vinicius3232/skymp-heavy-rp.git
+cd skymp-heavy-rp
+
+# Each service has its own dependencies
+cd skymp/gamemode   && npm ci && cd ../..
+cd apps/web         && npm ci && cd ../..
+cd apps/game-api    && npm ci && cd ../..
+cd apps/bot-discord && npm ci && cd ../..
+```
+
+Copy every `.env.example` to `.env` and fill it in — the comments explain where each value comes from. Apply `schema.sql` then migrations `v2` through `v8`, in order.
+
+```powershell
+.\scripts\phase0\Start-AllServices.ps1
+```
+
+The script checks `.env` and `node_modules` for each service first and tells you what won't start, instead of reporting success with a dead service.
+
+### Debugging tools you probably don't know about
+
+- **`localhost:9000`** in your normal browser opens **DevTools for the game's embedded browser** — console, inspector and breakpoints for the in-game UI. Without it you're debugging blind.
+- The server **proxies UI requests to a dev server on port 1234**, so you can iterate on interface CSS/JS without restarting anything.
+
+---
+
+## Documentation language
+
+Entry points are bilingual. **Deep technical documentation stays in Portuguese**, deliberately.
+
+That's a maintenance decision, not an oversight. Roughly 26 technical documents change often, and a stale translation is worse than no translation — it's a document people trust that quietly lies. Keeping one authoritative version means it stays correct.
+
+If a specific document blocks you, open an issue and we'll translate that one. Machine translation handles these files reasonably well since they're plain Markdown.
+
+---
+
+## License
+
+Free software under **[GNU AGPL-3.0-or-later](LICENSE)**.
+
+Deliberate choice: the goal is a public, current RP server base for the community. AGPL costs us nothing we weren't already giving away, and it protects the goal — anyone who modifies this base and runs a server **must offer their modifications to players** (AGPL §13). It's also the same license as `skymp5-server`, which everything here runs on.
+
+If you run a modified version, the source link must point to **your** version. See [PUBLIC_BUILD_GUIDE.md](docs/technical/PUBLIC_BUILD_GUIDE.md) §3.
+
+**The license covers our code — not third-party mods, not Bethesda assets.** Nothing from Bethesda is redistributed here; you need to own Skyrim.
+
+> This is an independent community project. Not affiliated with, endorsed, or sponsored by Bethesda Softworks, ZeniMax Media, Microsoft, or any official rights holder of The Elder Scrolls/Skyrim. All trademarks belong to their respective owners.
