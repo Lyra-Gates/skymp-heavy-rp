@@ -11,6 +11,18 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **O `npc-cleaner` apagava o mundo, e implementava a opção que a decisão técnica rejeitou.** Ele varria `mp.getActorsByProfileId(0)` e chamava `disable` **e `delete`** em todo ator encontrado, pulando apenas os de uma allowlist — que estava vazia, com um comentário "adicione IDs base de mercadores essenciais aqui". Na prática: mercadores, guardas e NPCs de quest apagados a cada 60 segundos, e `delete` numa referência persistente não volta. O [NPC_POLICY_DECISION](docs/technical/NPC_POLICY_DECISION.md) avaliou três opções e escolheu a **C — Vanilla Spawn Seletivo**; o código implementava a B, rejeitada, na forma mais extrema.
+
+  Três inversões: a lista virou **de bloqueio** (lista vazia agora remove nada em vez de tudo — o modo de falha aponta pro lado seguro), o `safeRadius` **passou a existir de verdade** (era declarado com o comentário "limpa apenas NPCs longe dos players" e nunca lido: o comentário descrevia um recurso que não estava escrito), e o `delete` saiu — só `disable`, que é reversível. A lista guarda `baseDesc` e não FormID numérico, porque o primeiro byte de um FormID é o índice de load order. Config em `skymp/config/npc-policy.json`, serviço inerte enquanto ela não for curada. 8 testes, onde antes não havia nenhum.
+
+  Isto ficou mais urgente com a correção do `.env` abaixo: até ela, ligar `ENABLE_NPC_CLEANER=true` não fazia nada.
+
+- **`/setgold` era o único caminho de dinheiro que escapava do ledger.** Fazia `UPDATE characters SET gold = ?` direto — sem transação e **sem linha em `gold_transactions`** —, que é exatamente o padrão que motivou apagar o `economy-service.js`. É também o comando que mais precisa de rastro: ouro que aparece na conta de um jogador sem origem registrada é indistinguível de duplicação por bug, e quem pode fazer isso é justamente a staff. O `audit_logs` guardava a intenção do comando; o saldo deixava de fechar com a soma do ledger.
+
+  Passou pelo `core/transaction-service`: o valor absoluto vira leitura + delta, com `reason='staff_setgold'`. Junto veio um guard que faltava — `/setgold <id>` sem valor passava `NaN`, que o MySQL grava como `0`, então um erro de digitação zerava o patrimônio do jogador em silêncio.
+
+  O teste da matriz de permissões aferia esse comando observando o `UPDATE` cru, ou seja, o próprio padrão proibido. A sonda passou a exigir que o ouro tenha se movido **e** que a movimentação tenha virado linha no ledger — mais forte que antes, e verificada por mutação.
+
 - **O gamemode nunca carregou o próprio `.env` — nenhum módulo `lab` jamais subiu.** `dotenv` estava em `dependencies`, o `.env.example` existia, e tanto o [CONTRIBUTING](CONTRIBUTING.md) §1 quanto o [roteiro da Fase 0](docs/technical/FASE_0_ROTEIRO.md) mandavam preencher `skymp/gamemode/.env`. Nenhum arquivo do gamemode chamava `require('dotenv')`. Quem lia esse arquivo era o `apps/web/server.js`, para si mesmo — o que tornava a falha invisível: o arquivo existia, era lido por alguém, e mesmo assim as flags não chegavam. `module-registry.bootAll()` via `process.env[ENABLE_*]` sempre indefinido, então governança, barracas, morte, painel e VOIP ficavam desligados de forma permanente. Sem erro: o log dizia `DESATIVADO (... não definido)`, exatamente o que diria se a pessoa tivesse escolhido desligar.
 
   O check `flags de ambiente` dava `[PASS]` durante todo esse período porque só conferia que a string existia no `.env.example` — provava que alguém escreveu a linha, não que ligar a linha fazia algo. Foi substituído por um que verifica o carregamento **e a ordem** (o `.env` precisa vir antes do registry e do `server-options`, que leem o ambiente em tempo de require, não de boot).

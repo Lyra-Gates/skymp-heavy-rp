@@ -230,6 +230,32 @@ async function kickPlayer(actorId, targetActorId, reason) {
 /**
  * /setgold [actorId] [valor] - Define ouro de um jogador
  * Permissão: 'set_gold' (nível admin+)
+ *
+ * ─── Por que isto passou a ser um delta ─────────────────────────────────────
+ *
+ * A versão anterior fazia `UPDATE characters SET gold = ?` direto — sem
+ * transação, sem `SELECT ... FOR UPDATE` e, principalmente, **sem linha em
+ * `gold_transactions`**. Era o único caminho de dinheiro do gamemode que
+ * escapava do ledger, e é exatamente o padrão que motivou apagar o
+ * `economy-service.js` em 06/08/2026 (ver `CONTRIBUTING.md` §3.1 e
+ * `PARKED_SERVICES_DECISION.md` §2).
+ *
+ * O custo não era teórico: `/setgold` é o comando que mais precisa de rastro.
+ * Ouro que aparece na conta de um jogador sem nenhum registro de origem é
+ * indistinguível de duplicação por bug — e a única pessoa capaz de fazer isso
+ * é a staff, que é justamente de quem a auditoria precisa proteger o servidor.
+ * O `audit_logs` registrava a intenção do comando; o ledger da economia não
+ * registrava nada, então o saldo deixava de fechar com a soma das transações.
+ *
+ * `transaction-service` só move saldo por delta (é o que permite
+ * `gold = gold + ?` sob lock, sem sobrescrever escrita concorrente). Um "set
+ * absoluto" vira leitura + delta. A leitura fora da transação é aceitável aqui
+ * e em nenhum outro lugar: se o saldo mudar entre o `getGold` e o
+ * `addGold`/`removeGold`, o resultado é o valor pedido pela staff com um
+ * desvio do tamanho da operação concorrente — e o ledger mostra as duas linhas,
+ * então a divergência é visível em vez de silenciosa. Travar a linha por fora
+ * exigiria expor a conexão do transaction-service, que é o encapsulamento que
+ * mantém esse arquivo como o único lugar que sabe mexer em ouro.
  */
 async function setGold(actorId, targetActorId, amount) {
   if (!hasPermission(actorId, 'set_gold')) {
@@ -239,11 +265,48 @@ async function setGold(actorId, targetActorId, amount) {
   const targetChar = commands.getActiveCharacterData(targetActorId);
   if (!targetChar) return;
 
-  await db.query('UPDATE characters SET gold = ? WHERE id = ?', [amount, targetChar.characterId]);
-  commands.sendNotification(actorId, `[Staff] Ouro definido para ${amount} Septims.`);
+  const alvo = Number(amount);
+  if (!Number.isFinite(alvo) || alvo < 0) {
+    // `parseInt(parts[1])` no handler devolve NaN pra `/setgold <id>` sem
+    // valor. Antes isso virava `SET gold = NaN`, que o MySQL grava como 0 —
+    // um erro de digitação zerava o patrimônio do jogador em silêncio.
+    commands.sendNotification(actorId, '[Staff] Valor invalido. Uso: /setgold <actorId> <valor>');
+    return;
+  }
+
+  const transactionService = require('./core/transaction-service');
+  const saldoAtual = await transactionService.getGold(targetChar.characterId);
+  const delta = alvo - saldoAtual;
+
+  if (delta !== 0) {
+    const ok = delta > 0
+      ? await transactionService.addGold({
+        characterId: targetChar.characterId,
+        amount: delta,
+        reason: 'staff_setgold',
+        module: 'admin'
+      })
+      : await transactionService.removeGold({
+        characterId: targetChar.characterId,
+        amount: -delta,
+        reason: 'staff_setgold',
+        module: 'admin'
+      });
+
+    if (!ok) {
+      commands.sendNotification(actorId, '[Staff] Falha ao ajustar o ouro. Nada foi alterado.');
+      return;
+    }
+  }
+
+  commands.sendNotification(actorId, `[Staff] Ouro definido para ${alvo} Septims.`);
   const charData = commands.getActiveCharacterData(actorId);
-  await auditLog(charData?.accountId, targetChar.accountId, 'staff:setGold', `role=${getRole(actorId)} amount=${amount}`);
-  console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) set gold=${amount} for char ${targetChar.characterId}`);
+  await auditLog(
+    charData?.accountId, targetChar.accountId,
+    'staff:setGold',
+    `role=${getRole(actorId)} amount=${alvo} anterior=${saldoAtual} delta=${delta}`
+  );
+  console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) set gold=${alvo} (delta ${delta}) for char ${targetChar.characterId}`);
 }
 
 /**
