@@ -19,11 +19,11 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 | Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
 | Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
-| Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 26 documentos |
+| Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 29 documentos |
 | Reportar falha de segurança | [SECURITY.md](SECURITY.md) — **não abra issue pública** |
 | Perguntar, propor ou mostrar o que fez | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
-**Sobre o idioma:** os documentos de entrada (este README, o guia de contribuição e a política de segurança) existem em português, inglês, russo e espanhol. A documentação técnica profunda fica **só em português** — traduzir 26 documentos que mudam toda semana produziria tradução desatualizada, que é pior que tradução nenhuma: é um documento em que as pessoas confiam e que mente calado. Se algum documento específico te travar, [peça nas Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions/categories/q-a) que a gente traduz aquele.
+**Sobre o idioma:** oito documentos existem em português, inglês, russo e espanhol — os três de entrada e os cinco que barram um dev de fora. O resto da documentação técnica fica **só em português** — traduzir tudo que muda toda semana produziria tradução desatualizada, que é pior que tradução nenhuma: é um documento em que as pessoas confiam e que mente calado. Se algum documento específico te travar, [peça nas Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions/categories/q-a) que a gente traduz aquele.
 
 ## Status Atual do Projeto (Auditoria Recente)
 
@@ -35,6 +35,8 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 - **Painel do Jogador (in-game)**: Comando `/painel` abre um HUD in-game com 4 abas — Status (vida/magicka/stamina/ouro/estado RP), Governança (cargo, mandados, multas), Economia (barracas, imposto local) e Social (rostos conhecidos). Agrega dados dos serviços existentes sem duplicar lógica de negócio; ativado via `ENABLE_PLAYER_PANEL_SERVICE=true`. Ver [player-panel-service.js](skymp/gamemode/player-panel-service.js).
 - **Launcher App**: Um Launcher em React + Electron (Vite) em `apps/launcher`, controlando autenticação, configurações e boot da build. Na auditoria de agosto ele estava quebrado ponta a ponta (nenhuma variável de ambiente era carregada) e o client secret do Discord ia embutido no instalador — ambos corrigidos, mas ainda sem validação em runtime. Ver [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) 2.1 e 2.2.
 - **Fase Inicial (Fase 0)**: As fundações locais (conexão, persistência base em banco MariaDB via scripts SQL migrados) já foram garantidas em ambiente de laboratório.
+
+- **Afinidade da Alma (domínio)**: `core/soul.js` — toda alma nasce de sete valores ocultos derivados da **ficha aprovada** do personagem, com orçamento fixo (afinidade alta obriga outra a ser baixa, então nenhuma alma é melhor que outra). A resolução **nunca falha**: devolve Limpo, Caro, Complicado ou Marcado — os quatro dão certo. Função pura, 28 testes, sem banco e sem `mp`. O serviço que entrega sinais e grava marcas depende do teste in-game. Desenho em [SOUL_AFFINITY.md](docs/design/SOUL_AFFINITY.md).
 
 - **API do Jogo (`apps/game-api`)**: serve a porta 7758 que o launcher sempre chamou e que não existia — `/mods.json` (paridade de modpack, a base do contrato de FormID) e a fila de entrada com capacidade e expiração de reserva. A fila é autenticada por ticket emitido pelo painel, nunca pelo `discordId` que o cliente informa. Manifesto gerado por `scripts/generate-mods-manifest.js`.
 

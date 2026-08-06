@@ -134,6 +134,16 @@ That makes polling expensive fast. Prefer native hooks (`mp.onDeath`, `mp.onActi
 
 Anything `VITE_*` in the launcher is **inlined into the installer at build time** and shipped to players. The Discord client secret used to live there — it now lives only in `apps/web`, which performs the token exchange.
 
+### 3.10 The soul secret never leaves the server — and the domain doesn't read the environment
+
+`core/soul.js` derives a character's soul from **their approved application**, signed with a server secret. Two rules follow, and both are easy to break without noticing.
+
+**The secret is passed as an argument, never read from `process.env` inside the module.** The domain doesn't know about infrastructure — that's what keeps the file testable with no server, no database and no `mp`. A `require('dotenv')` in there destroys the whole property.
+
+**The secret must not leak anywhere**: not a log, not a payload, not an API response. A character's application is public. With the secret, anyone computes anyone's soul from what's written in the panel — and the entire system stops being hidden, at once, without any error showing up.
+
+For the same reason: **no affinity number may reach the client.** The player receives signs and consequences, never values. See [`docs/design/SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) §III.12.7 (Portuguese) — it's the test that protects the whole system.
+
 ---
 
 ## 4. Code style

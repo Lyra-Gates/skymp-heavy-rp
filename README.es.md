@@ -25,7 +25,7 @@ Pensada para *rol estricto*: el servidor manda sobre economía, identidad y cons
 | Reportar un fallo de seguridad | [SECURITY.es.md](SECURITY.es.md) — **no abras un issue público** |
 | Preguntar, proponer o mostrar lo que hiciste | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
-**Sobre el idioma:** los documentos de entrada (este README, la guía de contribución y la política de seguridad) se mantienen en cuatro idiomas. La documentación técnica profunda está **solo en portugués** — ver [más abajo](#idioma-de-la-documentación).
+**Sobre el idioma:** los documentos de entrada (este README, la guía de contribución y la política de seguridad) se mantienen en cuatro idiomas. El resto de la documentación técnica está **solo en portugués** — ver [más abajo](#idioma-de-la-documentación).
 
 ---
 

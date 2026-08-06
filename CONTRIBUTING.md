@@ -138,6 +138,16 @@ Isso torna polling caro rápido. Prefira hooks nativos (`mp.onDeath`, `mp.onActi
 
 Tudo que é `VITE_*` no launcher é **embutido no instalador em tempo de build** e distribuído aos jogadores. O client secret do Discord já esteve lá — hoje vive só no `apps/web`, que faz a troca de token.
 
+### 3.10 O segredo da alma nunca sai do servidor — e o domínio não lê ambiente
+
+`core/soul.js` deriva a alma de um personagem da **ficha aprovada dele**, assinada com um segredo do servidor. Duas regras saem daí, e as duas já foram desenhadas para serem fáceis de quebrar sem perceber.
+
+**O segredo é passado como argumento, nunca lido de `process.env` dentro do módulo.** Domínio não conhece infraestrutura — é isso que mantém o arquivo testável sem servidor, sem banco e sem `mp`. Um `require('dotenv')` ali dentro derruba a propriedade inteira.
+
+**O segredo não pode vazar em lugar nenhum**: nem log, nem payload, nem resposta de API. A ficha do personagem é pública. Com o segredo, qualquer pessoa calcula a alma de qualquer personagem a partir do que está escrito no painel — e o sistema inteiro deixa de ser oculto, de uma vez, sem erro nenhum aparecer.
+
+Pelo mesmo motivo: **nenhum número de afinidade pode chegar ao cliente.** O jogador recebe sinais e consequências, nunca valores. Ver [`docs/design/SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) §III.12.7 — é o teste que protege o sistema inteiro.
+
 ---
 
 ## 4. Estilo de código

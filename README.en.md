@@ -25,7 +25,7 @@ Built for *strict roleplay*: server authority over economy, identity and consequ
 | Report a security issue | [SECURITY.en.md](SECURITY.en.md) — **do not open a public issue** |
 | Ask, propose, or show what you built | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
-**Language note:** entry-point documents (this README, contributing and security guides) are maintained in Portuguese, English, Russian and Spanish. Deep technical documentation is **Portuguese only** — see [Documentation language](#documentation-language) below.
+**Language note:** entry-point documents (this README, contributing and security guides) are maintained in Portuguese, English, Russian and Spanish. The remaining technical documentation is **Portuguese only** — see [Documentation language](#documentation-language) below.
 
 ---
 
