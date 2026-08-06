@@ -1,5 +1,4 @@
 const db = require('./database');
-const economy = require('./economy-service');
 const inventory = require('./inventory-service');
 const commands = require('./commands');
 

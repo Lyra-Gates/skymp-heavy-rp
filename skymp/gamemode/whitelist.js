@@ -5,9 +5,9 @@ const adminService = require('./admin-service');
 const characterState = require('./core/character-state');
 const serverOptions = require('./core/server-options');
 const transactionService = require('./core/transaction-service');
-// NOTA: survival-service NÃO é importado aqui.
-// Módulos PARKED são inicializados exclusivamente pelo module-registry
-// quando ENABLE_SURVIVAL_SERVICE=true. Não carregar módulos PARKED no boot.
+// NOTA: nenhum módulo PARKED é importado aqui. Eles são inicializados
+// exclusivamente pelo module-registry quando a flag ENABLE_* correspondente
+// está ligada — importar direto no boot os faria rodar sem passar pelo registry.
 
 function allowLocalAutoWhitelist(profileId) {
   if (process.env.NODE_ENV === 'production') return false;

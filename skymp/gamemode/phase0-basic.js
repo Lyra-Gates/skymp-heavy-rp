@@ -107,17 +107,32 @@ moduleRegistry.register({
   }
 });
 
-// PARKED — Os seguintes módulos NÃO são registrados até passarem por reengenharia:
-// - justice-service   (ENABLE_JUSTICE_SERVICE)
-// - survival-service  (ENABLE_SURVIVAL_SERVICE)
+// PARKED — Existem no disco e NÃO são registrados até passarem por reengenharia:
 // - economy-regional  (ENABLE_REGIONAL_ECONOMY)
-// - faction-service   (ENABLE_FACTION_SERVICE)
 // - jobs-service      (ENABLE_WOODCUTTING / ENABLE_MINING / ENABLE_FISHING)
 // - crafting-service  (ENABLE_CRAFTING)
 // - housing-service   (ENABLE_HOUSING)
 // - trade-service     (ENABLE_TRADE)
 // - disguise-service  (ENABLE_DISGUISE)
 // - horse-service     (ENABLE_HORSES)
+//
+// APAGADOS em 06/08/2026 (ver docs/technical/PARKED_SERVICES_DECISION.md):
+// - economy-service   Mexia em ouro com UPDATE solto, sem transação nem ledger.
+//                     `transfer` fazia removeGold + addGold sem transação: se a
+//                     segunda falhasse, o ouro sumia. Seis módulos o importavam,
+//                     então reativar qualquer um traria a economia insegura
+//                     junto, contornando o core/transaction-service em silêncio.
+//                     Os que ficaram foram migrados pro transaction-service.
+// - justice-service   Cada função tinha equivalente melhor no governance-service
+//                     (que tem alcance, plantão, auditoria e permissões nomeadas).
+//                     Duas fontes de verdade sobre quem está preso é pior que uma.
+// - faction-service   Mantinha uma segunda tabela de "quem pertence a qual facção
+//                     com qual patente", concorrendo com governance_memberships.
+//                     Facção é um ESCOPO da governança (scope_type='faction'), não
+//                     um sistema paralelo.
+// - survival-service  Mexia em ActorValue (StaminaRate/CarryWeight), que é
+//                     exatamente o que o death-service lê pra detectar DOWNED.
+//                     Precisa nascer depois do death-service estar validado.
 //
 // Para reativar um módulo, implemente o descriptor correto acima
 // com initialize(), commands[], healthCheck() e dependencies[].

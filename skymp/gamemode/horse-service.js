@@ -15,7 +15,8 @@
  */
 
 const db = require('./database');
-const economy = require('./economy-service');
+// Ver nota em economy-regional.js: ouro so pelo transaction-service.
+const transactionService = require('./core/transaction-service');
 const commands = require('./commands');
 
 // FormIDs de raças de cavalos vanilla (Skyrim.esm)
@@ -160,14 +161,14 @@ async function buyHorse(actorId, characterId, horseId) {
     return;
   }
   const horse = rows[0];
-  const paid = await economy.removeGold(characterId, horse.sale_price);
+  const paid = await transactionService.removeGold({ characterId, amount: horse.sale_price, reason: 'horse_purchase', module: 'horse' });
   if (!paid) {
     if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Ouro insuficiente. Preço: ${horse.sale_price}g.`]);
     return;
   }
   // Transfere lucro ao antigo dono
   if (horse.owner_character_id) {
-    await economy.addGold(horse.owner_character_id, horse.sale_price);
+    await transactionService.addGold({ characterId: horse.owner_character_id, amount: horse.sale_price, reason: 'horse_sale', module: 'horse' });
   }
   await db.query('UPDATE horses SET owner_character_id=?, for_sale=0, sale_price=0 WHERE id=?', [characterId, horseId]);
   if (typeof mp !== 'undefined') {

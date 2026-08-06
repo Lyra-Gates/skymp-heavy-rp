@@ -1,5 +1,6 @@
 const db = require('./database');
-const economy = require('./economy-service');
+// Ver nota em economy-regional.js: ouro so pelo transaction-service.
+const transactionService = require('./core/transaction-service');
 const commands = require('./commands');
 
 // Cache de containers abertos para evitar conflitos concorrentes
@@ -148,7 +149,7 @@ async function buyProperty(actorId, characterId, propertyId) {
   }
 
   const prop = propRows[0];
-  const paid = await economy.removeGold(characterId, prop.price_gold);
+  const paid = await transactionService.removeGold({ characterId, amount: prop.price_gold, reason: 'property_purchase', module: 'housing' });
   if (!paid) {
     if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Ouro insuficiente. Preço: ${prop.price_gold} Septims.`]);
     return false;

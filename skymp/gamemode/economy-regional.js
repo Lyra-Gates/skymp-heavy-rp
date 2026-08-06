@@ -11,7 +11,10 @@
  */
 
 const db = require('./database');
-const economy = require('./economy-service');
+// Ouro passa pelo transaction-service: atomico (BEGIN/FOR UPDATE/COMMIT) e com
+// ledger em `gold_transactions`. O antigo `economy-service` fazia UPDATE solto
+// e foi apagado justamente por isso.
+const transactionService = require('./core/transaction-service');
 const admin = require('./admin-service');
 const commands = require('./commands');
 
@@ -109,7 +112,7 @@ async function sellToMarket(actorId, characterId, baseId, qty = 1) {
 
   // Executa transação
   await inventoryService.removeItem(actorId, characterId, baseId, qty);
-  await economy.addGold(characterId, net);
+  await transactionService.addGold({ characterId, amount: net, reason: 'regional_sale', module: 'economy-regional' });
 
   // Acumula imposto no tesouro do Hold
   await db.query('UPDATE holds SET treasury = treasury + ? WHERE id = ?', [tax, holdId]);
@@ -142,7 +145,7 @@ async function buyFromMarket(actorId, characterId, baseId, qty = 1) {
   const baseValue = getBaseValue(entry);
   const unitPrice = getDynamicBuyPrice(entry.stock, baseValue);
   const totalCost = unitPrice * qty;
-  const paid = await economy.removeGold(characterId, totalCost);
+  const paid = await transactionService.removeGold({ characterId, amount: totalCost, reason: 'regional_purchase', module: 'economy-regional' });
   if (!paid) {
     if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Ouro insuficiente. Necessário: ${totalCost}g.`]);
     return;
@@ -201,10 +204,15 @@ async function withdrawHoldTreasury(actorId, characterId, amount) {
     return;
   }
 
-  const factionService = require('./faction-service');
-  const factionInfo = factionService.getMemberFactionInfo(characterId);
-  
-  if (!factionInfo || factionInfo.factionId !== hold.ruling_faction_id || factionInfo.rank !== 'leader') {
+  // Facção é um ESCOPO dentro da governança, não um sistema paralelo — é o que
+  // `governance_memberships.scope_type` já modela. O antigo `faction-service`
+  // mantinha uma segunda tabela de "quem pertence a qual facção com qual
+  // patente", e duas fontes de verdade sobre isso é como se perde o controle de
+  // quem manda em quê. Foi apagado; a associação vem daqui.
+  const governance = require('./governance-service');
+  const membership = await governance.getMembership(characterId, 'faction', hold.ruling_faction_id);
+
+  if (!membership || membership.role_name !== 'leader') {
     if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Apenas o Lorde desta cidade pode sacar os impostos.']);
     return;
   }

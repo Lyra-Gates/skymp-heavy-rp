@@ -139,7 +139,7 @@ function is(characterId, states) {
 /**
  * Define o estado de um personagem.
  * Estados duráveis (IMPRISONED, RESTRAINED, DOWNED) são persistidos no BD automaticamente via
- * seus próprios serviços (justice-service, death-service). Este método apenas atualiza o cache.
+ * seus próprios serviços (governance-service, death-service). Este método apenas atualiza o cache.
  *
  * @param {number} characterId
  * @param {string} newState - Um dos STATES válidos

@@ -2,7 +2,9 @@
 
 Onze arquivos de serviço vivem em `skymp/gamemode/` e **nunca são registrados** no `core/module-registry.js` — cerca de 2.000 linhas que não rodam. Isso está documentado como intencional, mas "estacionado" virou um estado permanente sem revisão.
 
-Este documento existe pra que a decisão seja tomada com dados em vez de por acúmulo. **Nada foi apagado** — remover código do projeto é decisão de quem toca o servidor, não minha. O que segue é a recomendação por arquivo, com o motivo.
+Este documento existe pra que a decisão seja tomada com dados em vez de por acúmulo.
+
+**Status: executado em 06/08/2026.** Quatro serviços foram apagados (`economy`, `justice`, `faction`, `survival`) e os sete restantes continuam estacionados. O que segue é a análise que embasou a decisão — o histórico do git guarda o código removido.
 
 Levantado em 05/08/2026.
 
@@ -12,11 +14,11 @@ Levantado em 05/08/2026.
 
 | Serviço | Linhas | Último commit | Situação |
 |---|---|---|---|
-| `justice-service.js` | 293 | 11/07 | **Duplicata.** Superseded por `governance-service.js` |
-| `economy-service.js` | 104 | 11/07 | **Perigoso.** Ouro sem atomicidade nem ledger |
-| `faction-service.js` | 222 | 12/07 | Sobreposição parcial com governança |
-| `economy-regional.js` | 302 | 04/08 | Desenho válido, depende do `economy-service` |
-| `survival-service.js` | 236 | 11/07 | Conflita com a lista negra de mods |
+| ~~`justice-service.js`~~ | 293 | 11/07 | (X) **Apagado.** Superseded por `governance-service.js` |
+| ~~`economy-service.js`~~ | 104 | 11/07 | (X) **Apagado.** Ouro sem atomicidade nem ledger |
+| ~~`faction-service.js`~~ | 222 | 12/07 | (X) **Apagado.** Modelo de membros concorrente com `governance_memberships` |
+| `economy-regional.js` | 302 | 04/08 | Mantido. Migrado pro `transaction-service` |
+| ~~`survival-service.js`~~ | 236 | 11/07 | (X) **Apagado.** Mexe em ActorValue, que o death-service lê |
 | `crafting-service.js` | 139 | 11/07 | Independente, coerente |
 | `housing-service.js` | 187 | 11/07 | Independente, coerente |
 | `jobs-service.js` | 159 | 12/07 | Independente, coerente |
@@ -28,7 +30,7 @@ Todos exceto `economy-regional` estão parados desde julho.
 
 ---
 
-## 1. `justice-service.js` — recomendo **apagar**
+## 1. `justice-service.js` — **apagado**
 
 É a implementação anterior de algemas, prisão e ficha criminal. Cada função dele tem equivalente no `governance-service.js`, que está ativo e é mais completo:
 
@@ -46,7 +48,7 @@ Manter as duas é um risco concreto: alguém revive a antiga achando que é a at
 
 **Não há nada a salvar.** Está no histórico do git se alguém precisar consultar.
 
-## 2. `economy-service.js` — recomendo **apagar**, e é o mais urgente
+## 2. `economy-service.js` — **apagado** (era o mais urgente)
 
 104 linhas que mexem em ouro **sem atomicidade e sem ledger**:
 
@@ -58,17 +60,23 @@ Compare com `core/transaction-service.js`, que faz `BEGIN` / `SELECT ... FOR UPD
 
 O risco não é teórico: **seis módulos PARKED importam este arquivo** (`economy-regional`, `faction`, `horse`, `housing`, `trade`). Reativar qualquer um deles hoje traria a economia insegura junto, silenciosamente, contornando toda a proteção que o `transaction-service` existe pra dar.
 
-Qualquer módulo que voltar deve usar `core/transaction-service`. Apagar o antigo é o que garante isso — enquanto ele existir, o caminho fácil continua sendo o errado.
+Qualquer módulo que voltar deve usar `core/transaction-service`. Apagar o antigo é o que garante isso — enquanto ele existisse, o caminho fácil continuaria sendo o errado.
 
-## 3. `faction-service.js` — recomendo **apagar a parte duplicada, decidir o resto**
+**Os três que ficaram e o importavam foram migrados** (`economy-regional`, `horse`, `housing`): `economy.addGold(id, n)` virou `transactionService.addGold({characterId, amount, reason, module})`, que é atômico e grava em `gold_transactions`. O `trade-service` importava sem usar — o import morto saiu junto.
+
+## 3. `faction-service.js` — **apagado**
 
 `governance-service.createFaction` já existe e está ativo. O `faction-service` tem a sua própria, além de convite, expulsão e tesouro de facção.
 
 O que ele tem de único (tesouro, membros com rank) sobrepõe conceitualmente `governance_memberships` e `governance_roles`, que já estão em uso. São dois modelos concorrentes de "quem pertence a quê e com qual poder".
 
-**Decisão necessária antes de qualquer código:** facção é um conceito separado de governança, ou é um escopo dentro dela? O schema atual (`governance_memberships` com `scope_type`) sugere a segunda. Se for, o `faction-service` inteiro é redundante.
+**Decidido: facção é um escopo dentro da governança.** O schema já dizia isso (`governance_memberships.scope_type` aceita o valor `faction`), e `governance.createFaction` é estritamente mais completo que o do serviço antigo — cria a facção, monta os cargos padrão via `ensureDefaultRoles`, registra o criador como líder, audita e exige permissão.
 
-## 4. `survival-service.js` — recomendo **apagar**
+O que o `faction-service` tinha de único (tesouro, controle de hold) era construído sobre o `economy-service` inseguro e sobre um segundo modelo de associação. Manter os dois significaria duas respostas possíveis pra pergunta "quem manda nesta facção" — e é assim que se perde o controle de quem manda em quê.
+
+Quando tesouro de facção voltar, nasce dentro da governança, sobre o escopo que já está ativo. O `economy-regional.js` já foi migrado: a checagem de "é o líder do hold?" agora usa `governance.getMembership(characterId, 'faction', holdFactionId)`.
+
+## 4. `survival-service.js` — **apagado**
 
 Aplica fome/sede/fadiga mexendo em `ActorValue` (`StaminaRate`, `CarryWeight`). Dois problemas:
 
@@ -101,14 +109,13 @@ O que **não** se deve fazer é deixá-las sem explicação. Estão listadas em 
 
 ---
 
-## Resumo da recomendação
+## Resultado
 
 | Ação | Arquivos | Linhas |
 |---|---|---|
-| **Apagar** | `justice-service`, `economy-service`, `survival-service` | ~633 |
-| **Decidir primeiro** | `faction-service` | 222 |
-| **Manter estacionado** | `economy-regional`, `crafting`, `housing`, `jobs`, `horse`, `trade`, `disguise` | ~1.205 |
+| **Apagados** | `economy-service`, `justice-service`, `faction-service`, `survival-service` | ~855 |
+| **Mantidos estacionados** | `economy-regional`, `crafting`, `housing`, `jobs`, `horse`, `trade`, `disguise` | ~1.205 |
 
-Se concordar com a coluna "apagar", são três comandos `git rm` — o código continua recuperável no histórico. A ordem importa: `economy-service` só sai depois de confirmar que nenhum módulo que você pretende reativar depende dele.
+Os sete que ficaram não duplicam nada ativo, são coerentes internamente e correspondem a fases futuras do backlog. Os três que mexiam em ouro foram migrados pro `transaction-service` — a dívida que os deixava perigosos saiu junto com o `economy-service`.
 
-**O mais urgente é o `economy-service`**, não por ocupar espaço, mas porque é uma armadilha ativa: ele torna o caminho errado mais fácil que o certo para qualquer módulo que volte.
+O código apagado continua no histórico do git.
