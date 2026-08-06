@@ -4,6 +4,27 @@ const path = require('path');
 // precisamos resolver o caminho original do gamemode de forma absoluta usando process.cwd().
 const gamemodeDir = path.resolve(process.cwd(), '../gamemode');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// .env — PRECISA vir antes de qualquer outro require deste arquivo.
+//
+// Duas coisas leem process.env em tempo de *carregamento*, não de boot:
+//   - core/module-registry.js decide o que ligar por process.env[ENABLE_*];
+//   - core/server-options.js faz load() preguiçoso usando NODE_ENV, e
+//     death-service/proximity-ranges chamam get() já no require.
+// Carregar depois significaria ler o ambiente errado nos dois casos.
+//
+// Até 06/08/2026 NADA aqui carregava o arquivo: `dotenv` estava em
+// dependencies, `.env.example` existia, CONTRIBUTING.md §1 e
+// FASE_0_ROTEIRO.md mandavam preencher `skymp/gamemode/.env` — e quem lia
+// esse arquivo era o `apps/web/server.js`, pra si mesmo. Resultado: todas as
+// flags ENABLE_* chegavam indefinidas no registry e TODO módulo lab ficava
+// desativado, sem erro nenhum. Ligar governança no .env simplesmente não
+// fazia nada, e o log dizia "DESATIVADO (... =false ou não definido)".
+//
+// `quiet` evita o banner do dotenv no stdout do servidor; a ausência do
+// arquivo não é erro (defaults valem), então o resultado não é checado.
+require('dotenv').config({ path: path.join(gamemodeDir, '.env'), quiet: true });
+
 const db            = require(path.join(gamemodeDir, 'database'));
 const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
 const commands      = require(path.join(gamemodeDir, 'commands'));
