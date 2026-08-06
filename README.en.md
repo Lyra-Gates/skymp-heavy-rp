@@ -1,8 +1,10 @@
-# SkyMP Heavy RP Ecosystem
+# SkyMP Heavy RP — a roleplay server for Skyrim multiplayer
 
 *[Português](README.md) · **English***
 
-An open, current server base for **strict roleplay** on [SkyMP](https://github.com/skyrim-multiplayer/skymp) (Skyrim Special Edition multiplayer).
+An open, current **RP server base for Skyrim Special Edition multiplayer**, built on [SkyMP](https://github.com/skyrim-multiplayer/skymp). Node.js gamemode, whitelist panel, Electron launcher and modpack parity verification.
+
+Built for *strict roleplay*: server authority over economy, identity and consequence, without compromising network sync.
 
 > **Why this exists:** as of August 2026, the SkyMP community has no open, maintained RP server base. The only public one — [Red House](https://github.com/alekcey0211/red-house-public) — has been unmaintained since 2021 and is Russian-only. This project aims to fill that gap.
 
@@ -84,6 +86,22 @@ Entry points are bilingual. **Deep technical documentation stays in Portuguese**
 That's a maintenance decision, not an oversight. Roughly 26 technical documents change often, and a stale translation is worse than no translation — it's a document people trust that quietly lies. Keeping one authoritative version means it stays correct.
 
 If a specific document blocks you, open an issue and we'll translate that one. Machine translation handles these files reasonably well since they're plain Markdown.
+
+---
+
+## Related projects
+
+If you're searching for a Skyrim multiplayer RP server, you'll run into these. Here's where each one stands:
+
+| Project | What it is | Status |
+|---|---|---|
+| [skyrim-multiplayer/skymp](https://github.com/skyrim-multiplayer/skymp) | The platform. C++ server, Skyrim Platform and TypeScript SDK. **This project runs on top of it.** | Active |
+| [alekcey0211/red-house-public](https://github.com/alekcey0211/red-house-public) | Public RP server build, GPL-3.0. The only one that existed. Studied in detail [here](docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md). | Unmaintained since 2021, Russian-only |
+| [alekcey0211/skymp5-scripts](https://github.com/alekcey0211/skymp5-scripts) | Papyrus scripts for RP, same author as Red House. | Unmaintained since 2021 |
+| [skyrim-roleplay](https://github.com/skyrim-roleplay) (Keizaal Online) | An RP server's organization. The SkyMP fork is public; the gamemode isn't. | Active, RP code closed |
+| [Silveira-Software/SKYRIMRP-BR](https://github.com/Silveira-Software/SKYRIMRP-BR) | Brazilian RP server, PT-BR. The repo is announcements only — the code is closed. | Active, closed source |
+
+**The gap this project tries to fill:** active servers keep their gamemode closed, and the only open one has been dormant for years. Anyone wanting to build an RP server today has nothing to start from.
 
 ---
 
