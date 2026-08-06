@@ -197,7 +197,8 @@ assert.match(query.sql, /FOR UPDATE/, 'without the lock, two purchases duplicate
 
 ## 7. Reporting problems
 
-- **Bug or idea**: open an issue. Say which service, what you expected, what happened.
+- **Question, loose idea, or help request**: [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions). That's where the answer stays visible for whoever comes next.
+- **Bug or concrete proposal**: open an issue. Say which service, what you expected, what happened.
 - **Security issue**: **don't open a public issue** — see [SECURITY.en.md](SECURITY.en.md).
 - **Question about a mod**: the [Mods × Gamemode Contract](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 has a four-question test that settles most cases.
 

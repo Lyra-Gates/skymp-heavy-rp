@@ -20,6 +20,7 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 | Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
 | Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 30 documentos |
 | Reportar falha de segurança | [SECURITY.md](SECURITY.md) — **não abra issue pública** |
+| Perguntar, propor ou mostrar o que fez | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
 ## Status Atual do Projeto (Auditoria Recente)
 

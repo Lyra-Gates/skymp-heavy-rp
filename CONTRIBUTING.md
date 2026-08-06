@@ -202,7 +202,8 @@ assert.match(query.sql, /FOR UPDATE/, 'sem lock, duas compras duplicam o item');
 
 ## 7. Reportando problemas
 
-- **Bug ou ideia**: abra uma issue. Diga qual serviço, o que esperava e o que aconteceu.
+- **Dúvida, ideia solta ou pedido de ajuda**: [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions). É onde a resposta fica visível pra quem vier depois.
+- **Bug ou proposta concreta**: abra uma issue. Diga qual serviço, o que esperava e o que aconteceu.
 - **Falha de segurança**: **não abra issue pública** — ver [SECURITY.md](SECURITY.md).
 - **Dúvida sobre um mod**: `docs/technical/MODS_AND_GAMEMODE_CONTRACT.md` §4 tem um teste de quatro perguntas que resolve a maioria dos casos.
 

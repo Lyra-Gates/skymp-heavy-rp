@@ -22,6 +22,7 @@ Built for *strict roleplay*: server authority over economy, identity and consequ
 | Know if a mod works on the server | [Mods × Gamemode Contract](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
 | Browse all documentation | [docs/README.md](docs/README.md) |
 | Report a security issue | [SECURITY.en.md](SECURITY.en.md) — **do not open a public issue** |
+| Ask, propose, or show what you built | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
 **Language note:** entry-point documents (this README, contributing and security guides) are maintained in Portuguese and English. Deep technical documentation is **Portuguese only** — see [Documentation language](#documentation-language) below.
 

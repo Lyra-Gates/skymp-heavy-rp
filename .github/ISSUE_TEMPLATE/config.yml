@@ -1,0 +1,25 @@
+# Issue é pra bug e proposta concreta. Pergunta, ideia solta e pedido de ajuda
+# vão pra Discussions — mantém o rastreador limpo e a conversa num lugar onde
+# outras pessoas encontram a resposta depois.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Dúvida ou pedido de ajuda
+    url: https://github.com/vinicius3232/skymp-heavy-rp/discussions/categories/q-a
+    about: Não conseguiu subir o servidor, dúvida sobre a API do SkyMP, ou algo que não entendeu na documentação. Pergunte aqui — a resposta fica visível pra quem vier depois.
+
+  - name: Ideia ou discussão de design
+    url: https://github.com/vinicius3232/skymp-heavy-rp/discussions/categories/ideas
+    about: Ideia de mecânica de RP, sugestão de arquitetura, ou algo que você quer discutir antes de virar proposta.
+
+  - name: Mostre o que você fez
+    url: https://github.com/vinicius3232/skymp-heavy-rp/discussions/categories/show-and-tell
+    about: Rodou um servidor com esta base? Fez um módulo? Conta pra gente — serve de referência pra comunidade.
+
+  - name: Falha de segurança
+    url: https://github.com/vinicius3232/skymp-heavy-rp/security/advisories/new
+    about: NÃO abra issue nem discussion pública. Use o canal privado de Security Advisory.
+
+  - name: Documentação em inglês
+    url: https://github.com/vinicius3232/skymp-heavy-rp/blob/main/README.en.md
+    about: Entry points are available in English. Deep technical docs are Portuguese-only — ask in Discussions if a specific document blocks you.
