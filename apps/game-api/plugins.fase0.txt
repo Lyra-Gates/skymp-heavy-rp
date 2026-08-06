@@ -1,0 +1,26 @@
+# Load order de referencia da Fase 0 — SkyMP Heavy RP
+#
+# Jogo base + Creation Club + USSEP. NENHUM mod de gameplay, de proposito:
+# a Fase 0 testa o gamemode, nao o modpack, e todo plugin a mais ocupa um
+# indice de load order que desloca os FormIDs gravados no banco
+# (docs/technical/MODS_AND_GAMEMODE_CONTRACT.md secao 3).
+#
+# TODOS os testadores precisam desta mesma lista, exatamente nesta ordem.
+#
+# Fora daqui de proposito: JK's Skyrim (lista negra, docs/MODDING_GUIDELINES.md
+# secao "Lista Negra", item 1 — reposiciona NPCs e conflita com a autoridade
+# do servidor sobre atores, que as etapas 5 e 6 exercitam), alem de
+# Apothecary, Cloaks&Capes, Simple Fishing Overhaul e SkyUI, que sao mod de
+# gameplay/UI e nao precisam existir pra validar o gamemode.
+
+*Skyrim.esm
+*Update.esm
+*Dawnguard.esm
+*HearthFires.esm
+*Dragonborn.esm
+*ccBGSSSE001-Fish.esm
+*ccQDRSSE001-SurvivalMode.esl
+*ccBGSSSE037-Curios.esl
+*ccBGSSSE025-AdvDSGS.esm
+*_ResourcePack.esl
+*unofficial skyrim special edition patch.esp
