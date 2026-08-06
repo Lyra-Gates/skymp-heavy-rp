@@ -9,7 +9,7 @@
     "test": "node --test queue.test.js modsManifest.test.js",
     "generate-manifest": "node scripts/generate-mods-manifest.js"
   },
-  "license": "ISC",
+  "license": "AGPL-3.0-or-later",
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^4.22.2",

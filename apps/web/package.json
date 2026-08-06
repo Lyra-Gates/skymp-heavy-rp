@@ -16,5 +16,6 @@
     "mysql2": "^3.22.6",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4"
-  }
+  },
+  "license": "AGPL-3.0-or-later"
 }

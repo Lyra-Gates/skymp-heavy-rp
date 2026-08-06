@@ -34,5 +34,6 @@
     "vite-plugin-electron": "^1.1.0",
     "vite-plugin-electron-renderer": "^1.0.0",
     "wait-on": "^9.0.10"
-  }
+  },
+  "license": "AGPL-3.0-or-later"
 }

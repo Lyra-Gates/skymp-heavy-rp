@@ -12,9 +12,10 @@ A documentação do projeto está dividida em diretórios para fácil manutenç�
 3. **[Contrato Mods × Gamemode (MODS_AND_GAMEMODE_CONTRACT.md)](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md):** O outro lado do anterior — o que tecnicamente acontece com um mod dentro de um cliente conectado, por que scripts Papyrus de mod não produzem estado, e o teste de 4 perguntas pra classificar um mod.
 4. **[Distribuição pelo Launcher (LAUNCHER_DISTRIBUTION.md)](docs/technical/LAUNCHER_DISTRIBUTION.md):** Como o cliente e o modpack são entregues e verificados, e por que não usamos Nexus Collections.
 5. **[Referência do SkyMP Upstream (SKYMP_UPSTREAM_REFERENCE.md)](docs/technical/SKYMP_UPSTREAM_REFERENCE.md):** O que o SkyMP já entrega e nós não usamos — `mp.makeEventSource` (eventos no lugar do nosso polling de 2s), DevTools do navegador in-game em `localhost:9000`, live reload da UI, e o mapa de portas.
-6. **[Decisão sobre Serviços PARKED (PARKED_SERVICES_DECISION.md)](docs/technical/PARKED_SERVICES_DECISION.md):** Análise dos 11 serviços que existem no disco e nunca rodam, com recomendação por arquivo. Nada foi apagado — a decisão é de quem toca o servidor.
-7. **[Relatório de QA e Plano de Melhorias](docs/technical/QA_REPORT_2026-08.md):** Estado real de cada componente, o que é stub, o que está estacionado e o plano priorizado pra deixar o servidor funcional ponta a ponta. **Comece por aqui se você acabou de chegar no projeto.**
-8. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
+6. **[Decisão sobre Serviços PARKED (PARKED_SERVICES_DECISION.md)](docs/technical/PARKED_SERVICES_DECISION.md):** Análise dos serviços que existiam no disco sem nunca rodar. Quatro foram apagados em 06/08/2026 (o mais urgente mexia em ouro sem transação nem ledger); sete continuam estacionados.
+7. **[Guia da Build Pública (PUBLIC_BUILD_GUIDE.md)](docs/technical/PUBLIC_BUILD_GUIDE.md):** O que precisa estar verdadeiro antes de publicar a build pra comunidade — o que vai no pacote, o que nunca pode ir, e a exigência de AGPL §13 de dar o link da fonte aos jogadores.
+8. **[Relatório de QA e Plano de Melhorias](docs/technical/QA_REPORT_2026-08.md):** Estado real de cada componente, o que é stub, o que está estacionado e o plano priorizado pra deixar o servidor funcional ponta a ponta. **Comece por aqui se você acabou de chegar no projeto.**
+9. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
 
 ## Status Atual do Projeto (Auditoria Recente)
 
@@ -55,3 +56,19 @@ O script pré-checa `.env` e `node_modules` de cada serviço e diz o que não va
 - O servidor SkyMP faz **proxy da UI pra um dev server na porta 1234**, se houver um rodando — live reload de CSS/JS da UI sem reiniciar nada.
 
 Mais em [SKYMP_UPSTREAM_REFERENCE.md](docs/technical/SKYMP_UPSTREAM_REFERENCE.md).
+
+---
+
+## Licença
+
+Este projeto é software livre sob **[GNU AGPL-3.0-or-later](LICENSE)**.
+
+A escolha é deliberada: o objetivo é ser uma **build pública e atual de servidor RP para a comunidade SkyMP** — hoje não existe nenhuma, já que o [Red House](https://github.com/alekcey0211/red-house-public) parou em 2021. AGPL não nos custa nada que já não pretendíamos dar, e protege o objetivo: quem modificar esta base e rodar um servidor **precisa oferecer as modificações aos jogadores** (AGPL §13).
+
+É também a mesma licença do `skymp5-server`, sobre o qual tudo aqui roda.
+
+Se você rodar uma versão modificada, o link da fonte precisa apontar pra **sua** versão. Ver [PUBLIC_BUILD_GUIDE.md](docs/technical/PUBLIC_BUILD_GUIDE.md) §3 e [LICENSE_AND_AFFILIATION_POLICY.md](docs/technical/LICENSE_AND_AFFILIATION_POLICY.md).
+
+**A licença cobre o nosso código, não mods de terceiros nem assets da Bethesda.** Nada da Bethesda é redistribuído aqui — você precisa possuir o Skyrim.
+
+> Este projeto é uma iniciativa independente da comunidade. Não é afiliado, endossado ou patrocinado pela Bethesda Softworks, ZeniMax Media, Microsoft ou qualquer detentor oficial da marca The Elder Scrolls/Skyrim. Todas as marcas pertencem aos seus respectivos proprietários.
