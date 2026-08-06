@@ -1,5 +1,32 @@
 # Decisao Tecnica Sobre NPCs
 
+> **Estado do codigo (06/08/2026): a Opcao C passou a ser o que o
+> `npc-cleaner.js` faz.** Ate esta data o servico implementava a **Opcao B na
+> forma mais extrema**: varria `mp.getActorsByProfileId(0)` e chamava
+> `disable` + `delete` em todo ator encontrado, pulando apenas os de uma
+> allowlist — que estava vazia. Ou seja, apagava mercadores, guardas e NPCs de
+> quest a cada 60 segundos, e `delete` numa referencia persistente nao volta.
+>
+> O que mudou:
+>
+> - **A lista virou de bloqueio, nao de permissao.** So sai do mundo o que
+>   estiver listado; lista vazia nao remove nada. O modo de falha aponta pro
+>   lado seguro.
+> - **`safeRadius` passou a existir.** Era declarado no config com o comentario
+>   "limpa apenas NPCs longe dos players" e nunca era lido — o comentario
+>   descrevia um recurso que nao estava escrito.
+> - **`delete` saiu.** So `disable`, que e reversivel. Enquanto a curadoria da
+>   secao 4 abaixo nao existir, nada aqui deve ser irreversivel.
+>
+> A lista vive em `skymp/config/npc-policy.json` (modelo em
+> `npc-policy.example.json`) e guarda `baseDesc` (`"1a6a0:Skyrim.esm"`), nunca
+> FormID numerico — ver o contrato de FormID em
+> [MODS_AND_GAMEMODE_CONTRACT.md](MODS_AND_GAMEMODE_CONTRACT.md) secao 3.
+>
+> **A secao 4 continua pendente**: as listas de permitidos e bloqueados ainda
+> nao foram curadas. Ate la o servico e inerte por construcao, mesmo com
+> `ENABLE_NPC_CLEANER=true`.
+
 ## 1. Problema
 
 Um servidor Heavy RP publico precisa decidir como lidar com NPCs vanilla, porque NPCs afetam performance, imersao, economia, lei, combate e papel dos jogadores.

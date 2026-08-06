@@ -41,6 +41,19 @@ function removeActiveCharacter(actorId) {
     identity.forgetKnownIdentities(char.characterId);
     characterState.cleanup(char.characterId);
     inventoryService.clearSyncCache(char.characterId);
+
+    // O staffCache do admin-service e chaveado por actorId, nao por conta — e o
+    // SkyMP reaproveita actorId entre sessoes. Sem limpar aqui, o cargo ficava
+    // preso ao slot: quem entrasse depois no mesmo actorId herdava `ban`,
+    // `set_gold` e `retire_character` de um admin que ja tinha saido.
+    // `registerStaffRole` so e chamado no login (whitelist.js), entao nada
+    // reescrevia a entrada obsoleta pra um jogador comum.
+    //
+    // require preguicoso pelo mesmo motivo dos handlers de staff abaixo:
+    // admin-service requer este modulo no topo, entao importar la em cima
+    // fecharia o ciclo.
+    require('./admin-service').removeStaffRole(actorId);
+
     activeCharacters.delete(actorId);
   }
 }

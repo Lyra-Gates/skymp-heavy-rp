@@ -38,8 +38,13 @@ function chopWood(actorId) {
   // RP Action
   commands.broadcastProximityMessage(actorId, `* Começa a cortar lenha energicamente.`, 1500);
 
-  // Toca a animacao do Skyrim (se disponivel no ator)
-  // mp.callPapyrusFunction('global', 'Debug', 'SendAnimationEvent', actorId, ['WoodChopping']);
+  // Toca a animacao do Skyrim (se disponivel no ator).
+  // `Debug.SendAnimationEvent` e global: o `self` e null e a referencia do ator
+  // vai como ARGUMENTO — e argumento que e referencia tambem precisa ser objeto
+  // (ver core/papyrus.js e o achado 2.13 do QA_REPORT). A versao anterior desta
+  // linha passava `actorId` cru na posicao do self, que e invalida nas duas
+  // contas; ficaria assim se alguem descomentasse sem reler o contrato.
+  // mp.callPapyrusFunction('global', 'Debug', 'SendAnimationEvent', null, [actorRef(actorId), 'WoodChopping']);
   
   mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Cortando lenha... aguarde.']);
 

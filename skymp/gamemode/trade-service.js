@@ -1,5 +1,16 @@
-const db = require('./database');
-const inventory = require('./inventory-service');
+// PARKED — ver docs/technical/PARKED_SERVICES_DECISION.md §6.
+//
+// Este servico nao mexe em ouro nem em item: ele so negocia o *convite* de
+// troca e guarda a sessao em memoria. A transferencia em si nunca foi
+// escrita — e quando for, o caminho obrigatorio e
+// `core/transaction-service.transfer()`, que move item e ouro dos dois lados
+// numa transacao so. Nao replicar a movimentacao aqui.
+//
+// `db` e `inventory-service` estavam importados e nunca usados desde o commit
+// original. Ficavam sugerindo que a persistencia ja existia — e o proximo a
+// mexer aqui comecaria escrevendo `db.query` em vez de chamar o
+// transaction-service, que e exatamente o erro que o `economy-service`
+// apagado cometia.
 const commands = require('./commands');
 
 // Armazena sessoes ativas. Chave: actorId do iniciador.

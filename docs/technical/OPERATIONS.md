@@ -71,6 +71,14 @@ A matriz vigente está em [`permissions.behavior.test.js`](../../skymp/gamemode/
 
 `/permakill` nunca chega ao moderador de propósito: morte permanente é revisão de staff sênior, não decisão de linha de frente.
 
+**`/setgold` deixa rastro na economia, não só no `audit_logs`.** Ele passa pelo `core/transaction-service`, então toda alteração vira linha em `gold_transactions` com `reason='staff_setgold'`. Para auditar o que a staff moveu:
+
+```sql
+SELECT * FROM gold_transactions WHERE reason = 'staff_setgold' ORDER BY id DESC;
+```
+
+Até 06/08/2026 o comando fazia `UPDATE characters SET gold = ?` direto: o `audit_logs` registrava a intenção, mas o saldo deixava de fechar com a soma do ledger e não havia como distinguir ouro concedido pela staff de ouro duplicado por bug.
+
 **Se um comando novo entrar sem cobertura na matriz, o teste falha.** É deliberado — comando de staff sem ninguém verificando quem pode usar nasce como porta aberta.
 
 ---

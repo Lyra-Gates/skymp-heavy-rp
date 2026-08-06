@@ -155,3 +155,67 @@ describe('admin-service — hasPermission valida o argumento', () => {
     assert.strictEqual(allowed, false, 'moderador não pode aposentar personagem');
   });
 });
+
+/**
+ * O cargo de staff vive num cache chaveado por actorId — e o SkyMP reaproveita
+ * actorId entre sessões. `registerStaffRole` só roda no login (whitelist.js),
+ * então nada reescreve a entrada quando o slot muda de dono: um jogador comum
+ * que entrasse no actorId de um admin que saiu herdava o cargo inteiro.
+ *
+ * O teste é de sessão, não de permissão: o cargo está correto nos dois momentos.
+ * O que se verifica é que a desconexão limpa o cache — por isso ele chama
+ * `commands.removeActiveCharacter`, que é o caminho real da desconexão em
+ * `phase0-basic.js`, e não `admin.removeStaffRole` direto (que só provaria que
+ * a função existe, que era exatamente o estado anterior: exportada, testada e
+ * nunca chamada em produção).
+ */
+describe('admin-service — cargo não sobrevive à desconexão', () => {
+  const SAINDO_ACTOR_ID = 0xff00a003;
+  const CONTA_DO_ADMIN = 77;
+
+  beforeEach(async () => {
+    staffRoleRow = { role: 'owner' };
+    commands.registerActiveCharacter(
+      SAINDO_ACTOR_ID,
+      { id: 7700, first_name: 'Admin', last_name: 'Saindo' },
+      CONTA_DO_ADMIN,
+      3
+    );
+    admin.removeStaffRole(SAINDO_ACTOR_ID);
+    await admin.registerStaffRole(SAINDO_ACTOR_ID, CONTA_DO_ADMIN);
+  });
+
+  it('o cargo vale enquanto o jogador está conectado', () => {
+    assert.strictEqual(admin.getRole(SAINDO_ACTOR_ID), 'owner');
+    assert.strictEqual(admin.hasPermission(SAINDO_ACTOR_ID, 'retire_character'), true);
+  });
+
+  it('removeActiveCharacter limpa o cargo do actorId', () => {
+    commands.removeActiveCharacter(SAINDO_ACTOR_ID);
+
+    assert.strictEqual(
+      admin.getRole(SAINDO_ACTOR_ID), null,
+      'o cargo continuou no cache depois da desconexão'
+    );
+  });
+
+  it('quem herda o actorId depois não herda a permissão junto', () => {
+    commands.removeActiveCharacter(SAINDO_ACTOR_ID);
+
+    // Mesmo actorId, outra pessoa: conta sem cargo nenhum em staff_roles.
+    staffRoleRow = null;
+    commands.registerActiveCharacter(
+      SAINDO_ACTOR_ID,
+      { id: 8800, first_name: 'Jogador', last_name: 'Comum' },
+      99,
+      4
+    );
+
+    for (const permissao of ['kick', 'ban', 'set_gold', 'retire_character']) {
+      assert.strictEqual(
+        admin.hasPermission(SAINDO_ACTOR_ID, permissao), false,
+        `jogador comum herdou '${permissao}' do admin que ocupava este actorId antes`
+      );
+    }
+  });
+});

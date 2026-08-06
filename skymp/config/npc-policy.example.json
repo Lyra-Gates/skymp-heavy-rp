@@ -1,0 +1,21 @@
+{
+  "enabled": false,
+  "notes": "Copie para npc-policy.json e preencha blockedBaseDescs. Enquanto a lista estiver vazia o servico nao remove NADA, mesmo com enabled=true. Ver docs/technical/NPC_POLICY_DECISION.md.",
+
+  "_sobre_blockedBaseDescs": "Lista de BLOQUEIO, nao de permissao. So o que esta aqui e removido. A versao anterior deste servico usava o inverso (uma allowlist vazia removia o mundo inteiro).",
+  "blockedBaseDescs": [],
+
+  "_sobre_o_formato": "Use o desc 'idHex:plugin.esm', nunca o FormID numerico. O primeiro byte de um FormID e o indice de load order, entao o mesmo numero aponta pra records diferentes em clientes com load order diferente (MODS_AND_GAMEMODE_CONTRACT.md secao 3). O desc carrega o plugin no proprio valor e sobrevive a reordenacao.",
+  "_exemplo_de_entrada": {
+    "baseDesc": "1a6a0:Skyrim.esm",
+    "porque": "exemplo — substitua por records reais depois da curadoria da secao 4 do NPC_POLICY_DECISION"
+  },
+
+  "_sobre_safeRadius": "NPC a esta distancia ou menos de um jogador conectado nao e tocado, pra que ninguem veja um ator sumir na frente. Infinity nao e aceito; use um numero.",
+  "safeRadius": 5000,
+
+  "sweepIntervalMs": 60000,
+
+  "_sobre_mode": "'disable' desliga o ator (reversivel com enable). 'delete' NAO existe de proposito: delete numa referencia persistente nao volta, e a decisao de MVP e Spawn Seletivo, nao terra arrasada.",
+  "mode": "disable"
+}

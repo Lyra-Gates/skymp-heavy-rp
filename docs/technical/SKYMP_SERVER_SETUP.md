@@ -132,17 +132,29 @@ Campos minimos a revisar:
 
 O gamemode `phase0-basic.js` deve iniciar com foco em rede, spawn, movimento e persistencia basica.
 
-Servicos avancados ficam desligados por padrao e so devem ser ligados quando o schema e o teste correspondente estiverem prontos:
+Servicos avancados ficam desligados por padrao e so devem ser ligados quando o schema e o teste correspondente estiverem prontos.
+
+Estas sao as flags que existem — uma por descriptor registrado em
+`phase0-basic.js`. A lista completa e comentada vive em
+`skymp/gamemode/.env.example`; copie de la, nao daqui:
 
 ```env
 ENABLE_NPC_CLEANER=false
 ENABLE_DEATH_SERVICE=false
-ENABLE_JUSTICE_SERVICE=false
+ENABLE_GOVERNANCE_SERVICE=false
+ENABLE_MARKET_STALLS_SERVICE=false
+ENABLE_PLAYER_PANEL_SERVICE=false
 ENABLE_VOIP_SERVICE=false
-ENABLE_SURVIVAL_SERVICE=false
-ENABLE_REGIONAL_ECONOMY=false
-ENABLE_FACTION_SERVICE=false
 ```
+
+> Este bloco listava `ENABLE_JUSTICE_SERVICE`, `ENABLE_SURVIVAL_SERVICE`,
+> `ENABLE_FACTION_SERVICE` e `ENABLE_REGIONAL_ECONOMY`, e nao listava
+> governanca, barracas nem painel — ou seja, oferecia quatro flags que nao
+> ligam nada e escondia tres que ligam. Os tres primeiros servicos foram
+> **apagados** em 06/08/2026 (ver [PARKED_SERVICES_DECISION.md](PARKED_SERVICES_DECISION.md));
+> `economy-regional` esta PARKED e sem descriptor, entao a flag dele tambem
+> nao tem efeito. **Flag sem descriptor no registry nao faz nada** — ver
+> `core/module-registry.js` e CONTRIBUTING.md §3.3.
 
 Para laboratorio local com `offlineMode=true`, auto-whitelist de `profileId` 1/2 so pode ser usada com:
 

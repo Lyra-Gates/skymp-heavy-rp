@@ -25,6 +25,7 @@ const inventory = require('./inventory-service');
 const actionPolicy = require('./core/action-policy');
 const admin = require('./admin-service');
 const governance = require('./governance-service');
+const transactionService = require('./core/transaction-service');
 const { actorRef } = require('./core/papyrus');
 
 const MODULE = 'market_stalls';
@@ -33,6 +34,12 @@ const MIN_STALL_DISTANCE = 250;
 const DEFAULT_TAX_RATE = 0.05;
 const MAX_PRICE = 1_000_000;
 const RATE_LIMIT_MS = 2000;
+
+// Mensagens que o jogador PODE ver, porque descrevem uma regra do jogo e não
+// uma falha interna. Tudo o que não casa aqui vira uma frase genérica e o
+// detalhe fica no log — antes, um erro de SQL ia inteiro pra tela de quem
+// clicou em comprar, com nome de tabela e coluna junto.
+const ERROS_DE_REGRA = /indisponivel|propria barraca|Ouro insuficiente|Estoque insuficiente|nao possui/i;
 const VISUAL_CONFIG_PATH = path.resolve(__dirname, '../config/market-stalls.visual.json');
 
 const PERMISSIONS = Object.freeze({
@@ -184,14 +191,22 @@ async function spawnStallVisual(actorId, loc, name) {
     let refId = null;
     if (typeof mp.callPapyrusFunction === 'function') {
       const formToPlace = mp.callPapyrusFunction('global', 'Game', 'getFormEx', null, [baseId]);
-      const anchor = typeof mp.getDescFromId === 'function'
-        ? { type: 'form', desc: mp.getDescFromId(actorId) }
-        : actorId;
+      // O fallback anterior era `: actorId` — o FormID cru, que e exatamente a
+      // forma que o achado 2.13 do QA_REPORT identificou como invalida. Cair
+      // nela quando `getDescFromId` some e pior do que nao colocar a barraca:
+      // a chamada nao lanca, o `placed` volta vazio, e o codigo abaixo so
+      // registra "PlaceAtMe returned no reference" — um erro de contrato
+      // disfarcado de falha de asset. Sem `getDescFromId` nao ha `self`
+      // valido possivel, entao a saida honesta e desistir do visual.
+      if (typeof mp.getDescFromId !== 'function') {
+        console.warn('[market-stalls] Visual spawn indisponivel: mp.getDescFromId ausente, sem self valido pro Papyrus.');
+        return null;
+      }
       const placed = mp.callPapyrusFunction(
         'method',
         'ObjectReference',
         'PlaceAtMe',
-        anchor,
+        actorRef(actorId),
         [formToPlace, 1, true, false]
       );
       refId = placed?.desc && typeof mp.getIdFromDesc === 'function'
@@ -708,43 +723,43 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw) {
     const taxAmount = Math.floor(total * taxRate);
     const sellerAmount = total - taxAmount;
 
-    const [goldRows] = await conn.query('SELECT gold FROM characters WHERE id = ? FOR UPDATE', [buyer.characterId]);
-    if (!goldRows[0] || goldRows[0].gold < total) {
-      throw new Error('Ouro insuficiente.');
-    }
+    // ── Ouro, inventario e ledger pelo core/transaction-service ──────────────
+    //
+    // Estas sao as primitivas `tx.*`, que participam da transacao ABERTA AQUI —
+    // nao as funcoes publicas, que abrem a propria. A distincao e o motivo de
+    // elas existirem: a compra move ouro, baixa estoque, credita o vendedor,
+    // cobra imposto e entrega o item, e ou tudo commita junto ou nada commita.
+    // `removeGold()` seguido de `giveItem()` seriam duas transacoes separadas,
+    // e uma falha no meio deixaria o comprador sem ouro e sem item.
+    //
+    // Ate 06/08/2026 este bloco era SQL escrito a mao aqui dentro: atomico e
+    // com ledger, mas era uma segunda implementacao de "como mexer em ouro",
+    // fora do arquivo que existe pra ser a unica. O `FOR UPDATE` do saldo e a
+    // guarda de saldo negativo estavam duplicados, e correcao no
+    // transaction-service nao alcancava esta funcao.
+    //
+    // `applyGoldDelta` faz o `SELECT ... FOR UPDATE` e recusa saldo negativo
+    // sozinho — por isso o SELECT manual que existia aqui saiu.
+    await transactionService.tx.applyGoldDelta(conn, buyer.characterId, -total);
+    await transactionService.tx.applyGoldDelta(conn, item.owner_character_id, sellerAmount);
 
-    // Transferencia de ouro
-    await conn.query('UPDATE characters SET gold = gold - ? WHERE id = ?', [total, buyer.characterId]);
-    await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [sellerAmount, item.owner_character_id]);
     if (taxAmount > 0 && item.city_id) {
+      // Tesouro de cidade nao e ouro de personagem: nao tem linha em
+      // `gold_transactions` nem passa pelo transaction-service, que e sobre
+      // patrimonio de personagem. O rastro dele e `market_stall_sales.tax_amount`.
       await conn.query('UPDATE cities SET treasury = treasury + ? WHERE id = ?', [taxAmount, item.city_id]);
     }
 
-    // Atualizar estoque da barraca
+    // Estoque da barraca — dominio deste modulo, nao do transaction-service.
     const remaining = item.count - count;
     await conn.query(
       'UPDATE market_stall_items SET count = ?, status = ? WHERE id = ?',
       [remaining, remaining > 0 ? 'listed' : 'sold', itemId]
     );
 
-    // Atualizar inventario do comprador
-    const [existingInv] = await conn.query(
-      'SELECT id FROM character_inventory WHERE character_id = ? AND base_id = ?',
-      [buyer.characterId, item.base_id]
-    );
-    if (existingInv.length > 0) {
-      await conn.query(
-        'UPDATE character_inventory SET count = count + ? WHERE character_id = ? AND base_id = ?',
-        [count, buyer.characterId, item.base_id]
-      );
-    } else {
-      await conn.query(
-        'INSERT INTO character_inventory (character_id, base_id, count) VALUES (?, ?, ?)',
-        [buyer.characterId, item.base_id, count]
-      );
-    }
+    await transactionService.tx.applyInventoryDelta(conn, buyer.characterId, item.base_id, count);
 
-    // Registro de venda
+    // Registro de venda (historico do mercado, alem do ledger da economia)
     await conn.query(
       `INSERT INTO market_stall_sales
         (stall_id, seller_character_id, buyer_character_id, base_id, count, unit_price, tax_amount, city_id)
@@ -752,32 +767,30 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw) {
       [stallId, item.owner_character_id, buyer.characterId, item.base_id, count, item.price, taxAmount, item.city_id]
     );
 
-    // Ledger de ouro com UUID consistente e idempotency key
-    const buyerGoldTxId = uuid();
-    const sellerGoldTxId = uuid();
-    await conn.query(
-      `INSERT INTO gold_transactions
-        (transaction_id, character_id, delta, reason, module, idempotency_key, status)
-       VALUES (?, ?, ?, 'stall_purchase', ?, ?, 'committed'),
-              (?, ?, ?, 'stall_sale', ?, ?, 'committed')`,
-      [buyerGoldTxId, buyer.characterId, -total, MODULE, `${idempotencyKey}_buy_gold`,
-       sellerGoldTxId, item.owner_character_id, sellerAmount, MODULE, `${idempotencyKey}_sell_gold`]
-    );
-
-    // Ledger de inventario com UUID e idempotency key
-    const invTxId = uuid();
-    await conn.query(
-      `INSERT INTO inventory_transactions
-        (transaction_id, character_id, base_id, delta, reason, module, idempotency_key, status)
-       VALUES (?, ?, ?, ?, 'stall_purchase', ?, ?, 'committed')`,
-      [invTxId, buyer.characterId, item.base_id, count, MODULE, `${idempotencyKey}_buy_inv`]
-    );
+    // Ledger: saldo que muda sem linha aqui e ouro sem rastro.
+    await transactionService.tx.recordGoldLedger(conn, {
+      characterId: buyer.characterId, delta: -total,
+      reason: 'stall_purchase', module: MODULE, idempotencyKey: `${idempotencyKey}_buy_gold`
+    });
+    await transactionService.tx.recordGoldLedger(conn, {
+      characterId: item.owner_character_id, delta: sellerAmount,
+      reason: 'stall_sale', module: MODULE, idempotencyKey: `${idempotencyKey}_sell_gold`
+    });
+    await transactionService.tx.recordInventoryLedger(conn, {
+      characterId: buyer.characterId, baseId: item.base_id, delta: count,
+      reason: 'stall_purchase', module: MODULE, idempotencyKey: `${idempotencyKey}_buy_inv`
+    });
 
     await conn.commit();
     itemForClient = { baseId: item.base_id, count, total, taxAmount, sellerCharId: item.owner_character_id };
   } catch (err) {
     await conn.rollback();
-    notify(actorId, err.message);
+    // `err.message` ia direto pro jogador, inclusive quando era erro de SQL —
+    // vazando nome de tabela e coluna pra tela de quem clicou em comprar. As
+    // mensagens de regra continuam passando (o jogador precisa saber que o
+    // ouro nao bastou); o resto vira uma frase generica e o detalhe fica no log.
+    console.error(`[market-stalls] Compra falhou (stall=${stallId} item=${itemId} comprador=${buyer.characterId}):`, err.message);
+    notify(actorId, ERROS_DE_REGRA.test(err.message) ? err.message : 'Nao foi possivel concluir a compra.');
     return;
   } finally {
     conn.release();

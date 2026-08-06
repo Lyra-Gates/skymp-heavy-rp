@@ -18,6 +18,7 @@ const inventory = require('./inventory-service');
 const characterState = require('./core/character-state');
 const actionPolicy = require('./core/action-policy');
 const panelRefreshBus = require('./core/panel-refresh-bus');
+const moduleRegistry = require('./core/module-registry');
 const transactionService = require('./core/transaction-service');
 const rangeUtils = require('./core/range-utils');
 const { actorRef } = require('./core/papyrus');
@@ -789,7 +790,21 @@ async function getInteractionActions(actorId, targetActorId) {
     console.error('[governance] market-stalls hook failed:', err.message);
   }
 
-  if (process.env.ENABLE_REGIONAL_ECONOMY === 'true') {
+  // `moduleRegistry.isEnabled` e nao `process.env.ENABLE_REGIONAL_ECONOMY`.
+  //
+  // A checagem direta de env era uma porta lateral pro registry: bastava a flag
+  // no .env pra este require carregar e EXECUTAR um modulo PARKED — sem passar
+  // pelo registry, sem resolucao de dependencia, sem registro de comando e sem
+  // shutdown. CONTRIBUTING.md 3.3 e explicito ("nunca importe um modulo PARKED
+  // direto"), e o `economy-regional` e justamente o que menos poderia rodar
+  // assim: ele chama `governance.getMembership`, que nao e exportado, e usa um
+  // `factionInfo` que nao existe (ver typecheck).
+  //
+  // `isEnabled` so responde `true` pra modulo que o registry inicializou de
+  // fato. Enquanto `economy-regional` nao tiver descriptor em phase0-basic.js,
+  // isto e permanentemente falso — que e o estado correto pra um modulo PARKED.
+  // Reativa-lo continua sendo o que sempre foi: escrever o descriptor.
+  if (moduleRegistry.isEnabled('economy-regional')) {
     try {
       const economyRegional = require('./economy-regional');
       if (economyRegional && typeof economyRegional.getInteractionSections === 'function') {
@@ -841,7 +856,9 @@ async function handleInteractionAction(actorId, action, payload = {}) {
   }
 
   if (action.startsWith('npc.')) {
-    if (process.env.ENABLE_REGIONAL_ECONOMY !== 'true') {
+    // Mesmo motivo do hook em getInteractionActions: quem decide se um modulo
+    // roda e o registry, nunca uma leitura solta de process.env.
+    if (!moduleRegistry.isEnabled('economy-regional')) {
       notify(actorId, 'Economia regional desativada neste servidor.');
       return;
     }

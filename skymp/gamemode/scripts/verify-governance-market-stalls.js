@@ -237,6 +237,41 @@ addCheck('flags de ambiente', () => {
   ]);
 });
 
+// Este check nasceu porque o de cima dava [PASS] enquanto o .env NAO era lido
+// por ninguem: conferir que a flag existe no .env.example prova que alguem
+// escreveu a linha, nao que ligar a linha faz alguma coisa. Durante meses o
+// gamemode nunca carregou o arquivo, entao todo modulo lab ficava desativado
+// e o unico sintoma era a mensagem "DESATIVADO (... nao definido)" no boot.
+//
+// A ordem importa e por isso e verificada: module-registry le
+// process.env[ENABLE_*] em bootAll(), mas core/server-options.js faz load()
+// preguicoso no primeiro get() — e death-service/proximity-ranges chamam get()
+// ainda no require. Carregar o .env depois de qualquer um desses requires
+// significa ler o ambiente errado sem nenhum erro aparecer.
+addCheck('phase0 carrega o .env antes de tudo', () => {
+  const source = readText(path.join(gamemodeDir, 'phase0-basic.js'));
+
+  const dotenvAt = source.indexOf("require('dotenv')");
+  assert(dotenvAt !== -1, "phase0-basic.js nao carrega dotenv — as flags ENABLE_* nunca chegam no process.env");
+  assert(
+    source.slice(dotenvAt, dotenvAt + 200).includes('.env'),
+    'phase0-basic.js chama dotenv sem apontar para o arquivo .env do gamemode'
+  );
+
+  const registryAt = source.indexOf("'core', 'module-registry'");
+  assert(registryAt !== -1, 'phase0-basic.js nao requer o module-registry');
+  assert(
+    dotenvAt < registryAt,
+    'dotenv precisa ser carregado ANTES do module-registry, senao bootAll() le process.env vazio'
+  );
+
+  const optionsAt = source.indexOf("'core', 'server-options'");
+  assert(
+    optionsAt === -1 || dotenvAt < optionsAt,
+    'dotenv precisa ser carregado ANTES do server-options, que resolve o arquivo por NODE_ENV'
+  );
+});
+
 addCheck('config visual de exemplo', () => {
   validateVisualConfigExample(rel('skymp', 'config', 'market-stalls.visual.example.json'));
 });
