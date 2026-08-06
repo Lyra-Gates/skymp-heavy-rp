@@ -11,6 +11,14 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **A compra em barraca tinha a própria implementação de "como mexer em ouro".** `buyItem` escrevia o SQL de saldo e de inventário à mão dentro da transação dele — atômico e com ledger, então não era inseguro, mas era uma segunda implementação fora do arquivo que existe pra ser a única. O `SELECT ... FOR UPDATE` do saldo e a guarda de saldo negativo estavam duplicados, e correção no `core/transaction-service` não alcançava a compra.
+
+  Não dava pra resolver chamando as funções públicas do `transaction-service`: cada uma abre a própria transação, e a compra move ouro, baixa estoque, credita o vendedor, cobra imposto e entrega o item — ou tudo commita junto, ou o comprador fica sem ouro e sem item. As primitivas internas já recebiam a conexão como argumento; passaram a ser exportadas como `tx.*`, com o contrato explícito de que quem chama é dono da transação.
+
+  Junto: `err.message` ia direto pro jogador no `catch`, inclusive quando era erro de SQL — nome de tabela e coluna na tela de quem clicou em comprar. As mensagens de regra continuam passando; o resto vira uma frase genérica e o detalhe fica no log.
+
+  `buyItem` não tinha **nenhum** teste de comportamento — o único que existia conferia que a função estava exportada. Ganhou 10, verificados por mutação: remover um lançamento do ledger reprova, e trocar as primitivas pelas funções públicas (quebrando a transação única) reprova em três.
+
 - **O `npc-cleaner` apagava o mundo, e implementava a opção que a decisão técnica rejeitou.** Ele varria `mp.getActorsByProfileId(0)` e chamava `disable` **e `delete`** em todo ator encontrado, pulando apenas os de uma allowlist — que estava vazia, com um comentário "adicione IDs base de mercadores essenciais aqui". Na prática: mercadores, guardas e NPCs de quest apagados a cada 60 segundos, e `delete` numa referência persistente não volta. O [NPC_POLICY_DECISION](docs/technical/NPC_POLICY_DECISION.md) avaliou três opções e escolheu a **C — Vanilla Spawn Seletivo**; o código implementava a B, rejeitada, na forma mais extrema.
 
   Três inversões: a lista virou **de bloqueio** (lista vazia agora remove nada em vez de tudo — o modo de falha aponta pro lado seguro), o `safeRadius` **passou a existir de verdade** (era declarado com o comentário "limpa apenas NPCs longe dos players" e nunca lido: o comentário descrevia um recurso que não estava escrito), e o `delete` saiu — só `disable`, que é reversível. A lista guarda `baseDesc` e não FormID numérico, porque o primeiro byte de um FormID é o índice de load order. Config em `skymp/config/npc-policy.json`, serviço inerte enquanto ela não for curada. 8 testes, onde antes não havia nenhum.

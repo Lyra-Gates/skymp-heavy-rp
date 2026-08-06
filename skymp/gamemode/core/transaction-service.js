@@ -411,6 +411,49 @@ async function getGold(characterId) {
 
 module.exports = {
   giveItem, removeItem, transfer, hasItem, getGold, addGold, removeGold,
+
+  /**
+   * Primitivas que participam de uma transação **do chamador**.
+   *
+   * ─── Por que isto é exportado ─────────────────────────────────────────────
+   *
+   * As funções públicas acima abrem a própria conexão e a própria transação.
+   * Isso é o certo pra quase tudo, e errado pra uma operação que precisa
+   * commitar junto com outra coisa: a compra em barraca move ouro, baixa
+   * estoque, credita o vendedor, cobra imposto da cidade e entrega o item —
+   * ou tudo acontece, ou nada acontece. Chamar `removeGold()` seguido de
+   * `giveItem()` ali seriam duas transações independentes, e uma falha no meio
+   * deixaria o comprador sem ouro e sem item.
+   *
+   * Antes desta exportação o `market-stalls-service` resolvia isso escrevendo
+   * o próprio SQL de ouro e de inventário dentro da transação dele — atômico e
+   * com ledger, mas era uma segunda implementação de "como mexer em ouro",
+   * fora do arquivo que existe pra ser a única. O `FOR UPDATE` do saldo e a
+   * proteção contra saldo negativo estavam duplicados; qualquer correção aqui
+   * não alcançava lá.
+   *
+   * ─── Contrato ────────────────────────────────────────────────────────────
+   *
+   * - Quem chama **abre, commita e faz rollback** da transação. Estas funções
+   *   não fazem nenhuma das três.
+   * - Elas lançam em caso de regra violada (saldo insuficiente, estoque
+   *   insuficiente). O `rollback` é responsabilidade do chamador.
+   * - `applyGoldDelta` e `applyInventoryDelta` trancam a linha com `FOR UPDATE`
+   *   antes de ler, então duas operações concorrentes no mesmo personagem
+   *   serializam em vez de ambas lerem o valor obsoleto.
+   * - Mudança de saldo ou de item **sem** o `record*Ledger` correspondente é
+   *   ouro ou item sem rastro. Sempre chame os dois.
+   *
+   * Use as funções públicas sempre que a operação for isolada; use estas só
+   * quando ela precisar commitar junto com outra coisa.
+   */
+  tx: {
+    applyGoldDelta: _applyGoldDelta,
+    applyInventoryDelta: _applyInventoryDelta,
+    recordGoldLedger: _recordGoldLedger,
+    recordInventoryLedger: _recordInventoryLedger
+  },
+
   // Exposto só pra teste: garante que o `self` do Papyrus vai como objeto
   // `{type,desc}` e não como FormID cru (ver core/papyrus.js).
   _applyToClient
