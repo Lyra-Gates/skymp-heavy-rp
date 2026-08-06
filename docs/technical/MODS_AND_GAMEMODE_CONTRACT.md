@@ -1,5 +1,7 @@
 # Como um mod se comporta dentro do gamemode
 
+***Português** · [English](MODS_AND_GAMEMODE_CONTRACT.en.md) · [Русский](MODS_AND_GAMEMODE_CONTRACT.ru.md) · [Español](MODS_AND_GAMEMODE_CONTRACT.es.md)*
+
 `docs/MODDING_GUIDELINES.md` diz **o que** é permitido e **por quê** (política, lista negra, fases). Este documento é a outra metade: **o que tecnicamente acontece** com um mod quando ele entra num cliente conectado ao nosso servidor, com base no código que existe hoje em `skymp/gamemode/`.
 
 Serve pra responder, sem achismo, a pergunta que sempre volta: *"esse mod funciona no servidor?"*

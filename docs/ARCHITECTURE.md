@@ -1,5 +1,7 @@
 # Arquitetura do Sistema (SkyMP Heavy RP)
 
+***Português** · [English](ARCHITECTURE.en.md) · [Русский](ARCHITECTURE.ru.md) · [Español](ARCHITECTURE.es.md)*
+
 O servidor de SkyMP Heavy RP opera utilizando uma arquitetura distribuída, separando os serviços críticos para garantir segurança, estabilidade e aderência rígida à regra de **Autoridade do Servidor**.
 
 ## 1. Topologia do Servidor

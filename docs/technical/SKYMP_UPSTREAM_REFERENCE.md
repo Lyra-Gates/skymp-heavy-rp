@@ -1,5 +1,7 @@
 # SkyMP upstream: o que existe e o que dá pra aproveitar
 
+***Português** · [English](SKYMP_UPSTREAM_REFERENCE.en.md) · [Русский](SKYMP_UPSTREAM_REFERENCE.ru.md) · [Español](SKYMP_UPSTREAM_REFERENCE.es.md)*
+
 Levantamento feito em 05/08/2026 direto do repositório oficial (`github.com/skyrim-multiplayer/skymp`, C++, 313 estrelas, último push 25/07/2026).
 
 O objetivo é que ninguém aqui reinvente o que o SkyMP já entrega — e que ninguém tente usar o que ele não entrega.

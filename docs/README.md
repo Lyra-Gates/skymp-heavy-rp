@@ -103,8 +103,22 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 ## Convenções desta documentação
 
 - **Português.** Termos técnicos consagrados ficam em inglês (`whitelist`, `commit`, `hash`).
-- **Sobre o idioma:** os documentos de entrada (`README`, `CONTRIBUTING`, `SECURITY`) são mantidos em **português, inglês, russo e espanhol** — russo porque é a língua nativa da comunidade SkyMP (o upstream e o Red House são russos), espanhol pelo alcance na América Latina. A documentação técnica profunda fica **só em português**, de propósito: são muitos arquivos que mudam com frequência, e tradução desatualizada é pior que tradução ausente — é um texto em que as pessoas confiam e que mente em silêncio. Se algum documento específico bloquear alguém, traduzimos aquele sob demanda.
-- **Traduziu um documento de entrada? Ele entra na lista de troca de idioma dos outros.** Os quatro arquivos de cada família (`X.md`, `X.en.md`, `X.ru.md`, `X.es.md`) carregam a mesma linha de links no topo. Um idioma novo que não seja adicionado nessa linha em todos os arquivos fica invisível.
+- **Sobre o idioma:** existem **oito documentos traduzidos** para inglês, russo e espanhol — os três de entrada (`README`, `CONTRIBUTING`, `SECURITY`) e os cinco que barram um dev de fora (ver a tabela abaixo). Russo porque é a língua nativa da comunidade SkyMP (o upstream e o Red House são russos), espanhol pelo alcance na América Latina. Os outros 21 documentos ficam **só em português** de propósito: são regras de RP, rubricas de staff, backlog e decisões históricas — servem à operação deste servidor, não a quem chega de fora. Tradução desatualizada é pior que tradução ausente: é um texto em que as pessoas confiam e que mente em silêncio. Se algum documento específico bloquear alguém, traduzimos aquele sob demanda.
+- **Mexeu num documento traduzido? Atualize as quatro cópias no mesmo PR.** É a regra que decide se essa tradução vale a pena ou vira dívida. Se não der pra atualizar todas, é melhor apagar as traduções daquele documento do que deixá-las mentindo.
+- **Idioma novo entra na linha de troca de TODOS os arquivos da família.** Os quatro arquivos de cada documento (`X.md`, `X.en.md`, `X.ru.md`, `X.es.md`) carregam a mesma linha de links no topo. Um idioma que não seja adicionado nessa linha em todos eles fica invisível.
+
+### Documentos traduzidos
+
+| Documento | Por que este e não outro |
+|---|---|
+| [`../README.md`](../README.md) · [en](../README.en.md) · [ru](../README.ru.md) · [es](../README.es.md) | Porta de entrada |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) · [en](../CONTRIBUTING.en.md) · [ru](../CONTRIBUTING.ru.md) · [es](../CONTRIBUTING.es.md) | As invariantes que já foram quebradas |
+| [`../SECURITY.md`](../SECURITY.md) · [en](../SECURITY.en.md) · [ru](../SECURITY.ru.md) · [es](../SECURITY.es.md) | Ninguém deve errar o canal de reporte por barreira de idioma |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) · [en](ARCHITECTURE.en.md) · [ru](ARCHITECTURE.ru.md) · [es](ARCHITECTURE.es.md) | Sem isso não dá pra entender o que fala com o quê |
+| [`technical/QA_REPORT_2026-08.md`](technical/QA_REPORT_2026-08.md) · [en](technical/QA_REPORT_2026-08.en.md) · [ru](technical/QA_REPORT_2026-08.ru.md) · [es](technical/QA_REPORT_2026-08.es.md) | É onde está a verdade sobre o que não está pronto |
+| [`technical/MODS_AND_GAMEMODE_CONTRACT.md`](technical/MODS_AND_GAMEMODE_CONTRACT.md) · [en](technical/MODS_AND_GAMEMODE_CONTRACT.en.md) · [ru](technical/MODS_AND_GAMEMODE_CONTRACT.ru.md) · [es](technical/MODS_AND_GAMEMODE_CONTRACT.es.md) | A pergunta mais repetida da comunidade |
+| [`technical/SKYMP_UPSTREAM_REFERENCE.md`](technical/SKYMP_UPSTREAM_REFERENCE.md) · [en](technical/SKYMP_UPSTREAM_REFERENCE.en.md) · [ru](technical/SKYMP_UPSTREAM_REFERENCE.ru.md) · [es](technical/SKYMP_UPSTREAM_REFERENCE.es.md) | Útil pra qualquer servidor SkyMP, mesmo quem não usa esta base |
+| [`technical/SERVER_OPTIONS_SCHEMA.md`](technical/SERVER_OPTIONS_SCHEMA.md) · [en](technical/SERVER_OPTIONS_SCHEMA.en.md) · [ru](technical/SERVER_OPTIONS_SCHEMA.ru.md) · [es](technical/SERVER_OPTIONS_SCHEMA.es.md) | Separa a opção que funciona da que é só intenção |
 - **Diga o que não funciona.** Documento que só descreve o caminho feliz vira mentira com o tempo. Quando algo está incompleto, o texto diz — e vários avisos aqui existem porque a documentação antiga afirmava coisas que o código nunca fez.
 - **Marque a procedência.** Ao afirmar algo sobre o SkyMP, diga se veio da documentação oficial, de teste real ou de leitura de código. As três têm confiabilidades diferentes.
 - **Ao mudar comportamento, atualize o documento no mesmo PR.** Documentação desatualizada custa mais caro que documentação ausente: ela é confiada.

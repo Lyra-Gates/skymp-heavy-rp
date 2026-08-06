@@ -1,0 +1,115 @@
+# Arquitectura del sistema (SkyMP Heavy RP)
+
+*[Português](ARCHITECTURE.md) · [English](ARCHITECTURE.en.md) · [Русский](ARCHITECTURE.ru.md) · **Español***
+
+El servidor de SkyMP Heavy RP opera con una arquitectura distribuida, separando los servicios críticos para garantizar seguridad, estabilidad y adhesión estricta a la regla de **autoridad del servidor**.
+
+## 1. Topología del servidor
+
+La infraestructura se divide en los siguientes módulos:
+
+### 1.1 Base de datos (MariaDB/MySQL)
+**MariaDB** es la fuente absoluta de verdad. Todos los servicios se conectan a ella.
+- **Tablas principales:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. El esquema completo está en `skymp/packages/database/schema.sql` más las migraciones `v2`–`v8`, aplicadas **en orden** (v6 = `launch_tickets`, v7 = índices de las consultas calientes, v8 = `game_sessions`).
+- Algunas tablas existen en el esquema pero ningún código activo las lee (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — pertenecen a módulos PARKED (ver 1.4).
+- **Regla estricta:** ningún cambio de estado del juego (dinero, posiciones, objetos) ocurre sin ser escrito o leído en MariaDB. Node.js no confía en datos sueltos en memoria durante períodos largos sin persistencia.
+
+### 1.2 Aplicación web y API (`apps/web`)
+Desarrollada en **Express.js / Node.js**.
+- Sirve el panel web (whitelist, staff, perfiles fuera del juego).
+- Le da al **launcher** el intercambio de OAuth de Discord (`POST /api/launcher/oauth/exchange`, que además emite el ticket de lanzamiento) y recibe los crash reports. El manifiesto de mods **no** viene de aquí — viene de `apps/game-api` y de GitHub Releases (ver 1.3.1 y `LAUNCHER_DISTRIBUTION.md`).
+- Autenticación obligatoria mediante `passport-discord`.
+- No confundir con el **panel del jugador in-game** (ver 1.4.2), que corre dentro del propio HUD de SkyMP, no en el navegador.
+- **Solicitud de personaje** (`/api/apply`, `apply.html`): además de nombre y biografía, recoge `motivations`/`weaknesses`/`social_ties` (rúbrica de whitelist Heavy RP — ver `SKYMP_RP_DEVELOPMENT_PLAN.md` §8.1). Una heurística de palabras clave (`detectsStrongConcept` en `server.js`) marca `characters.needs_extra_review` para conceptos fuertes (nobleza, vampirismo, licantropía, Daedra, liderazgo de facción) — no es un bloqueo automático, solo un aviso para que el staff mire con más atención; el staff puede adjuntar `extra_review_notes` desde el panel (`PATCH /api/whitelist/:id`). `skymp/gamemode/whitelist.js` lee `characters` con `ORDER BY id DESC LIMIT 1` al liberar el spawn.
+
+### 1.2.1 Master API (contrato de SkyMP, servido por `apps/web`)
+`GET /api/servers/:masterKey/sessions/:session` → `{ user: { id, discordId } }`
+
+Este endpoint no lo inventamos nosotros: es el que el servidor SkyMP llama cuando `offlineMode: false` (ver `skymp5-server/ts/systems/login.ts` en upstream). El `user.id` que respondemos **se convierte en el `profileId`** del gamemode.
+
+Es la pieza que saca la identidad de las manos del cliente. Con `offlineMode: true`, el cliente declara su propio `profileId` en `skymp_config.json` y el servidor le cree — cualquiera edita el archivo y se vuelve otra persona. Con `offlineMode: false`, el `profileId` viene de aquí, del mismo servicio que autenticó Discord y aprobó la whitelist.
+
+El `master` por defecto de SkyMP es `https://gateway.skymp.net`; apuntarlo a nuestro panel es cambiar una cadena en `server-settings.json`. `masterKey` tiene que coincidir en ambos lados (`MASTER_KEY` en el `.env` del panel).
+
+Las sesiones viven en `game_sessions`, guardadas como hash SHA-256, con `expires_at`, `revoked_at` (ban inmediato sin esperar el TTL) y `resolve_count` (un conteo alto sugiere sesión compartida entre máquinas).
+
+### 1.3 Bot de Discord (`apps/bot-discord`)
+Desarrollado en **discord.js**.
+- Hace de puente entre la cuenta de Discord del usuario y su `profileId` en el juego (`POST /api/sync-role`, llamado por el panel web al aprobar/rechazar una whitelist).
+- **Canales de voz temporales** (`voiceChannels.js`, comandos `/voz-criar <nombre>` y `/voz-fechar`, solo staff): alternativa práctica de voz mientras el VOIP nativo in-game (`/voz`, ver 1.4.4) dependa de un parche de cliente que aún no se aplicó (`docs/technical/VOICE_CLIENT_PATCH.md`). El canal se borra automáticamente ~30s después de quedar vacío. Los comandos se registran al arrancar el bot (`deploy-commands.js` corre en el evento `ready`); un fallo ahí no tumba el bot, pero grita en el log. `npm run deploy-commands` sigue existiendo para ejecutarlo a mano.
+- El envío de logs a canales de moderación **no está implementado** — pese a haber sido la intención original documentada aquí, hoy el bot solo expone el endpoint interno de sincronización de roles y los comandos de voz de arriba.
+
+### 1.3.1 Game API (`apps/game-api`)
+Express, puerto `GAME_API_PORT` (7758) — el puerto que el launcher siempre llamó y para el cual no había servidor. Detalles en `docs/technical/LAUNCHER_DISTRIBUTION.md`.
+- **`GET /mods.json`**: manifiesto de paridad de modpack (`{mods, loadOrder}`), generado offline por `scripts/generate-mods-manifest.js` a partir de una carpeta `Data/` de referencia. Un manifiesto ausente o corrupto responde **503**, nunca una lista vacía — una lista vacía pasaría la verificación del launcher y dejaría entrar cualquier modpack.
+- **Cola** (`POST /api/queue/join`, `GET /api/queue/status`): capacidad fija, FIFO, con expiración de reserva para que quien cierra el launcher tras ser admitido no retenga el slot para siempre. Autenticada por un ticket de un solo uso emitido por el panel (`launch_tickets`, migración v6) — `discordId` es público y no sirve como prueba de identidad.
+- **Sesión de juego**: al admitir a alguien, escribe una fila en `game_sessions` (migración v8) y devuelve el token al launcher, que lo escribe como `session` en `skymp_config.json`. Ese token es el que el servidor SkyMP resuelve contra la master API (ver 1.2.1) — así es como la identidad deja de ser una declaración del cliente.
+- **`POST /internal/session/resolve` / `/release`** (`X-Internal-Secret`): liberación de slot al desconectar. `resolve` quedó redundante después de que existiera el camino nativo de sesión — se mantiene solo mientras la prueba en el juego no confirme el flujo de la master API.
+
+### 1.4 Servidor nativo SkyMP (gamemode)
+Ubicado en `skymp/gamemode/`.
+- Se ejecuta en Node.js usando las bibliotecas internas de SkyMP (`mp.events`, `mp.players`).
+- Maneja el ciclo de vida del jugador: conexión, desconexión, spawn, combate, comandos de chat y persistencia de objetos en tiempo real.
+- Delega las reglas de negocio a los servicios activos hoy (`governance-service.js`, `market-stalls-service.js`, `death-service.js`, `player-panel-service.js`, `voip-service.js`). Otros siete servicios existen en disco (`economy-regional.js`, `crafting-service.js`, `jobs-service.js`, `housing-service.js`, `horse-service.js`, `trade-service.js`, `disguise-service.js`) pero están **PARKED** — nunca registrados en `core/module-registry.js`, así que nunca corren en producción (ver el comentario en `phase0-basic.js`). Otros cuatro (`economy-service`, `justice-service`, `faction-service`, `survival-service`) fueron **borrados** el 06/08/2026 por duplicar sistemas activos o por ser inseguros — ver `docs/technical/PARKED_SERVICES_DECISION.md`.
+- Los módulos se registran y encienden/apagan vía `core/module-registry.js` (flags `ENABLE_*` en el `.env`), que también resuelve las dependencias entre módulos y el registro automático de comandos en `core/command-registry.js`.
+- **La configuración de gameplay** viene de `skymp/config/server-options.<env>.json`, cargada y validada por `core/server-options.js`. Solo las opciones listadas en el `SPEC` de ese archivo tienen efecto — el loader avisa en el arranque si encuentra una opción todavía no implementada, y **aborta el arranque** si un valor tiene el tipo equivocado o está fuera de rango. Ver `docs/technical/SERVER_OPTIONS_SCHEMA.es.md`.
+- **Tipado del API `mp`**: `skymp/gamemode/types/mp.d.ts` (SkyMP no publica tipos). `npm run typecheck` es informativo — el gamemode sigue siendo JS puro cargado directamente por el servidor, sin paso de build.
+
+#### 1.4.1 Puente de UI (CEF)
+La comunicación entre el gamemode y la UI CEF (`skymp/ui/`) usa dos properties de SkyMP registradas en `phase0-basic.js`:
+- **`browserModal`**: canal de modales puntuales (p. ej. el menú de interacción de gobernanza). `updateOwner` ejecuta `ctx.sp.browser.executeJavaScript('window.handleServerModal(...)')` en el cliente.
+- **`panelData`**: canal dedicado del panel del jugador, con formato `{ channel, data }` — el cliente lo despacha a `window.handlePanelData(...)` y cada pestaña (`status`, `governance`, `economy`, `social`) renderiza su propio bloque.
+
+En sentido UI→servidor, `mp.onUiEvent` despacha todo evento a través de `core/ui-event-router.js`, que enruta por el prefijo de `uiEvent.type` (p. ej. `governance:*` → `governance-service.js`, `panel:*` → `player-panel-service.js`). Los módulos nuevos que necesiten UI solo llaman `uiEventRouter.register('<prefijo>', handler)` en su `initialize()` — no hace falta editar `phase0-basic.js` para cada tipo de evento nuevo.
+
+#### 1.4.2 Panel del jugador (in-game)
+`player-panel-service.js` — módulo `player-panel` (`ENABLE_PLAYER_PANEL_SERVICE`), activado con el comando `/painel`. No duplica lógica de negocio: solo agrega lecturas de otros servicios que ya existen.
+- **Status**: salud/magicka/aguante leídos vía `mp.callPapyrusFunction('method', 'Actor', 'getActorValue', ...)` (el mismo patrón que `death-service.js`), oro vía `core/transaction-service.js`, estado de rol vía `core/character-state.js`. Se actualiza con polling de 2s mientras el panel está abierto, reenviando solo cuando un valor cambia.
+- **Gobernanza**: `governance-service.getMyGovernanceSummary()`.
+- **Economía**: `market-stalls-service.getMyEconomySummary()`.
+- **Social**: la lista de `character_known_identities` del propio personaje.
+- UI en `skymp/ui/player-panel.css` / `player-panel.js`, con una identidad visual que espeja [Prisma UI](https://prismaui.dev) (tarjeta de vidrio negra, brillo violeta, chip de estado, navegación en píldoras con runas del Futhark antiguo como icono de cada pestaña).
+- **Actualización proactiva**: `core/panel-refresh-bus.js` es un `EventEmitter` desacoplado — `governance-service.js` llama `panelRefreshBus.requestRefresh(actorId, 'governance'|'status')` tras una multa, orden de arresto o encarcelamiento, y `player-panel-service.js` (único suscriptor, registrado en `initPlayerPanelService`) reenvía la sección correspondiente **solo si el panel de ese jugador ya está abierto**. Existe para que `governance-service.js` no tenga que depender de `player-panel-service.js` (que ya depende de él), sin forzar que el panel se abra solo en la pantalla del jugador.
+- **Acción directa en la pestaña Social**: cada persona conocida tiene un botón "Apodar" que abre un mini-formulario en línea (`skymp/ui/player-panel.js`, `socialRow`/`bindSocialRenameHandlers`) y envía `panel:social:rename` con `{ targetCharacterId, alias }`. `player-panel-service.renameKnownPerson` llama a `identity-service.upsertKnownIdentity` directamente por characterId — funciona incluso con el objetivo desconectado, ya que `character_known_identities` no depende de un actorId activo.
+
+#### 1.4.3 Muerte y consecuencia (`death-service.js`)
+Módulo `death` (`ENABLE_DEATH_SERVICE`), fase `lab`. Existe para que "morir" tenga peso mecánico y social, en vez de ser un no-evento — principio central del Heavy RP en `SKYMP_RP_DEVELOPMENT_PLAN.md` (§8.1, "Muerte y consecuencias").
+- Muerte → `core/character-state.js` pasa a `DOWNED`, lo que ya bloquea gameplay/combate/habla vía `core/action-policy.js` sin trabajo extra. El disparador primario es el hook nativo **`mp.onDeath(actorId, killerId)`**, que se dispara en el frame de la muerte; el polling de 2s sigue como red de seguridad mientras el hook no se confirme en una sesión real (`handlePlayerDowned` es idempotente por personaje, así que ambos caminos juntos no duplican nada).
+- **Autoría**: `mp.onDeath` entrega `killerId` — quién mató, `0` cuando no hay autor. Se graba en `audit_logs` como `death:killer` y se arrastra hasta el desangrado, que ocurre minutos después. Eso es atribución, distinto de la proximidad de `logDeathContext`, que es circunstancial: en una pelea de cinco personas aparecen cinco nombres y el staff decide a ojo.
+- **Auxilio**: `/socorrer <actorId>` (cualquier jugador, dentro de `RESCUE_RANGE`) corta el desangrado y estabiliza al objetivo de vuelta a `NORMAL` con salud parcial (`STABILIZE_HEALTH`). El alcance lo valida `core/range-utils.js` (extraído de `governance-service.js`, usado por ambos).
+- **Desangrado**: si nadie auxilia dentro de `BLEED_OUT_MS` (4 min), el personaje pasa a `DEAD`, se aplica una penalización de oro vía `core/transaction-service.removeGold` (atómica — nunca deja saldo negativo), y solo entonces ocurre el respawn en el punto seguro de siempre.
+- **Evidencia anti-RDM**: en el momento del desangrado, `logDeathContext` graba en `audit_logs` (`action='death:context'`) una instantánea de quién estaba cerca (el mismo radio de proximidad del chat `say`) — es circunstancial, no atribución. La atribución de quién mató viene del `killerId` de `mp.onDeath` (ver arriba); la instantánea de proximidad sigue sirviendo porque muestra **quién estaba en la escena**, que es la pregunta que hace el staff en una denuncia de RDM grupal.
+- Cada transición (`DOWNED`/auxiliado/penalizado/reaparecido) llama `panelRefreshBus.requestRefresh(actorId, 'status')`, reflejándose en tiempo real en `/painel`.
+- **Capa mínima de rol para el combate**: no hay hook nativo confiable de "quién atacó a quién" en esta base, así que el alcance es evidencia, no aplicación. `/iniciar <actorId> <motivo>` graba una marca explícita de apertura de conflicto IC en `audit_logs` (`combat:initiate`). En paralelo, el mismo polling de HP que detecta `DOWNED` también corre `checkDamageSpike` en cada tick — una caída de salud `>= DAMAGE_SPIKE_THRESHOLD` (heurística, 25 puntos) en un solo tick de 2s dispara `logDeathContext(..., 'damage_spike')`, creando un rastro de proximidad incluso cuando nadie usa `/iniciar`. `core/range-utils.js` ganó `nearbyActors()` para no duplicar la lógica de barrido de vecinos entre el contexto de muerte y el de daño.
+
+**Muerte permanente (soft-delete):** `admin-service.retireCharacter(actorId, targetActorId, reason)`, comando `/permakill` (permiso `retire_character`, niveles `admin`/`owner` únicamente — nunca moderador). Nunca hace `DELETE` — solo `UPDATE characters SET status='retired'`, con motivo obligatorio y registro de auditoría. `whitelist.js` solo permite spawn con `status='approved'`, así que un personaje `retired` nunca vuelve a entrar en juego sin necesitar ningún otro cambio.
+
+#### 1.4.4 Voz por proximidad (`voip-service.js`)
+Módulo `voip` (`ENABLE_VOIP_SERVICE`), fase `lab`. Señalización WebRTC (offer/answer/ICE) por un WebSocket propio (puerto `VOIP_PORT`, por defecto 7778) — el audio en sí es P2P entre clientes tras el handshake; el servidor solo intercambia señalización y calcula volumen por distancia cada 2s. Los radios vienen de `core/proximity-ranges.js`, que es la fuente única de chat **y** voz — antes las dos tablas divergían (la voz susurraba a 200, el chat a 450), así que el mismo gesto de acercarse para hablar bajo funcionaba o no según el canal elegido.
+
+**Antes de esta revisión la función existía solo en el papel** — nada en `phase0-basic.js` llamaba a `startVoipServer()`, y el listener `mp.events.add('voip:connect', ...)` del cliente nunca se disparaba porque ningún código del servidor hace `mp.trigger`/emit de ese evento en ninguna parte del gamemode. No era un indicador visiblemente roto (el chip de estado es `display:none` hasta que corre `setStatus()`, y eso nunca pasaba) — la función simplemente estaba ausente, en silencio.
+
+- **Opt-in vía `/voz`** (no es forzado — "si el chat de voz es obligatorio" sigue como decisión abierta en `SKYMP_RP_DEVELOPMENT_PLAN.md` §13). El comando llama a `requestVoiceConnection`, que emite un ticket de un solo uso (`issueTicket`, TTL de 30s) y empuja `{actorId, ticket, host, port}` al cliente vía la property `voipTicket` (el mismo patrón probado de `browserModal`/`panelData`).
+- **Autenticación por ticket**: el handshake del WebSocket (`{type:'auth', actorId, ticket}`) exige que el ticket coincida con el emitido para ese `actorId` — sin eso, cualquier proceso que se conectara a `ws://127.0.0.1:7778` podía reclamar el `actorId` de otro jugador y secuestrarle el slot de voz. El ticket se consume en el primer uso (el replay falla).
+- **Host dinámico**: como `skymp/ui/index.html` es un archivo estático sin plantillas, no puede saber la IP pública del servidor por sí solo — por eso el servidor manda `host`/`port` en el propio payload del ticket (`VOIP_PUBLIC_HOST`/`VOIP_PORT` en el `.env`), en lugar de que el cliente tenga `ws://127.0.0.1:7778` fijo en el código (lo que solo funcionaba con jugador y servidor en la misma máquina).
+- `VOIP_BIND_HOST` (por defecto `127.0.0.1`) controla en qué interfaces escucha el `WebSocketServer` — no confundir con `VOIP_PUBLIC_HOST`, que es lo que el cliente recibe para conectarse.
+
+### 1.5 Launcher del cliente (`apps/launcher`)
+Desarrollado en **Electron / React**. Detalles completos en `docs/technical/LAUNCHER_DISTRIBUTION.md`.
+- **La actualización** de cliente y modpack viene de **GitHub Releases** (`VITE_GITHUB_DIST_REPO`), con SHA-256 obligatorio — un manifiesto sin hash aborta la instalación en vez de instalar sin verificar. No viene de `apps/web`: el `GET /api/launcher/manifest` que existía allí era un stub con hash falso que nadie consumía, y fue eliminado.
+- **Paridad en tiempo de conexión** (`verify-mods` + `analyze-plugins`) compara el hash de cada archivo en `Data/` y valida masters/load order contra `http://<SERVER_IP>:<VITE_API_PORT>/mods.json`. Ese endpoint lo sirve `apps/game-api` (ver 1.3.1) — cuando este documento decía que no existía, era cierto: el launcher llamaba a un puerto sin servicio y el paso siempre fallaba como "servidor offline". El servicio pasó a existir el 05/08/2026. **Todavía no se ejercitó contra un launcher empaquetado**, solo con pruebas automáticas.
+- **Login**: el launcher solo captura el `code` de Discord; el intercambio por token lo hace el panel web (`POST /api/launcher/oauth/exchange`), porque cualquier secreto embebido en una app distribuida a jugadores puede extraerse del instalador.
+- La configuración viene de variables `VITE_*` incrustadas en **tiempo de build** por el `define` de `vite.config.ts` — no existe `.env` del lado de la app empaquetada.
+
+## 2. Flujo de decisión (la regla de oro)
+
+En nuestro servidor, la autoridad nunca se delega al cliente.
+
+**Ejemplo de flujo (pesca o herrería):**
+1. El jugador (cliente) presiona un botón para interactuar.
+2. El gamemode (servidor) recibe la petición y comprueba en la base de datos si tiene la caña/recurso y la habilidad necesaria.
+3. El servidor altera la base de datos y guarda el objeto nuevo.
+4. El servidor dispara `mp.callPapyrusFunction` solo para que el cliente haga la animación y reciba el aviso visual de éxito.
+*(Si un mod local intenta saltarse el paso 2, falla en silencio, protegiendo la economía.)*
+
+El detalle técnico de esta regla — qué puede y qué no puede tocar un mod, por qué los scripts Papyrus de mod no producen estado, y el contrato de FormID que obliga a la paridad de load order — está en [`MODS_AND_GAMEMODE_CONTRACT.es.md`](technical/MODS_AND_GAMEMODE_CONTRACT.es.md).

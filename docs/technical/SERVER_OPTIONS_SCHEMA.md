@@ -1,5 +1,7 @@
 # Schema de Server Options RP
 
+***Português** · [English](SERVER_OPTIONS_SCHEMA.en.md) · [Русский](SERVER_OPTIONS_SCHEMA.ru.md) · [Español](SERVER_OPTIONS_SCHEMA.es.md)*
+
 > **Estado: parcialmente implementado.**
 > O arquivo passou a ser carregado e validado por `skymp/gamemode/core/server-options.js`. Mas **só as opções listadas na seção "O que está ligado hoje" fazem alguma coisa** — o resto continua sendo contrato de design.
 >

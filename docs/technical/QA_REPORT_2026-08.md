@@ -1,5 +1,7 @@
 # Relatório de QA e Plano de Melhorias — Agosto/2026
 
+***Português** · [English](QA_REPORT_2026-08.en.md) · [Русский](QA_REPORT_2026-08.ru.md) · [Español](QA_REPORT_2026-08.es.md)*
+
 Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, schema, scripts e documentação. Escrito depois de rodar os testes existentes, seguir cada caminho de configuração até a origem e conferir se o que a documentação afirma bate com o que o código faz.
 
 **Método e limite:** tudo aqui foi verificado por leitura de código, execução de testes automatizados e checagem estática. **Nada foi validado numa sessão de jogo real** — nenhuma afirmação sobre comportamento in-game deve ser tomada como testada.
