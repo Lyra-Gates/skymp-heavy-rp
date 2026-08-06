@@ -68,6 +68,51 @@ const queue = createQueue({ capacity: parseInt(process.env.QUEUE_CAPACITY || '40
 
 const makeSessionTicket = () => crypto.randomBytes(32).toString('hex');
 
+// Quanto tempo a sessão de jogo vale. Precisa cobrir uma sessão inteira, com
+// folga pra reconectar depois de um crash — o servidor de jogo consulta o
+// master a cada conexão.
+const GAME_SESSION_TTL_SECONDS = parseInt(process.env.GAME_SESSION_TTL_SECONDS || String(12 * 60 * 60), 10);
+
+/**
+ * Grava a sessão que o servidor de jogo vai resolver contra o master API
+ * (`apps/web`, `GET /api/servers/:masterKey/sessions/:session`).
+ *
+ * É este registro que faz o `profileId` deixar de ser uma declaração do
+ * cliente: o SkyMP com `offlineMode: false` não lê o `profileId` do
+ * `skymp_config.json`, ele pergunta ao master quem é o dono da sessão.
+ *
+ * Guardamos só o hash — se o banco vazar, as sessões em voo não viram
+ * credencial. Mesmo critério de `launch_tickets`.
+ */
+async function persistGameSession(token, accountId, discordId) {
+  await db(
+    `INSERT INTO game_sessions (token_hash, account_id, discord_id, expires_at)
+     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))`,
+    [hashTicket(token), accountId, discordId, GAME_SESSION_TTL_SECONDS]
+  );
+}
+
+/**
+ * Persiste a sessão de quem acabou de ser admitido.
+ *
+ * A fila é síncrona e em memória (pra ser testável sem banco), então a
+ * gravação acontece aqui, depois. Se falhar, a admissão é desfeita: entrar na
+ * fila e receber um ticket que o servidor de jogo vai recusar seria pior que
+ * um erro honesto — o jogador ficaria olhando o Skyrim não conectar sem
+ * entender por quê.
+ */
+async function persistAdmission(result, identity) {
+  if (result.status !== 'success' || !result.ticket) return result;
+  try {
+    await persistGameSession(result.ticket, identity.accountId, identity.discordId);
+    return result;
+  } catch (err) {
+    console.error('[game-api] Falha ao gravar game_session:', err.message);
+    queue.release(identity.accountId, makeSessionTicket);
+    return { status: 'error', message: 'session_persist_failed' };
+  }
+}
+
 // ── Rate limiting (janela deslizante em memória) ────────────────────────────
 const rateLimitBuckets = new Map();
 function isRateLimited(key, maxRequests, windowMs) {
@@ -171,7 +216,10 @@ app.post('/api/queue/join', async (req, res) => {
     const eligible = await isEligible(identity.accountId);
     if (!eligible.ok) return res.status(403).json({ status: 'error', message: eligible.reason });
 
-    const result = queue.join(identity.accountId, identity.discordId, makeSessionTicket);
+    const result = await persistAdmission(
+      queue.join(identity.accountId, identity.discordId, makeSessionTicket),
+      identity
+    );
 
     // O launcher precisa reconsultar a fila, e o ticket de lançamento acabou de
     // ser consumido — então devolvemos um ticket novo pro polling seguinte.
@@ -196,7 +244,10 @@ app.get('/api/queue/status', async (req, res) => {
     const identity = await consumeLaunchTicket(req.query.ticket);
     if (!identity) return res.status(401).json({ status: 'error', message: 'invalid_ticket' });
 
-    const result = queue.status(identity.accountId, makeSessionTicket);
+    const result = await persistAdmission(
+      queue.status(identity.accountId, makeSessionTicket),
+      identity
+    );
     if (result.status === 'queued') {
       result.pollTicket = await issuePollTicket(identity.accountId, identity.discordId, ip);
     }

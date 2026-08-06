@@ -20,6 +20,17 @@ Desenvolvido em **Express.js / Node.js**.
 - Não confundir com o **Painel do Jogador in-game** (ver 1.4.2), que roda dentro do próprio HUD do SkyMP, não no navegador.
 - **Aplicação de personagem** (`/api/apply`, `apply.html`): além de nome/biografia, coleta `motivations`/`weaknesses`/`social_ties` (rubrica de whitelist Heavy RP — ver `SKYMP_RP_DEVELOPMENT_PLAN.md` 8.1). Uma heurística de palavras-chave (`detectsStrongConcept` em `server.js`) sinaliza `characters.needs_extra_review` pra conceitos fortes (nobreza, vampirismo, lycanthropia, Daedra, liderança de facção) — não é um gate automático, só um aviso pra staff prestar mais atenção na revisão; a staff pode anexar `extra_review_notes` pelo painel (`PATCH /api/whitelist/:id`). `skymp/gamemode/whitelist.js` lê `characters` com `ORDER BY id DESC LIMIT 1` ao liberar spawn.
 
+### 1.2.1 Master API (contrato do SkyMP, servido pelo `apps/web`)
+`GET /api/servers/:masterKey/sessions/:session` → `{ user: { id, discordId } }`
+
+Este endpoint não foi inventado por nós: é o que o servidor SkyMP chama quando `offlineMode: false` (ver `skymp5-server/ts/systems/login.ts` upstream). O `user.id` que respondemos **vira o `profileId`** do gamemode.
+
+É a peça que tira a identidade das mãos do cliente. Com `offlineMode: true`, o cliente declara o próprio `profileId` no `skymp_config.json` e o servidor acredita — qualquer um edita o arquivo e vira outra pessoa. Com `offlineMode: false`, o `profileId` vem daqui, do mesmo serviço que autenticou o Discord e aprovou a whitelist.
+
+O `master` padrão do SkyMP é `https://gateway.skymp.net`; apontar para o nosso painel é trocar uma string em `server-settings.json`. `masterKey` precisa ser igual dos dois lados (`MASTER_KEY` no `.env` do painel).
+
+Sessões ficam em `game_sessions`, guardadas como hash SHA-256, com `expires_at`, `revoked_at` (ban imediato sem esperar TTL) e `resolve_count` (contagem alta sugere sessão compartilhada entre máquinas).
+
 ### 1.3 Bot do Discord (`apps/bot-discord`)
 Desenvolvido em **discord.js**.
 - Realiza a ponte entre a conta do Discord do usuário e o seu `profileId` no jogo (`POST /api/sync-role`, chamado pelo painel web na aprovação/rejeição de whitelist).
@@ -30,7 +41,8 @@ Desenvolvido em **discord.js**.
 Express, porta `GAME_API_PORT` (7758) — a porta que o launcher sempre chamou e para a qual não havia servidor. Detalhes em `docs/technical/LAUNCHER_DISTRIBUTION.md`.
 - **`GET /mods.json`**: manifesto de paridade de modpack (`{mods, loadOrder}`), gerado offline por `scripts/generate-mods-manifest.js` a partir da pasta `Data/` de referência. Manifesto ausente ou corrompido responde **503**, nunca lista vazia — lista vazia passaria na verificação do launcher e deixaria qualquer modpack entrar.
 - **Fila** (`POST /api/queue/join`, `GET /api/queue/status`): capacidade fixa, FIFO, com expiração de reserva pra que quem fecha o launcher depois de admitido não segure o slot para sempre. Autenticada por ticket de uso único emitido pelo painel (`launch_tickets`, migration v6) — `discordId` é público e não serve como prova de identidade.
-- **`POST /internal/session/resolve` / `/release`** (`X-Internal-Secret`): pro gamemode confirmar quem entrou e devolver o slot na desconexão. ⚠️ O gamemode **ainda não chama** esses endpoints — hoje `whitelist.js` confia no `profileId` informado pelo cliente, então a fila controla *quantos* entram, não *quem*.
+- **Sessão de jogo**: ao admitir alguém, grava uma linha em `game_sessions` (migration v8) e devolve o token ao launcher, que o escreve como `session` no `skymp_config.json`. É esse token que o servidor SkyMP resolve contra o master API (ver 1.2.1) — é assim que a identidade deixa de ser uma declaração do cliente.
+- **`POST /internal/session/resolve` / `/release`** (`X-Internal-Secret`): liberação de slot na desconexão. O `resolve` virou redundante depois que o caminho nativo de sessão passou a existir — mantido só enquanto o teste in-game não confirma o fluxo do master API.
 
 ### 1.4 Servidor Nativo SkyMP (Gamemode)
 Localizado em `skymp/gamemode/`.
@@ -60,7 +72,8 @@ No sentido UI→servidor, `mp.onUiEvent` despacha todo evento através de `core/
 
 #### 1.4.3 Morte e Consequência (`death-service.js`)
 Módulo `death` (`ENABLE_DEATH_SERVICE`), fase `lab`. Existe pra que "morrer" tenha peso mecânico e social, não seja um non-event — princípio central de Heavy RP do `SKYMP_RP_DEVELOPMENT_PLAN.md` (seção 8.1, "Morte e Consequências").
-- HP≤0 (detectado por polling de 2s, mesmo padrão de antes) → `core/character-state.js` vira `DOWNED`, o que já bloqueia gameplay/combate/fala via `core/action-policy.js` sem trabalho extra.
+- Morte → `core/character-state.js` vira `DOWNED`, o que já bloqueia gameplay/combate/fala via `core/action-policy.js` sem trabalho extra. O gatilho primário é o hook nativo **`mp.onDeath(actorId, killerId)`**, que dispara no frame da morte; o polling de 2s continua como rede de segurança enquanto o hook não é confirmado numa sessão real (`handlePlayerDowned` é idempotente por personagem, então os dois caminhos juntos não duplicam nada).
+- **Autoria**: `mp.onDeath` entrega `killerId` — quem matou, `0` quando não há autor. Gravado em `audit_logs` como `death:killer` e carregado até o bleed-out, que acontece minutos depois. É atribuição, diferente da proximidade do `logDeathContext`, que é circunstancial: numa briga de cinco pessoas, cinco nomes aparecem e a staff decide no olho.
 - **Socorro**: `/socorrer <actorId>` (qualquer jogador, dentro de `RESCUE_RANGE`) cancela o sangramento e estabiliza o alvo de volta pra `NORMAL` com vida parcial (`STABILIZE_HEALTH`). Alcance validado por `core/range-utils.js` (extraído de `governance-service.js`, usado por ambos).
 - **Bleed-out**: se ninguém socorre dentro de `BLEED_OUT_MS` (4min), o personagem vira `DEAD`, uma penalidade de ouro é aplicada via `core/transaction-service.removeGold` (atômico — nunca deixa saldo negativo), e só então o respawn acontece no ponto seguro de sempre.
 - **Evidência anti-RDM**: no momento do bleed-out, `logDeathContext` grava em `audit_logs` (`action='death:context'`) um snapshot de quem estava por perto (mesmo raio de proximidade do chat `say`) — não é atribuição definitiva de "quem matou" (não há hook nativo confiável pra isso nesta base), mas dá à staff uma trilha real em vez de só a palavra dos jogadores.

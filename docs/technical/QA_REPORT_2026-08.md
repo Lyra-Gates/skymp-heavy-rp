@@ -12,9 +12,9 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 132/132 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
+| `skymp/gamemode` | 139/139 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
-| `apps/web` | 33/33 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
+| `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
 | `apps/game-api` | 24/24 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. |
 | Tipagem `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa a API do SkyMP (não há typings públicos upstream). Informativo, não trava build nem teste. Achou 2.13 e 2.14 na primeira execução. |
@@ -88,7 +88,11 @@ Isso significa que a verificação de paridade de mods — a coisa que sustenta 
 
 **Resolvido:** `apps/game-api` serve os três endpoints, com gerador de manifesto (`scripts/generate-mods-manifest.js`) e 24 testes. Detalhes em `LAUNCHER_DISTRIBUTION.md`. Junto veio 1.1b: a fila passou a exigir ticket emitido pelo painel em vez do `discordId` que o cliente informa.
 
-**Ponta solta (🟠 ABERTO):** o gamemode ainda **não lê o ticket de sessão**. `whitelist.js` deriva a identidade do `profileId` que o cliente informa, e o `launcherTicket` que o launcher grava em `skymp_config.json` não é verificado por ninguém. Ou seja, a fila hoje controla *quantos* entram, não *quem* entra. `/internal/session/resolve` já existe pro gamemode fechar o laço — falta descobrir como o SkyMP expõe o ticket ao gamemode no momento da conexão, o que precisa de teste com servidor real.
+**Ponta solta — resolvida pelo caminho nativo:** a pesquisa no `skymp5-server/ts/systems/login.ts` mostrou que o SkyMP já resolve isso sozinho. Com `offlineMode: false`, ele não lê o `profileId` do cliente: resolve `gameData.session` contra um master API e usa o `id` que vier de lá.
+
+O `apps/web` passou a servir esse contrato (`GET /api/servers/:masterKey/sessions/:session`), o `apps/game-api` grava a sessão em `game_sessions` (migration v8) ao admitir na fila, e o launcher já escreve o token como `session`. Resultado: `whitelist.js` não precisou mudar — o `profileId` que chega **já é** o `accountId` validado.
+
+Isso tornou o `/internal/session/resolve` que construímos redundante. Ficou no `game-api` só até o teste in-game confirmar o fluxo nativo.
 
 ### 2.10 🟡 `server-options.json` não era lido por ninguém — *resolvido em parte*
 
@@ -158,8 +162,8 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 1.4 | ✅ **Feito** — 29 smoke tests em `apps/web/server.test.js` | |
 | 1.5 | **Rodar o plano de teste in-game que já existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) com as flags `ENABLE_*` ligadas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
 | 1.5a | ✅ **Resolvido sem servidor** — os testes oficiais do SkyMP responderam. As 22 chamadas foram convertidas. Confirmar in-game continua valendo, mas como checagem, não investigação | |
-| 1.6 | **Gamemode passa a confiar no `profileId`** — mas pelo caminho nativo, não pelo nosso. Ver `SKYMP_UPSTREAM_REFERENCE.md` 2.6: com `offlineMode: false`, o servidor resolve `gameData.session` contra um master API, e o `apps/web` pode ser esse master (um endpoint só). O `/internal/session/resolve` que construímos vira desnecessário | A pesquisa mudou a solução: em vez de inventar um caminho paralelo, usar o que o SkyMP já faz. |
-| 1.7 | **Trocar o polling do `death-service` por `mp.onDeath`** — que existe e entrega `killerId` | Substitui o polling de 2s **e** a heurística de proximidade do anti-RDM. Ver `SKYMP_UPSTREAM_REFERENCE.md` 2.5. |
+| 1.6 | ✅ **Feito** — `apps/web` serve o master API, `game_sessions` (v8) guarda a sessão, `offlineMode: false` nos exemplos. Falta confirmar in-game | |
+| 1.7 | ✅ **Feito** — `mp.onDeath` é o gatilho primário e a autoria vai pra `audit_logs` (`death:killer`). O polling continua como rede de segurança até o hook ser confirmado in-game | |
 
 ### Fase 2 — Tirar a configuração-fantasma do caminho
 

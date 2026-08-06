@@ -23,6 +23,18 @@ const LAUNCHER_REDIRECT_URIS = (process.env.LAUNCHER_REDIRECT_URIS || 'http://lo
   .map((uri) => uri.trim())
   .filter(Boolean);
 const CRASH_REPORT_DIR = path.join(__dirname, 'crash-reports');
+// Identifica o servidor de jogo no contrato de master API do SkyMP. Precisa
+// bater com `masterKey` do skymp/config/server-settings.*.json.
+const MASTER_KEY = process.env.MASTER_KEY || null;
+
+/** Comparação em tempo constante, tolerante a tamanhos diferentes. */
+function safeEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -608,6 +620,66 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
     res.json(reports.slice(0, 100));
   } catch (err) {
     console.error('[/api/crashes]', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// ── API: Master (contrato do SkyMP) ──────────────────────────────────────────
+//
+// Este endpoint não foi inventado por nós: é o contrato que o servidor SkyMP
+// chama quando `offlineMode: false` (ver skymp5-server/ts/systems/login.ts
+// upstream). O servidor pega o `gameData.session` que o cliente mandou e
+// pergunta ao master quem é aquela pessoa. O `user.id` que respondermos vira o
+// `profileId` do gamemode.
+//
+// É isso que tira a identidade das mãos do cliente. Sem este endpoint, o
+// caminho é `offlineMode: true`, onde o cliente simplesmente declara o próprio
+// `profileId` no `skymp_config.json` e o servidor acredita.
+//
+// O `master` padrão do SkyMP é `https://gateway.skymp.net`. Apontar para o
+// nosso painel é só trocar a string em `server-settings.json` — e faz sentido,
+// porque o painel já é quem autentica o Discord e aprova a whitelist.
+app.get('/api/servers/:masterKey/sessions/:session', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+  // Comparação em tempo constante: a masterKey identifica o servidor de jogo
+  // e não deve vazar por diferença de tempo de resposta.
+  if (!MASTER_KEY || !safeEquals(req.params.masterKey, MASTER_KEY)) {
+    console.warn(`[master-api] masterKey invalida vinda de ${ip}`);
+    return res.status(404).json({ error: 'Unknown server' });
+  }
+
+  if (isRateLimited(`master-session:${ip}`, 120, 60 * 1000)) {
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
+  try {
+    const session = req.params.session;
+    if (typeof session !== 'string' || session.length < 32) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const rows = await db(
+      `SELECT id, account_id, discord_id FROM game_sessions
+       WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > NOW()`,
+      [hashTicket(session)]
+    );
+
+    // 404 é o que o SkyMP espera pra sessão inválida: ele manda
+    // `loginFailedSessionNotFound` pro cliente, que é a mensagem correta.
+    if (rows.length === 0) return res.status(404).json({ error: 'Session not found' });
+
+    // Contabiliza o uso. `resolve_count` alto é sinal de sessão compartilhada
+    // entre máquinas — vale olhar quando aparecer.
+    await db(
+      'UPDATE game_sessions SET last_resolved_at = NOW(), resolve_count = resolve_count + 1 WHERE id = ?',
+      [rows[0].id]
+    );
+
+    // A forma da resposta é ditada pelo SkyMP, não por nós: `data.user.id`.
+    res.json({ user: { id: rows[0].account_id, discordId: rows[0].discord_id } });
+  } catch (err) {
+    console.error('[master-api] /sessions', err);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
 });

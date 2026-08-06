@@ -22,10 +22,15 @@
   "gamemodePath": "gamemode/phase0-basic.js",
   "startPoints": [
     {
-      "pos": [0, 0, 0],
+      "pos": [
+        0,
+        0,
+        0
+      ],
       "worldOrCell": "0x3c",
       "angleZ": 0
     }
   ],
-  "isPapyrusHotReloadEnabled": false
+  "isPapyrusHotReloadEnabled": false,
+  "master": "http://127.0.0.1:3001"
 }

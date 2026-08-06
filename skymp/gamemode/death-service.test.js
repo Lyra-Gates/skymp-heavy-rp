@@ -256,3 +256,92 @@ describe('death-service', () => {
     });
   });
 });
+
+/**
+ * Atribuição de morte via `mp.onDeath`.
+ *
+ * A diferença entre evidência e atribuição: `logDeathContext` lista quem estava
+ * por perto — numa briga de cinco pessoas, cinco nomes, e a staff decide no
+ * olho. `mp.onDeath` entrega `killerId`, que é o servidor dizendo quem foi.
+ *
+ * Fonte do hook: `misc/tests/test_isdead.js` do repositório upstream.
+ */
+describe('death-service — autoria da morte (mp.onDeath)', () => {
+  const KILLER_ACTOR_ID = 0xff00d003;
+  const KILLER_CHARACTER_ID = 8003;
+
+  beforeEach(() => {
+    commands.registerActiveCharacter(VICTIM_ACTOR_ID, { id: VICTIM_CHARACTER_ID, first_name: 'Vitima', last_name: 'Um' }, 1, 1);
+    commands.registerActiveCharacter(KILLER_ACTOR_ID, { id: KILLER_CHARACTER_ID, first_name: 'Agressor', last_name: 'Tres' }, 3, 3);
+    characterState.set(VICTIM_CHARACTER_ID, STATES.NORMAL, {});
+    setPos(VICTIM_ACTOR_ID, [0, 0, 0]);
+    auditEntries.length = 0;
+    deathService._downedPlayers.clear();
+    deathService._killers.clear();
+  });
+
+  it('registra quem matou quando o hook informa o killerId', async () => {
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID, KILLER_ACTOR_ID);
+
+    const entry = auditEntries.find(p => p[0] === 'death:killer');
+    assert.ok(entry, 'deveria ter gravado death:killer em audit_logs');
+
+    const details = JSON.parse(entry[3]);
+    assert.strictEqual(details.characterId, VICTIM_CHARACTER_ID);
+    assert.strictEqual(details.killer.characterId, KILLER_CHARACTER_ID);
+    assert.strictEqual(details.killer.name, 'Agressor Tres');
+  });
+
+  it('não grava autoria quando killerId é 0 (queda, veneno)', async () => {
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID, 0);
+    assert.strictEqual(auditEntries.find(p => p[0] === 'death:killer'), undefined);
+  });
+
+  it('não grava autoria quando a queda veio pelo polling (sem killerId)', async () => {
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID);
+    assert.strictEqual(auditEntries.find(p => p[0] === 'death:killer'), undefined);
+  });
+
+  it('agressor sem personagem carregado é registrado como NPC/ator do mundo', async () => {
+    // Morte por NPC não é RDM — distinguir isso já é informação pra staff.
+    const NPC_ACTOR_ID = 0x000abcde;
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID, NPC_ACTOR_ID);
+
+    const details = JSON.parse(auditEntries.find(p => p[0] === 'death:killer')[3]);
+    assert.strictEqual(details.killer.actorId, NPC_ACTOR_ID);
+    assert.strictEqual(details.killer.characterId, null);
+    assert.strictEqual(details.killer.name, null);
+  });
+
+  it('a autoria sobrevive até o bleed-out, minutos depois', async () => {
+    // O killerId só existe no instante da queda; o bleed-out acontece até 4
+    // minutos depois e precisa gravá-lo no contexto final.
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID, KILLER_ACTOR_ID);
+    auditEntries.length = 0;
+
+    await deathService.bleedOut(VICTIM_ACTOR_ID, VICTIM_CHARACTER_ID);
+
+    const contextEntry = auditEntries.find(p => p[0] === 'death:context');
+    assert.ok(contextEntry, 'bleed-out deveria gravar death:context');
+    const details = JSON.parse(contextEntry[3]);
+    assert.ok(details.killer, 'o contexto final precisa carregar a autoria');
+    assert.strictEqual(details.killer.characterId, KILLER_CHARACTER_ID);
+  });
+
+  it('socorro a tempo limpa a autoria (não houve morte)', async () => {
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID, KILLER_ACTOR_ID);
+    assert.ok(deathService._killers.has(VICTIM_CHARACTER_ID));
+
+    setPos(KILLER_ACTOR_ID, [10, 0, 0]);
+    await deathService.rescueTarget(KILLER_ACTOR_ID, VICTIM_ACTOR_ID);
+
+    assert.strictEqual(deathService._killers.has(VICTIM_CHARACTER_ID), false,
+      'sem morte, a autoria não precisa continuar em memória');
+  });
+
+  it('bleed-out limpa a autoria (senão vaza memória a cada morte)', async () => {
+    await deathService._handlePlayerDowned(VICTIM_ACTOR_ID, KILLER_ACTOR_ID);
+    await deathService.bleedOut(VICTIM_ACTOR_ID, VICTIM_CHARACTER_ID);
+    assert.strictEqual(deathService._killers.has(VICTIM_CHARACTER_ID), false);
+  });
+});

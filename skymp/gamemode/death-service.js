@@ -46,11 +46,55 @@ const DAMAGE_SPIKE_THRESHOLD = 25; // heurística: pontos de vida perdidos num �
 const _downedPlayers = new Map();
 // actorId -> última leitura de Health (pra detectar picos de dano)
 const _lastHealth = new Map();
+// characterId -> quem o derrubou, capturado por `mp.onDeath` no instante da
+// queda. Precisa sobreviver até o bleed-out, que acontece minutos depois.
+const _killers = new Map();
 
 function initDeathService() {
   if (typeof mp === 'undefined') return;
   console.log('[death-service] Initializing Death and Respawn hooks...');
 
+  // ── Caminho primário: o hook nativo ────────────────────────────────────────
+  //
+  // `mp.onDeath` existe desde sempre e este projeto não usava — a evidência
+  // está em `misc/tests/test_isdead.js` do repositório upstream. Ele entrega
+  // duas coisas que o polling nunca daria:
+  //
+  //   1. O momento exato da morte, no frame em que acontece. O polling de 2s
+  //      atrasava o `DOWNED` em até dois segundos, o que numa cena de RP é a
+  //      diferença entre a cena funcionar e não funcionar.
+  //   2. `killerId` — quem matou. A documentação de combate deste projeto
+  //      chegou a registrar que "não há hook confiável de quem atacou quem";
+  //      para o momento da morte, há. É atribuição direta, não a inferência
+  //      por proximidade que o `logDeathContext` faz.
+  //
+  // `killerId` é `0` quando não há autor: queda, veneno, afogamento.
+  mp.onDeath = (actorId, killerId) => {
+    try {
+      handlePlayerDowned(actorId, killerId).catch(err =>
+        console.error('[death-service] Falha ao processar queda (onDeath):', err.message)
+      );
+    } catch (err) {
+      console.error('[death-service] Erro no hook onDeath:', err.message);
+    }
+  };
+
+  // ── Rede de segurança: o polling que existia antes ─────────────────────────
+  //
+  // Mantido de propósito, por dois motivos:
+  //
+  //   - `mp.onDeath` ainda não foi confirmado numa sessão real deste servidor.
+  //     Se ele não disparar como esperado, o polling ainda pega a queda — com
+  //     atraso, mas pega. `handlePlayerDowned` é idempotente por personagem
+  //     (`_downedPlayers`), então os dois caminhos juntos não duplicam nada.
+  //   - `checkDamageSpike` depende de ler vida ao longo do tempo, e não tem
+  //     equivalente em `onDeath`: ele existe pra registrar agressão que NÃO
+  //     matou.
+  //
+  // Quando o teste in-game confirmar o `onDeath`, o laço pode virar só o
+  // `checkDamageSpike` — ou sair de vez, se o evento de hit por
+  // `makeEventSource` substituir a heurística. Ver
+  // docs/technical/SKYMP_UPSTREAM_REFERENCE.md 2.5.
   setInterval(() => {
     try {
       // Para cada profileId de player 1..50
@@ -84,7 +128,13 @@ function initDeathService() {
 // Queda → DOWNED
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function handlePlayerDowned(actorId) {
+/**
+ * @param {number} actorId
+ * @param {number} [killerId] FormID de quem matou, vindo de `mp.onDeath`.
+ *   `0`/ausente quando não há autor (queda, veneno) ou quando a queda veio pelo
+ *   polling, que não sabe quem foi.
+ */
+async function handlePlayerDowned(actorId, killerId) {
   const character = commands.getActiveCharacterData(actorId);
   if (!character) return;
   if (_downedPlayers.has(character.characterId)) return; // já processando esta queda
@@ -93,6 +143,11 @@ async function handlePlayerDowned(actorId) {
   characterState.set(character.characterId, STATES.DOWNED, { downedAt: Date.now() });
   commands.broadcastProximityMessage(actorId, '* O corpo cai ao chão, ferido e sangrando.', 1500);
   panelRefreshBus.requestRefresh(actorId, 'status');
+
+  // Registra a autoria no instante em que ela é conhecida. Guardar junto do
+  // estado, e não só no log, é o que permite ao `bleedOut` gravar quem matou
+  // mesmo minutos depois — a informação vem do hook e não se recupera sozinha.
+  await logKiller(actorId, character.characterId, killerId);
 
   const timer = setTimeout(() => {
     bleedOut(actorId, character.characterId).catch(err => console.error('[death-service] Falha no bleed-out:', err.message));
@@ -139,6 +194,9 @@ async function rescueTarget(rescuerActorId, targetActorId) {
 
   clearTimeout(downed.timer);
   _downedPlayers.delete(target.characterId);
+  // Socorrido a tempo: não houve morte, então a autoria deixa de ser relevante
+  // (e o registro em audit_logs já guarda o que aconteceu, se a staff precisar).
+  _killers.delete(target.characterId);
 
   characterState.set(target.characterId, STATES.NORMAL, {});
   if (typeof mp !== 'undefined') {
@@ -164,6 +222,9 @@ async function bleedOut(actorId, characterId) {
 
   characterState.set(characterId, STATES.DEAD, {});
   await logDeathContext(actorId, characterId, 'bleed_out');
+  // O contexto já foi gravado com a autoria; a partir daqui o mapa não é mais
+  // necessário e mantê-lo vazaria memória a cada morte.
+  _killers.delete(characterId);
 
   const gold = await transactionService.getGold(characterId);
   const penalty = Math.min(gold, Math.max(DEATH_PENALTY_COINS, Math.floor(gold * DEATH_PENALTY_PERCENTAGE)));
@@ -264,6 +325,43 @@ async function executeRespawn(actorId, characterId, penalty = 0) {
  * não uma atribuição definitiva. Ainda assim dá à staff uma trilha real pra
  * arbitrar denúncias de RDM, em vez de só a palavra dos jogadores.
  */
+/**
+ * Registra quem matou, quando o hook `mp.onDeath` informa.
+ *
+ * É a diferença entre evidência e atribuição. O `logDeathContext` lista quem
+ * estava por perto — útil, mas circunstancial: numa briga de cinco pessoas,
+ * cinco nomes aparecem e a staff decide no olho. Aqui é o servidor dizendo
+ * quem foi.
+ *
+ * Guarda também em `_killers` porque a morte definitiva (`bleedOut`) acontece
+ * até quatro minutos depois, e o `killerId` só existe neste instante.
+ */
+async function logKiller(actorId, characterId, killerId) {
+  if (!killerId) return null; // 0 ou ausente: queda, veneno, ou veio do polling
+
+  const killerChar = commands.getActiveCharacterData(killerId);
+  const killer = {
+    actorId: killerId,
+    characterId: killerChar ? killerChar.characterId : null,
+    // Sem personagem carregado, o agressor é um NPC ou um ator do mundo — o
+    // que por si só já é informação pra staff (morte por NPC não é RDM).
+    name: killerChar ? `${killerChar.firstName} ${killerChar.lastName}` : null
+  };
+
+  _killers.set(characterId, killer);
+
+  try {
+    await db.query(
+      'INSERT INTO audit_logs (action, actor_account_id, target_account_id, details) VALUES (?, ?, ?, ?)',
+      ['death:killer', killerChar?.accountId || null, null, JSON.stringify({ characterId, killer })]
+    );
+  } catch (err) {
+    console.error('[death-service] Falha ao registrar autoria da morte:', err.message);
+  }
+
+  return killer;
+}
+
 async function logDeathContext(actorId, characterId, cause) {
   const nearby = rangeUtils.nearbyActors(actorId, DEATH_CONTEXT_RANGE)
     .map(({ actorId: neighborId, distance }) => {
@@ -280,7 +378,10 @@ async function logDeathContext(actorId, characterId, cause) {
   try {
     await db.query(
       'INSERT INTO audit_logs (action, actor_account_id, target_account_id, details) VALUES (?, ?, ?, ?)',
-      ['death:context', null, null, JSON.stringify({ characterId, cause, nearby })]
+      // `killer` vem do hook nativo (atribuição); `nearby` é proximidade
+      // (circunstancial). Guardar os dois no mesmo registro deixa claro pra
+      // staff qual é qual.
+      ['death:context', null, null, JSON.stringify({ characterId, cause, killer: _killers.get(characterId) || null, nearby })]
     );
   } catch (err) {
     console.error('[death-service] Falha ao registrar contexto de morte:', err.message);
@@ -415,9 +516,11 @@ module.exports = {
   logCombatInitiation,
   checkDamageSpike,
   retireOnPermadeath,
+  logKiller,
   isDowned: (characterId) => _downedPlayers.has(characterId),
   // Exposto só pra testes: evita depender de setTimeout real pra exercitar o fluxo.
   _handlePlayerDowned: handlePlayerDowned,
   _downedPlayers,
-  _lastHealth
+  _lastHealth,
+  _killers
 };

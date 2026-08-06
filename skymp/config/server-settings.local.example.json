@@ -1,6 +1,6 @@
 {
   "name": "SkyMP Heavy RP - Local",
-  "masterKey": "local-dev-key",
+  "masterKey": "TROQUE-POR-UM-VALOR-ALEATORIO-E-IGUAL-AO-MASTER_KEY-DO-PAINEL",
   "listenHost": "127.0.0.1",
   "uiListenHost": "127.0.0.1",
   "port": 7777,
@@ -22,10 +22,15 @@
   "gamemodePath": "gamemode/phase0-basic.js",
   "startPoints": [
     {
-      "pos": [35, -165, -189],
+      "pos": [
+        35,
+        -165,
+        -189
+      ],
       "worldOrCell": "0x162e2",
       "angleZ": 180
     }
   ],
-  "isPapyrusHotReloadEnabled": false
+  "isPapyrusHotReloadEnabled": false,
+  "master": "http://127.0.0.1:3001"
 }

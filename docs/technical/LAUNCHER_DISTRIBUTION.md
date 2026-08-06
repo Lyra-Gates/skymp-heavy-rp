@@ -72,7 +72,13 @@ O painel valida o `redirect_uri` contra uma allowlist (`LAUNCHER_REDIRECT_URIS`)
 
 Junto com o perfil, o painel devolve um **`launchTicket`** (`launch_tickets`, migration v6) — de uso único, TTL de 5 min, guardado como hash SHA-256 pra que um vazamento do banco não vire credencial utilizável. É esse ticket que a fila exige.
 
-> ⚠️ **Ponta ainda solta:** o `launch-game` grava o ticket de sessão em `skymp_config.json`, mas o **gamemode nunca o lê** — `whitelist.js` confia no `profileId` que o cliente informa. Enquanto isso não mudar, a fila controla *quantos* entram, não *quem* entra. O `apps/game-api` já expõe `/internal/session/resolve` pro gamemode fechar esse laço.
+### O que acontece com o ticket depois
+
+O `launch-game` grava o ticket de sessão em `skymp_config.json` como `session`. Isso não é invenção nossa: é o campo que o servidor SkyMP lê quando `offlineMode: false`. Ele então resolve a sessão contra o master API — que passou a ser o nosso próprio painel (`ARCHITECTURE.md` 1.2.1) — e o `id` que voltar vira o `profileId` do gamemode.
+
+É esse desvio que tira a identidade das mãos do cliente. Com `offlineMode: true`, o cliente declararia o próprio `profileId` no mesmo arquivo e o servidor acreditaria.
+
+Cadeia completa: **Discord** → painel (`launch_tickets`) → fila (`game_sessions`) → `skymp_config.json` → servidor SkyMP → master API → `profileId`.
 
 ---
 
