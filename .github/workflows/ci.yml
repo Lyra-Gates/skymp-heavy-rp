@@ -37,6 +37,8 @@ jobs:
             dir: apps/game-api
           - nome: bot discord
             dir: apps/bot-discord
+          - nome: launcher
+            dir: apps/launcher
 
     steps:
       - uses: actions/checkout@v4

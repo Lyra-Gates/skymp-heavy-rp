@@ -17,7 +17,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 | `skymp/gamemode` | 218/218 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
-| `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
+| `apps/launcher` | 24/24 ✅ (paridade) | ✅ | **Estava quebrado ponta a ponta** (ver 2.1) e sem teste nenhum. A lógica de paridade de modpack foi extraída pra `electron/parity.mjs` e testada — achou o buraco do plugin extra (2.15). O resto do `main.ts` depende de Electron. |
 | `apps/game-api` | 24/24 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. |
 | Tipagem `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa a API do SkyMP (não há typings públicos upstream). Informativo, não trava build nem teste. Achou 2.13 e 2.14 na primeira execução. |
 | Schema / migrations | — | — | Consistente. Sem drift entre tabelas referenciadas e definidas. |
@@ -147,6 +147,18 @@ Ainda vale conferir in-game, mas agora como confirmação, não como investigaç
 
 Escolha deliberada de não lançar exceção: isso derrubaria o comando do jogador por um erro de programação. Negar é o resultado seguro; o log é o que faz alguém corrigir. Pega também o caso oposto — quem escreve `hasPermission(id, 'manage_factions')` acha que criou uma regra e criou uma porta que nunca abre. 4 testes novos.
 
+### 2.15 🔴 Cliente com plugin extra passava na verificação de paridade — *corrigido*
+
+Achado ao extrair a lógica do launcher para teste. As duas verificações de paridade percorriam **a lista do servidor** perguntando "o jogador tem isto?". Nenhuma percorria a do jogador perguntando "o servidor conhece isto?".
+
+Consequência: um cliente com **todos** os mods certos, com o hash certo, **mais um `.esp` a mais**, passava nas duas. E um plugin a mais na load order ocupa um índice e desloca todos os seguintes — o `HeavyRP.esm` que é `02` no servidor vira `03` nele, e **todo `base_id` gravado no banco passa a apontar para outro registro na tela daquele jogador**.
+
+É exatamente a falha que o contrato de FormID existe para impedir (`MODS_AND_GAMEMODE_CONTRACT.md` §3), e ela não produz erro nenhum: produz um baú com outra coisa dentro.
+
+Junto veio um segundo caso: quando o servidor não informava load order, o código caía para a ordem **local** — comparando o jogador consigo mesmo e respondendo `ok` sempre. A pior resposta possível, porque parece aprovação.
+
+**Corrigido:** lógica extraída para `apps/launcher/electron/parity.mjs` (sem `fs`, sem `http`, sem `electron`), com 24 testes. A verificação passou a rodar nas duas direções, usa o `plugins.txt` para saber o que está de fato ativo (plugin presente e desativado não desloca nada), e load order ausente agora **reprova**.
+
 ---
 
 ## 3. Plano de melhorias
@@ -162,7 +174,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 1.2 | ✅ **Feito** — `apps/game-api/scripts/generate-mods-manifest.js` | |
 | 1.3 | ✅ **Feito** — `Start-AllServices.ps1` pré-checa cada serviço e reporta o que não subiu | |
 | 1.4 | ✅ **Feito** — 29 smoke tests em `apps/web/server.test.js` | |
-| 1.5 | **Rodar o plano de teste in-game que já existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) com as flags `ENABLE_*` ligadas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
+| 1.5 | **Rodar o [roteiro da Fase 0](FASE_0_ROTEIRO.md)** — passo a passo, ~50 min, 2 pessoas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
 | 1.5a | ✅ **Resolvido sem servidor** — os testes oficiais do SkyMP responderam. As 22 chamadas foram convertidas. Confirmar in-game continua valendo, mas como checagem, não investigação | |
 | 1.6 | ✅ **Feito** — `apps/web` serve o master API, `game_sessions` (v8) guarda a sessão, `offlineMode: false` nos exemplos. Falta confirmar in-game | |
 | 1.7 | ✅ **Feito** — `mp.onDeath` é o gatilho primário e a autoria vai pra `audit_logs` (`death:killer`). O polling continua como rede de segurança até o hook ser confirmado in-game | |

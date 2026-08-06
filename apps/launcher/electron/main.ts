@@ -6,6 +6,7 @@ import http from 'http';
 import https from 'https';
 import crypto from 'crypto';
 import { URL } from 'url';
+import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins } from './parity.mjs';
 
 // ─── Constants & Env ───
 // Estes valores são substituídos em tempo de build pelo `define` do
@@ -846,41 +847,22 @@ function listDataPlugins(folderPath: string) {
 }
 
 function readPluginHeader(filePath: string): PluginHeader {
+  // O I/O fica aqui; o parsing vive em parity.mjs, testado com plugin
+  // sintetico. Lemos so o comeco do arquivo: o bloco de masters fica no
+  // cabecalho, e um .esm de Skyrim tem centenas de MB.
   let fd: number | null = null;
   try {
     fd = fs.openSync(filePath, 'r');
     const head = Buffer.alloc(24);
     fs.readSync(fd, head, 0, 24, 0);
-    if (head.toString('latin1', 0, 4) !== 'TES4') {
-      return { masters: [], isMaster: false, isLight: false, error: 'Cabecalho TES4 invalido' };
+    if (head.length >= 8) {
+      const dataSize = head.readUInt32LE(4);
+      const cap = Math.min(dataSize, 1024 * 1024);
+      const corpo = Buffer.alloc(cap);
+      fs.readSync(fd, corpo, 0, cap, 24);
+      return parsePluginHeader(Buffer.concat([head, corpo]));
     }
-
-    const dataSize = head.readUInt32LE(4);
-    const flags = head.readUInt32LE(8);
-    const isMaster = (flags & 0x1) !== 0;
-    const isLight = (flags & 0x200) !== 0;
-    const cap = Math.min(dataSize, 1024 * 1024);
-    const data = Buffer.alloc(cap);
-    fs.readSync(fd, data, 0, cap, 24);
-
-    const masters: string[] = [];
-    let offset = 0;
-    while (offset + 6 <= data.length) {
-      const type = data.toString('latin1', offset, offset + 4);
-      const size = data.readUInt16LE(offset + 4);
-      const valueStart = offset + 6;
-      const valueEnd = valueStart + size;
-      if (valueEnd > data.length) break;
-      if (type === 'MAST') {
-        const value = data.toString('utf8', valueStart, valueEnd);
-        const nulIndex = value.indexOf(String.fromCharCode(0));
-        const raw = (nulIndex >= 0 ? value.slice(0, nulIndex) : value).trim();
-        if (raw) masters.push(raw);
-      }
-      offset = valueEnd;
-    }
-
-    return { masters, isMaster, isLight };
+    return parsePluginHeader(head);
   } catch (e: any) {
     return { masters: [], isMaster: false, isLight: false, error: e.message };
   } finally {
@@ -897,11 +879,7 @@ ipcMain.handle('get-local-plugins', async (_event, folderPath) => {
     const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local');
     const pluginsTxtPath = path.join(localAppData, 'Skyrim Special Edition', 'plugins.txt');
     const pluginsTxt = fs.existsSync(pluginsTxtPath)
-      ? fs.readFileSync(pluginsTxtPath, 'utf8')
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(line => line.length > 0 && !line.startsWith('#'))
-        .map(line => ({ name: line.replace(/^\*/, ''), enabled: line.startsWith('*') }))
+      ? parsePluginsTxt(fs.readFileSync(pluginsTxtPath, 'utf8'))
       : [];
     return { plugins, pluginsTxt };
   } catch {
@@ -929,25 +907,15 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
     }
 
     const allFiles = fs.readdirSync(dataPath);
-    for (const serverMod of modsJson.mods) {
-      const match = allFiles.find(p => p.toLowerCase() === serverMod.filename.toLowerCase());
-      if (!match) {
-        return { success: false, error: `Mod faltando: ${serverMod.filename}` };
-      }
+    const hashOf = (filename: string) => {
+      const h = crypto.createHash('md5');
+      h.update(fs.readFileSync(path.join(dataPath, filename)));
+      return h.digest('hex');
+    };
 
-      const filePath = path.join(dataPath, match);
-      const hash = await new Promise<string>((resolve, reject) => {
-        const h = crypto.createHash('md5');
-        const s = fs.createReadStream(filePath);
-        s.on('data', data => h.update(data));
-        s.on('end', () => resolve(h.digest('hex')));
-        s.on('error', err => reject(err));
-      });
+    const resultado = compareMods({ serverMods: modsJson.mods, localFiles: allFiles, hashOf });
+    if (!resultado.success) return resultado;
 
-      if (hash !== serverMod.hash) {
-        return { success: false, error: `O mod ${serverMod.filename} está modificado ou corrompido!` };
-      }
-    }
     return { success: true, loadOrder: modsJson.loadOrder };
   } catch (e: any) {
     return { success: false, error: e.message };
@@ -959,38 +927,23 @@ ipcMain.handle('analyze-plugins', async (_event, folderPath, serverLoadOrder) =>
   try {
     const dataPath = path.join(folderPath, 'Data');
     if (!fs.existsSync(dataPath)) return { ok: false, problems: ['Pasta Data nao encontrada.'], plugins: [] };
-    const localPlugins = listDataPlugins(folderPath);
-    const localByLower = new Map(localPlugins.map(file => [file.toLowerCase(), file]));
-    const order = Array.isArray(serverLoadOrder) && serverLoadOrder.length > 0 ? serverLoadOrder : localPlugins;
-    const orderIndex = new Map(order.map((file: string, index: number) => [file.toLowerCase(), index]));
-    const problems: string[] = [];
-    const plugins = [];
 
-    for (const plugin of order) {
-      const localName = localByLower.get(String(plugin).toLowerCase());
-      if (!localName) {
-        problems.push(`Plugin ausente: ${plugin}`);
-        continue;
-      }
-      const header = readPluginHeader(path.join(dataPath, localName));
-      plugins.push({ name: localName, ...header });
-      if (header.error) problems.push(`${localName}: ${header.error}`);
+    // A load order real vem do plugins.txt, nao dos arquivos presentes em
+    // Data/: um plugin no disco e desativado nao ocupa indice e nao desloca
+    // FormID nenhum. Sem o arquivo, parity.mjs cai para os arquivos presentes,
+    // que e a direcao segura.
+    const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local');
+    const pluginsTxtPath = path.join(localAppData, 'Skyrim Special Edition', 'plugins.txt');
+    const enabledPlugins = fs.existsSync(pluginsTxtPath)
+      ? parsePluginsTxt(fs.readFileSync(pluginsTxtPath, 'utf8')).filter(p => p.enabled).map(p => p.name)
+      : undefined;
 
-      for (const master of header.masters) {
-        const masterLocal = localByLower.get(master.toLowerCase());
-        if (!masterLocal) {
-          problems.push(`${localName}: master ausente ${master}`);
-          continue;
-        }
-        const masterIndex = orderIndex.get(master.toLowerCase());
-        const pluginIndex = orderIndex.get(String(plugin).toLowerCase());
-        if (masterIndex !== undefined && pluginIndex !== undefined && masterIndex > pluginIndex) {
-          problems.push(`${localName}: master ${master} carrega depois do plugin`);
-        }
-      }
-    }
-
-    return { ok: problems.length === 0, problems, plugins };
+    return analyzePlugins({
+      localPlugins: listDataPlugins(folderPath),
+      serverLoadOrder,
+      enabledPlugins,
+      readHeader: (nome: string) => readPluginHeader(path.join(dataPath, nome))
+    });
   } catch (e: any) {
     return { ok: false, problems: [e.message], plugins: [] };
   }

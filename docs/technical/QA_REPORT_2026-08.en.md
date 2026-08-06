@@ -17,7 +17,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 | `skymp/gamemode` | 218/218 ✅ + 9/9 system checks | ✅ | **Mature.** The best part of the project: atomic transactions, a state machine, a module registry, real test coverage. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
-| `apps/launcher` | ❌ none | ✅ | **Was broken end to end** (see 2.1); fixed this round, but with no runtime validation. |
+| `apps/launcher` | 24/24 ✅ (parity) | ✅ | **Was broken end to end** (see 2.1) and had no tests at all. The modpack parity logic was extracted into `electron/parity.mjs` and tested — it found the extra-plugin hole (2.15). The rest of `main.ts` needs Electron. |
 | `apps/game-api` | 24/24 ✅ | ✅ | **New.** Serves port 7758, which the launcher always called and which didn't exist. |
 | `mp` typings | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` types SkyMP's API (there are no public upstream typings). Informational; it blocks neither build nor tests. It found 2.13 and 2.14 on its first run. |
 | Schema / migrations | — | — | Consistent. No drift between referenced and defined tables. |
@@ -161,7 +161,7 @@ Ordered by **what unblocks what**. Phase 1 items are prerequisites for any test 
 | 1.2 | ✅ **Done** — `apps/game-api/scripts/generate-mods-manifest.js` | |
 | 1.3 | ✅ **Done** — `Start-AllServices.ps1` pre-checks each service and reports what didn't start | |
 | 1.4 | ✅ **Done** — 29 smoke tests in `apps/web/server.test.js` | |
-| 1.5 | **Run the in-game test plan that already exists** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) with the `ENABLE_*` flags on | The whole gamemode is verified only by unit tests against a mocked `mp`. **This is the real remaining blocker.** |
+| 1.5 | **Run the [Phase 0 runbook](FASE_0_ROTEIRO.md)** (Portuguese) — step by step, ~50 min, 2 people | The whole gamemode is verified only by unit tests against a mocked `mp`. **This is the real remaining blocker.** |
 | 1.5a | ✅ **Resolved without a server** — SkyMP's own tests answered it. The 22 calls were converted. Confirming in game still counts, but as a check, not an investigation | |
 | 1.6 | ✅ **Done** — `apps/web` serves the master API, `game_sessions` (v8) stores the session, `offlineMode: false` in the examples. In-game confirmation still pending | |
 | 1.7 | ✅ **Done** — `mp.onDeath` is the primary trigger and attribution goes to `audit_logs` (`death:killer`). Polling stays as a safety net until the hook is confirmed in game | |

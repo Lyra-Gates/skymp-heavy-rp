@@ -17,7 +17,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 | `skymp/gamemode` | 218/218 ✅ + 9/9 comprobaciones de sistema | ✅ | **Maduro.** La mejor parte del proyecto: transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
-| `apps/launcher` | ❌ ninguna | ✅ | **Estaba roto de punta a punta** (ver 2.1); corregido en esta ronda, pero sin validación en tiempo de ejecución. |
+| `apps/launcher` | 24/24 ✅ (paridad) | ✅ | **Estaba roto de punta a punta** (ver 2.1) y sin ninguna prueba. La lógica de paridad del modpack se extrajo a `electron/parity.mjs` y se probó — encontró el agujero del plugin extra (2.15). El resto de `main.ts` necesita Electron. |
 | `apps/game-api` | 24/24 ✅ | ✅ | **Nuevo.** Sirve el puerto 7758 que el launcher siempre llamó y que no existía. |
 | Tipado `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa el API de SkyMP (no hay tipos públicos en upstream). Es informativo; no bloquea ni el build ni las pruebas. Encontró 2.13 y 2.14 en la primera ejecución. |
 | Esquema / migraciones | — | — | Consistentes. Sin desvío entre tablas referenciadas y definidas. |
@@ -161,7 +161,7 @@ Ordenado por **qué desbloquea qué**. Los puntos de la Fase 1 son prerrequisito
 | 1.2 | ✅ **Hecho** — `apps/game-api/scripts/generate-mods-manifest.js` | |
 | 1.3 | ✅ **Hecho** — `Start-AllServices.ps1` precomprueba cada servicio y reporta lo que no levantó | |
 | 1.4 | ✅ **Hecho** — 29 smoke tests en `apps/web/server.test.js` | |
-| 1.5 | **Ejecutar el plan de prueba en el juego que ya existe** (`GOVERNANCE_MARKET_STALLS_TEST_PLAN.md`) con las flags `ENABLE_*` encendidas | Todo el gamemode está verificado solo con pruebas unitarias contra un `mp` simulado. **Es el bloqueo real que queda.** |
+| 1.5 | **Ejecutar el [runbook de la Fase 0](FASE_0_ROTEIRO.md)** (en portugués) — paso a paso, ~50 min, 2 personas | Todo el gamemode está verificado solo con pruebas unitarias contra un `mp` simulado. **Es el bloqueo real que queda.** |
 | 1.5a | ✅ **Resuelto sin servidor** — las propias pruebas de SkyMP respondieron. Las 22 llamadas fueron convertidas. Confirmarlo en el juego sigue valiendo, pero como comprobación, no como investigación | |
 | 1.6 | ✅ **Hecho** — `apps/web` sirve la master API, `game_sessions` (v8) guarda la sesión, `offlineMode: false` en los ejemplos. Falta confirmar en el juego | |
 | 1.7 | ✅ **Hecho** — `mp.onDeath` es el disparador primario y la autoría va a `audit_logs` (`death:killer`). El polling sigue como red de seguridad hasta que el hook se confirme en el juego | |

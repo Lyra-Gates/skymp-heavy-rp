@@ -1,0 +1,40 @@
+/**
+ * Tipos de `parity.mjs`.
+ *
+ * O módulo é JS puro para que `node --test` rode sem passo de build; esta
+ * declaração é o que mantém o `main.ts` typechecked ao importá-lo.
+ */
+
+export interface PluginHeader {
+  masters: string[];
+  isMaster: boolean;
+  isLight: boolean;
+  error?: string;
+}
+
+export interface PluginEntry {
+  name: string;
+  enabled: boolean;
+}
+
+export interface ServerMod {
+  filename: string;
+  hash: string;
+}
+
+export function parsePluginsTxt(content: string): PluginEntry[];
+
+export function parsePluginHeader(buffer: Buffer | null | undefined): PluginHeader;
+
+export function compareMods(params: {
+  serverMods: ServerMod[] | null | undefined;
+  localFiles: string[];
+  hashOf: (filename: string) => string;
+}): { success: boolean; error?: string };
+
+export function analyzePlugins(params: {
+  localPlugins: string[];
+  serverLoadOrder: string[] | null | undefined;
+  enabledPlugins?: string[];
+  readHeader: (name: string) => PluginHeader;
+}): { ok: boolean; problems: string[]; plugins: Array<{ name: string } & PluginHeader> };

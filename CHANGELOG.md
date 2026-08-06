@@ -9,7 +9,14 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido
+
+- **Cliente com plugin extra passava na verificação de paridade.** As duas checagens percorriam a lista do servidor perguntando "o jogador tem isto?"; nenhuma percorria a do jogador perguntando "o servidor conhece isto?". Um cliente com todos os mods certos, com o hash certo, **mais um `.esp` a mais**, era aprovado — e um plugin extra ocupa um índice na load order e desloca todos os seguintes, então o `base_id` gravado no banco passa a apontar para outro item na tela daquele jogador. Sem erro, sem log, sem crash: um baú com outra coisa dentro. Junto veio um segundo caso — load order ausente fazia a checagem comparar o jogador consigo mesmo e responder `ok`, que é a pior resposta possível porque parece aprovação. Ver QA 2.15.
+
 ### Adicionado
+
+- **[Roteiro da Fase 0](docs/technical/FASE_0_ROTEIRO.md)** — o teste in-game passa a ser um procedimento de ~50 min com passos, o que observar, o que significa falhar, e um registro para preencher enquanto testa. O plano anterior era de 13/07 e cobria só governança e barracas; desde ele entraram morte, painel, VOIP, master API e fila.
+- **Primeiros testes do launcher** (24) — ele tinha zero, e é o programa que todo jogador roda. A lógica de paridade saiu de dentro dos handlers `ipcMain` para `electron/parity.mjs`, sem `fs`, sem `http` e sem `electron`: as dependências de I/O entram como argumento, e o cabeçalho TES4 é testado com um plugin sintético de 60 bytes em vez de um `.esm` de 300 MB. O launcher entrou na matriz de testes do CI.
 
 - **`core/soul.js` — a camada de domínio da Afinidade da Alma**, com 28 testes. Função pura: gerador com orçamento fixo, bandas, semente derivada da ficha e resolução em quatro resultados. Não depende da Fase 0 porque não toca no jogo — o serviço, que toca, continua bloqueado.
 
