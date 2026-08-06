@@ -226,6 +226,8 @@ Duas saídas, ambas viáveis:
 1. **`makeEventSource` no cliente**, escutando o evento de hit do Skyrim Platform e mandando `{aggressor, target}` pro servidor. Barato, e melhor que a proximidade que usamos hoje — mas continua sendo o cliente falando.
 2. **`IDamageFormula` em C++** — o SkyMP expõe uma interface justamente pra servidores customizados redefinirem a fórmula de dano. É onde o dado é confiável de verdade, mas exige build C++ do servidor.
 
+**Isto deixou de ser teoria.** O servidor RP Red House implementou a saída 1 e o código é público — ver `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` 4.1. Lá estão também os dois detalhes que custariam horas de depuração (o `0x14` do jogador local e a conversão obrigatória de FormID) e um aviso de performance que vale pra nós.
+
 Enquanto nenhuma das duas for feita, o `/iniciar` + `checkDamageSpike` continua sendo o que temos: evidência por proximidade, não atribuição.
 
 ---

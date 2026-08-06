@@ -24,7 +24,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 Cinco módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
 
-Onze serviços existem no disco e **nunca são registrados** — `justice`, `survival`, `economy-regional`, `faction`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse`, `economy`. Isso está documentado e é intencional (PARKED), mas vale dizer em voz alta: **é a maior parte do código do gamemode em volume, e nada dela roda.**
+Sete serviços existem no disco e **nunca são registrados** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Outros quatro foram apagados em 06/08/2026 (`economy-service`, `justice`, `faction`, `survival`) por duplicarem sistema ativo ou serem inseguros — ver `PARKED_SERVICES_DECISION.md`. Os que ficaram e mexiam em ouro foram migrados pro `core/transaction-service`.
 
 ---
 
@@ -164,6 +164,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 1.5a | ✅ **Resolvido sem servidor** — os testes oficiais do SkyMP responderam. As 22 chamadas foram convertidas. Confirmar in-game continua valendo, mas como checagem, não investigação | |
 | 1.6 | ✅ **Feito** — `apps/web` serve o master API, `game_sessions` (v8) guarda a sessão, `offlineMode: false` nos exemplos. Falta confirmar in-game | |
 | 1.7 | ✅ **Feito** — `mp.onDeath` é o gatilho primário e a autoria vai pra `audit_logs` (`death:killer`). O polling continua como rede de segurança até o hook ser confirmado in-game | |
+| 1.8 | **Tirar o polling do `death-service` de vez** assim que o `onDeath` for confirmado in-game | Deixou de ser só elegância: o Red House mediu ~15 ms por ida e volta ao Papyrus (`REFERENCE_STUDY_SKYMP_RED_HOUSE.md` 4.1). Nosso laço varre até 50 profileIds a cada 2 s — com 40 jogadores isso come ~600 ms de cada janela, sincronamente. Não escala. Vale rever o `player-panel-service` pelo mesmo motivo. |
 
 ### Fase 2 — Tirar a configuração-fantasma do caminho
 

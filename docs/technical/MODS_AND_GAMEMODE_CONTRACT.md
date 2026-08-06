@@ -36,6 +36,8 @@ ObjectReference.disable     ObjectReference.delete
 
 São todos **imperativos**: "mostre isso", "toque essa animação", "coloque esse item aí". Não existe nenhum ponto onde o servidor pergunte ao cliente "e aí, o que aconteceu?" e acredite na resposta.
 
+*(Nota de 06/08/2026: o servidor também consegue **ler os registros dos plugins** via `mp.lookupEspmRecordById(formId)` — dano base de arma, valor de armadura, perks, raça. Isso não muda a regra acima, mas amplia o que dá pra validar sem confiar no cliente: o servidor pode conferir o dano de uma arma contra o ESM em vez de contra uma tabela nossa. Ver `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` 4.1.)*
+
 A consequência prática:
 
 - Um mod que adiciona um script `OnActivate` numa bancada **roda** no cliente que o instalou. Mas se ele der um item, esse item existe apenas na tela daquele jogador — não passa por `core/transaction-service.js`, então não está em `character_inventory`, não aparece no `/painel`, e some no próximo login.

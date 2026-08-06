@@ -239,6 +239,81 @@ Impacto:
 - Em producao devem exigir permissoes por cargo, motivo obrigatorio e audit log.
 - Comandos destrutivos devem ter confirmacao ou serem bloqueados fora de ambiente staff.
 
+## 4.1 Leitura do código-fonte (06/08/2026)
+
+A análise anterior (seção 4) olhou estrutura, config e comandos. Esta é a leitura do **código** de `alekcey0211/red-house-public` — especificamente `functions-lib/src/`, que é onde vive a lógica de jogo.
+
+O repositório está parado desde 16/11/2021 e é baseado num SkyMP daquela época, então nada aqui deve ser tratado como API atual. O valor é de **projeto**: eles resolveram problemas que ainda estão abertos pra nós.
+
+### ⚖️ Licença: GPL-3.0 — não dá pra copiar código
+
+O repositório é **GPL-3.0**. Copiar trechos para o nosso gamemode obrigaria a licenciar o nosso projeto sob GPL também.
+
+Isso não impede aprender: técnica e arquitetura não são protegidas por direito autoral, código específico é. Tudo abaixo é descrição do que eles fazem e por quê — qualquer implementação nossa precisa ser escrita do zero, e no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform de qualquer jeito.
+
+### O evento de hit existe, e eles o implementaram
+
+O achado mais direto. `functions-lib/src/events/_onHit.ts` registra:
+
+```
+mp.makeEventSource('_onHit', <snippet de cliente>)
+mp._onHit = (pcFormId, event) => { ... }
+```
+
+O snippet de cliente escuta `ctx.sp.on('hit', ...)` do Skyrim Platform e manda pro servidor `{ target, agressor, isPowerAttack, isSneakAttack, isBashAttack, isHitBlocked }`.
+
+Isso confirma o que `SKYMP_UPSTREAM_REFERENCE.md` §2 dizia como teoria: **`makeEventSource` é o caminho para o evento de hit**. O `docs_onhit_and_damage.md` do SkyMP descreve o pacote no C++ e a issue #1338 recusou expor ao gamemode — mas dá pra reconstruir do lado do cliente, e alguém já fez.
+
+Dois detalhes que economizariam horas de depuração:
+
+- **`0x14` é o jogador local.** O cliente reporta `0x14` como FormID de si mesmo; o servidor precisa trocar por `pcFormId` antes de usar. Sem isso, todo hit do próprio jogador aponta pro form errado.
+- **`ctx.getFormIdInServerFormat()` é obrigatório** no snippet. FormID do cliente e do servidor são espaços diferentes — mandar o número cru daria o objeto errado.
+
+### Eles calculam dano no servidor
+
+`hitSync` não só registra o hit: recalcula o dano e aplica. Lê a arma equipada (`baseDamage`, tipo), a armadura do alvo (`baseArmor`), aplica multiplicador de power/bash attack vindo do `server-options`, reduz 50% se o golpe foi bloqueado, e escreve o resultado no ActorValue de vida.
+
+É a resposta à pergunta "dá pra ter fórmula de dano própria sem mexer em C++?". Dá — o `IDamageFormula` em C++ que o SkyMP oferece é o caminho limpo, mas o caminho em JS existe.
+
+Para Heavy RP isso abre coisas que hoje não temos: dano diferenciado por tipo de arma, armadura importando de verdade, e sobretudo o item seguinte.
+
+### `isInSafeLocation` — zonas seguras
+
+Antes de aplicar dano, eles checam uma property `isInSafeLocation` no alvo **e** no agressor. Se qualquer um dos dois estiver numa zona segura, o dano não é aplicado — o evento ainda é registrado, mas não machuca.
+
+É exatamente o que falta pra proteger área de spawn, taverna de RP passivo ou cidade sob trégua. Combina com a nossa `action-policy.js`: hoje bloqueamos ações por **estado do personagem**, isso bloquearia por **lugar**.
+
+### ⚠️ O aviso de performance que veio de graça
+
+O código deles está cheio de `// TODO: optimize` com o custo medido ao lado:
+
+| Operação | Custo anotado por eles |
+|---|---|
+| `getEquipment(...)` | 13 ms |
+| `av.set(target, 'health', 'damage', ...)` | 35 ms |
+| `av.getMaximum(target, 'health')` | 15 ms |
+
+São medições deles, em hardware e versão deles — mas a ordem de grandeza é o recado: **cada ida e volta ao Papyrus custa dezenas de milissegundos**, não microssegundos. Eles chegaram a instrumentar tudo com um `logExecuteTime` por handler.
+
+Isso importa direto pra nós. O `death-service.js` varre até 50 profileIds a cada 2 segundos chamando `getActorValue('Health')` por ator. Se uma chamada custa ~15 ms, 40 jogadores conectados consomem ~600 ms de cada janela de 2 s — e o laço é síncrono. O polling não escala.
+
+É mais um argumento pra migração que já começamos (`mp.onDeath` como gatilho primário, `SKYMP_UPSTREAM_REFERENCE.md` §2.5) e pra tirar o polling de vez assim que o hook for confirmado in-game. Vale também rever o `player-panel-service`, que faz o mesmo tipo de leitura enquanto o painel está aberto.
+
+### Outras coisas que aprendemos
+
+- **`mp.lookupEspmRecordById(formId)`** — o servidor consegue ler registros dos plugins (dano base de arma, armadura, perks, raça). Não sabíamos que existia. Abre validação server-side de item usando o dado real do ESM em vez de tabela nossa.
+- **Módulos com hook `onHit`** — o sistema de módulos deles recebe eventos, não só `initialize`. O nosso `core/module-registry.js` só tem ciclo de vida; um dia pode valer distribuir eventos de jogo pra módulos ativos.
+- **`onCellChange`** por `makeEventSource` — saber quando alguém troca de célula é a base de zonas seguras, territórios e presença.
+- **`server-options.json` era deles.** As opções do nosso `SERVER_OPTIONS_SCHEMA.md` (`isVanillaSpawn`, `SpawnTimeToRespawn`, `spawnTimeToRespawnNPC`) são as do Red House. Isso explica por que o schema descrevia coisas que o nosso código nunca implementou: foi copiado como intenção e nunca ligado. Ver `QA_REPORT_2026-08.md` 2.10 — hoje o `core/server-options.js` diz claramente o que está ligado e o que não está.
+
+### O que NÃO copiar
+
+A conclusão da seção 2 continua valendo, e o código reforça:
+
+- **`adminPassword` em `server-options`** — autenticação de staff por senha em arquivo de configuração. Nós derivamos staff de `staff_roles` no banco, com auditoria. Não regredir.
+- **`/killall`, `/killnpc`, `/delete`, `/placeatme` expostos no chat** — comandos destrutivos sem o gate de permissão nomeada que o nosso `admin-service` tem.
+- **Cálculo de perk a cada hit** — eles mesmos deixaram desligado (`const calcPerks = false`) por custo. Se formos por esse caminho, o cache é obrigatório desde o começo.
+
 ## 5. Ajustes Recomendados no Nosso Plano
 
 1. Separar banco de mundo SkyMP de banco da plataforma RP.

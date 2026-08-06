@@ -5,6 +5,8 @@
 >
 > O loader avisa no boot quando encontra no arquivo uma opção que ainda não faz nada, e **aborta o boot** se um valor for de tipo errado ou estiver fora do intervalo. Falhar alto é deliberado: uma opção de gameplay mal digitada que "quase funciona" é pior que um servidor que não sobe.
 
+> **De onde este schema veio:** as opções originais (`isVanillaSpawn`, `SpawnTimeToRespawn`, `spawnTimeToRespawnNPC` e afins) são as do servidor Red House — ver `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` 4.1. Foram copiadas como intenção de design e nunca ligadas ao nosso código, o que explica o schema descrever comportamento que nunca existiu aqui. A tabela abaixo separa o que é real do que continua sendo intenção.
+
 ## 0. O que está ligado hoje
 
 | Opção | Onde age |
