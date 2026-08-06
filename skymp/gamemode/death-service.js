@@ -24,6 +24,11 @@ const { STATES } = characterState;
 const transactionService = require('./core/transaction-service');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 const rangeUtils = require('./core/range-utils');
+// Este arquivo ja usava a forma de objeto antes do achado 2.13 (era um dos
+// dois que estavam certos). Passou a usar o helper pra que exista um lugar
+// so onde a forma do `self` e decidida — enquanto a construcao estava
+// duplicada aqui, corrigir `core/papyrus.js` nao alcancava este arquivo.
+const { actorRef } = require('./core/papyrus');
 
 const RESPAWN_POS = [-150, -100, -200]; // Coordenadas ficticias do Templo de Kynareth
 const RESPAWN_CELL = '0x162e2'; // ID do Templo
@@ -103,8 +108,7 @@ function initDeathService() {
         if (!actors || actors.length === 0) continue;
 
         for (const actorId of actors) {
-          const selfObj = { type: 'form', desc: mp.getDescFromId(actorId) };
-          const health = mp.callPapyrusFunction('method', 'Actor', 'getActorValue', selfObj, ['Health']);
+          const health = mp.callPapyrusFunction('method', 'Actor', 'getActorValue', actorRef(actorId), ['Health']);
           const currentlyDead = (health <= 0);
           const wasDead = mp.get(actorId, '_wasDead') || false;
 
@@ -200,9 +204,8 @@ async function rescueTarget(rescuerActorId, targetActorId) {
 
   characterState.set(target.characterId, STATES.NORMAL, {});
   if (typeof mp !== 'undefined') {
-    const targetSelf = { type: 'form', desc: mp.getDescFromId(targetActorId) };
-    mp.callPapyrusFunction('method', 'Actor', 'Resurrect', targetSelf, []);
-    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', targetSelf, ['Health', STABILIZE_HEALTH]);
+    mp.callPapyrusFunction('method', 'Actor', 'Resurrect', actorRef(targetActorId), []);
+    mp.callPapyrusFunction('method', 'Actor', 'SetActorValue', actorRef(targetActorId), ['Health', STABILIZE_HEALTH]);
     mp.set(targetActorId, '_wasDead', false);
   }
 
@@ -293,8 +296,7 @@ async function executeRespawn(actorId, characterId, penalty = 0) {
   if (typeof mp === 'undefined') return;
 
   try {
-    const selfObj = { type: 'form', desc: mp.getDescFromId(actorId) };
-    mp.callPapyrusFunction('method', 'Actor', 'Resurrect', selfObj, []);
+    mp.callPapyrusFunction('method', 'Actor', 'Resurrect', actorRef(actorId), []);
 
     mp.set(actorId, 'locationalData', {
       pos: RESPAWN_POS,

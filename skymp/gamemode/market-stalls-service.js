@@ -184,14 +184,22 @@ async function spawnStallVisual(actorId, loc, name) {
     let refId = null;
     if (typeof mp.callPapyrusFunction === 'function') {
       const formToPlace = mp.callPapyrusFunction('global', 'Game', 'getFormEx', null, [baseId]);
-      const anchor = typeof mp.getDescFromId === 'function'
-        ? { type: 'form', desc: mp.getDescFromId(actorId) }
-        : actorId;
+      // O fallback anterior era `: actorId` — o FormID cru, que e exatamente a
+      // forma que o achado 2.13 do QA_REPORT identificou como invalida. Cair
+      // nela quando `getDescFromId` some e pior do que nao colocar a barraca:
+      // a chamada nao lanca, o `placed` volta vazio, e o codigo abaixo so
+      // registra "PlaceAtMe returned no reference" — um erro de contrato
+      // disfarcado de falha de asset. Sem `getDescFromId` nao ha `self`
+      // valido possivel, entao a saida honesta e desistir do visual.
+      if (typeof mp.getDescFromId !== 'function') {
+        console.warn('[market-stalls] Visual spawn indisponivel: mp.getDescFromId ausente, sem self valido pro Papyrus.');
+        return null;
+      }
       const placed = mp.callPapyrusFunction(
         'method',
         'ObjectReference',
         'PlaceAtMe',
-        anchor,
+        actorRef(actorId),
         [formToPlace, 1, true, false]
       );
       refId = placed?.desc && typeof mp.getIdFromDesc === 'function'

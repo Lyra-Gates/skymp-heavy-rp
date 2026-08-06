@@ -24,6 +24,8 @@ const governance = require('./governance-service');
 const marketStalls = require('./market-stalls-service');
 const identity = require('./identity-service');
 const panelRefreshBus = require('./core/panel-refresh-bus');
+// Mesmo motivo do death-service: a forma do `self` tem um lugar so.
+const { actorRef } = require('./core/papyrus');
 
 const VITALS_POLL_INTERVAL_MS = 2000;
 
@@ -46,11 +48,11 @@ const _lastStatusJson = new Map();
 function readVitals(actorId) {
   if (typeof mp === 'undefined') return { health: 0, magicka: 0, stamina: 0 };
   try {
-    const selfObj = { type: 'form', desc: mp.getDescFromId(actorId) };
+    const self = actorRef(actorId);
     return {
-      health: mp.callPapyrusFunction('method', 'Actor', 'getActorValue', selfObj, ['Health']),
-      magicka: mp.callPapyrusFunction('method', 'Actor', 'getActorValue', selfObj, ['Magicka']),
-      stamina: mp.callPapyrusFunction('method', 'Actor', 'getActorValue', selfObj, ['Stamina'])
+      health: mp.callPapyrusFunction('method', 'Actor', 'getActorValue', self, ['Health']),
+      magicka: mp.callPapyrusFunction('method', 'Actor', 'getActorValue', self, ['Magicka']),
+      stamina: mp.callPapyrusFunction('method', 'Actor', 'getActorValue', self, ['Stamina'])
     };
   } catch (err) {
     console.error('[player-panel] Falha ao ler vitals:', err.message);
