@@ -10,7 +10,7 @@ A infraestrutura é dividida nos seguintes módulos:
 
 ### 1.1 Banco de Dados (MariaDB/MySQL)
 O **MariaDB** é a fonte absoluta de verdade. Todos os serviços se conectam a ele.
-- **Tabelas Principais:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. O schema completo está em `skymp/packages/database/schema.sql` mais as migrations `v2`–`v8`, aplicadas **em ordem** (v6 = `launch_tickets`, v7 = índices das queries quentes, v8 = `game_sessions`).
+- **Tabelas Principais:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. O schema completo está em `skymp/packages/database/schema.sql` mais as migrations `v2`–`v9`, aplicadas **em ordem** (v6 = `launch_tickets`, v7 = índices das queries quentes, v8 = `game_sessions`, v9 = `characters.gold` para bancos anteriores à coluna).
 - Algumas tabelas existem no schema mas ainda não são lidas por nenhum código ativo (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — pertencem a módulos PARKED (ver 1.4).
 - **Regra Restrita:** Nenhuma alteração de estado no jogo (dinheiro, posições, itens) acontece sem ser gravada ou lida do MariaDB. O Node.js não confia em dados soltos na memória por períodos longos sem persistência.
 

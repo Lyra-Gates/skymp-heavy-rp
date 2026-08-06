@@ -49,9 +49,31 @@ async function getConnection() {
   return pool.getConnection();
 }
 
+/**
+ * Fecha o pool e libera o event loop.
+ *
+ * O servidor de jogo nunca chama isto — ele roda até ser desligado. Quem precisa
+ * é script de linha de comando: enquanto o pool existe, o mysql2 mantém sockets
+ * abertos e o Node não encerra sozinho.
+ *
+ * `scripts/verify-governance-market-stalls.js` já chamava `db.close()`, atrás de
+ * um `if (typeof db.close === 'function')` — e esta função não existia, então o
+ * guard nunca disparava. O resultado era que `RUN_DB_CHECK=1 npm run
+ * test:systems` imprimia "10/10 checks passaram" e **ficava pendurado para
+ * sempre**, sem devolver o prompt. Num CI com banco, o job só terminaria no
+ * timeout, e o relatório diria "cancelado" em vez de "passou".
+ */
+async function close() {
+  if (!pool) return;
+  const atual = pool;
+  pool = null;
+  await atual.end();
+}
+
 module.exports = {
   init,
   query,
   getConnection,
+  close,
   getPool: () => pool
 };
