@@ -311,3 +311,93 @@ describe('bandas', () => {
     assert.equal(soul.band(undefined), 'surdo');
   });
 });
+
+/**
+ * A alma de um personagem e derivada da ficha aprovada dele e nunca muda. Isso
+ * significa que a funcao de derivacao e um formato de dados, nao codigo livre:
+ * qualquer alteracao em `normalize`, na ordem dos campos ou no separador
+ * reescreve a alma de TODO personagem que ja existe, sem erro nenhum aparecer.
+ *
+ * Estes valores foram capturados do codigo em producao. Se um deles mudar, a
+ * pergunta nao e "o teste esta errado?" — e "isso vai mudar a alma de todo
+ * mundo, e a Constituicao secao 8 permite isso?".
+ */
+describe('deriveSeed e um formato congelado', () => {
+  const SEG = 's3gr3d0';
+  const GOLDEN = [
+    [1,  { motivations: 'Vinganca', weaknesses: 'Orfao',   socialTies: 'Sozinho' }, '95e23e31dc94b4a4a5ac5e5e'],
+    [42, { motivations: 'Poder',    weaknesses: 'Orgulho', socialTies: 'Guilda'  }, '732409bc8afcb3bc8bfda881']
+  ];
+
+  for (const [characterId, ficha, esperado] of GOLDEN) {
+    it(`semente de char ${characterId} nao mudou`, () => {
+      assert.equal(
+        soul.deriveSeed(SEG, characterId, ficha).slice(0, 24), esperado,
+        'a derivacao mudou — isso reescreve a alma de todo personagem que ja existe'
+      );
+    });
+  }
+
+  it('mover uma letra entre campos produz alma diferente', () => {
+    // O separador dos campos e NUL (U+0000), impossivel de digitar numa ficha
+    // porque o `normalize()` nao o deixa passar. Com um separador digitavel —
+    // espaco, por exemplo — 'ab'+'c' e 'a'+'bc' assinariam o MESMO material, e
+    // duas fichas diferentes nasceriam com a mesma alma.
+    const a = soul.deriveSeed(SEG, 7, { motivations: 'ab', weaknesses: 'c',  socialTies: 'd' });
+    const b = soul.deriveSeed(SEG, 7, { motivations: 'a',  weaknesses: 'bc', socialTies: 'd' });
+    assert.notEqual(a, b, 'o separador de campo deixou de proteger a fronteira');
+  });
+
+  it('acento e caixa nao mudam a alma, mas o conteudo muda', () => {
+    const comAcento = soul.deriveSeed(SEG, 3, { motivations: 'Vingança', weaknesses: 'Órfão', socialTies: 'Está só' });
+    const semAcento = soul.deriveSeed(SEG, 3, { motivations: 'vinganca', weaknesses: 'orfao', socialTies: 'esta so' });
+    assert.equal(comAcento, semAcento, 'normalize deveria absorver acento, caixa e espaco');
+
+    const outra = soul.deriveSeed(SEG, 3, { motivations: 'vinganca', weaknesses: 'orfao', socialTies: 'esta sozinho' });
+    assert.notEqual(comAcento, outra, 'ficha diferente precisa dar alma diferente');
+  });
+});
+
+/**
+ * O fonte deste arquivo carregava DOIS caracteres invisiveis com significado:
+ * o separador NUL e a classe de marcas combinantes do `normalize`. Os dois
+ * funcionavam, e os dois eram armadilhas — o arquivo contava como binario pro
+ * `grep`, a linha do separador se lia como `join('')`, e qualquer editor que
+ * limpe caracteres de controle ao salvar mudaria a semente de toda alma ja
+ * derivada, em silencio.
+ *
+ * Este teste existe pra que eles nao voltem por descuido.
+ */
+describe('o fonte nao esconde caractere invisivel', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const fonte = fs.readFileSync(path.join(__dirname, 'soul.js'), 'utf8');
+
+  it('nao ha byte NUL cru', () => {
+    assert.equal(
+      fonte.includes('\u0000'), false,
+      'use o escape \u0000 — NUL cru torna o arquivo binario pro grep e some em editor que limpa controle'
+    );
+  });
+
+  it('nao ha marca combinante crua', () => {
+    const marcas = [...fonte].filter(c => c.charCodeAt(0) >= 0x300 && c.charCodeAt(0) <= 0x36f);
+    assert.deepEqual(
+      marcas, [],
+      'use [\u0300-\u036f] escapado — marca combinante crua e invisivel em qualquer editor'
+    );
+  });
+
+  it('os escapes esperados estao la', () => {
+    // String.raw pra escrever a barra invertida sem uma terceira camada de
+    // escape: o que se procura no fonte e o texto \u0300, seis caracteres.
+    assert.ok(
+      fonte.includes(String.raw`[\u0300-\u036f]`),
+      'a classe de marcas combinantes deveria estar escapada'
+    );
+    assert.ok(
+      fonte.includes(String.raw`'\u0000'`),
+      'o separador de campo deveria estar escapado'
+    );
+  });
+});

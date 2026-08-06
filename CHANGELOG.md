@@ -11,6 +11,14 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **`core/soul.js` guardava dois caracteres invisíveis com significado.** O arquivo contava como binário para o `grep` e para o `file`, e a causa não era a que parecia: além da classe de marcas combinantes crua no `normalize()` (`U+0300`–`U+036F`), havia um **byte NUL** no separador do material assinado — `].join('<NUL>')`, que se lê na tela como `].join('')`.
+
+  O NUL é uma escolha deliberada e correta: ele não sobrevive ao `normalize()`, então nenhum jogador consegue escrevê-lo na ficha. Com um separador digitável, mover uma letra de um campo para o seguinte (`'ab'+'c'` contra `'a'+'bc'`) assinaria o mesmo material, e duas fichas diferentes nasceriam com a mesma alma. O problema nunca foi a escolha — foi ela estar invisível: quem lesse a linha entenderia o oposto, e qualquer editor que limpe caracteres de controle ao salvar mudaria a semente de **toda alma já derivada**, sem erro nenhum aparecer.
+
+  Os dois viraram escape (`'\u0000'` e `[\u0300-\u036f]`), com o separador em constante nomeada. Verificado que as sementes não mudaram: quatro almas derivadas antes e depois batem byte a byte, incluindo o par que testa a fronteira entre campos.
+
+  Ganhou também um teste de valores dourados — a derivação é um formato de dados, não código livre: mexer em `normalize`, na ordem dos campos ou no separador reescreve a alma de todo personagem que já existe. Agora isso reprova em vez de acontecer em silêncio.
+
 - **A compra em barraca tinha a própria implementação de "como mexer em ouro".** `buyItem` escrevia o SQL de saldo e de inventário à mão dentro da transação dele — atômico e com ledger, então não era inseguro, mas era uma segunda implementação fora do arquivo que existe pra ser a única. O `SELECT ... FOR UPDATE` do saldo e a guarda de saldo negativo estavam duplicados, e correção no `core/transaction-service` não alcançava a compra.
 
   Não dava pra resolver chamando as funções públicas do `transaction-service`: cada uma abre a própria transação, e a compra move ouro, baixa estoque, credita o vendedor, cobra imposto e entrega o item — ou tudo commita junto, ou o comprador fica sem ouro e sem item. As primitivas internas já recebiam a conexão como argumento; passaram a ser exportadas como `tx.*`, com o contrato explícito de que quem chama é dono da transação.

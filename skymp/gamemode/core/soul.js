@@ -149,17 +149,32 @@ function deriveSeed(secret, characterId, ficha = {}) {
   // gerar uma alma diferente para a mesma ficha aprovada.
   const normalize = (texto) => String(texto || '')
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+
+  // O separador e NUL (U+0000), nao espaco, e a escolha e de seguranca: NUL
+  // nao sobrevive ao `normalize()` acima (que colapsa espaco em branco e corta
+  // as pontas), entao nenhum jogador consegue escreve-lo na ficha. Sem um
+  // separador impossivel de digitar, mover uma letra de um campo pro seguinte
+  // produziria o MESMO material assinado -- 'ab'+'c' e 'a'+'bc' -- e duas
+  // fichas diferentes nasceriam com a mesma alma.
+  //
+  // Estava escrito como um NUL CRU no fonte ate 06/08/2026. Funcionava, mas era
+  // invisivel: o arquivo inteiro contava como binario pro `grep` e pro `file`,
+  // e quem lesse esta linha via `].join('');` e concluiria que os campos sao
+  // concatenados sem separador nenhum. Pior: qualquer editor que limpe
+  // caracteres de controle ao salvar mudaria a semente de TODA alma ja
+  // derivada, sem erro nenhum aparecer.
+  const SEPARADOR_DE_CAMPO = '\u0000';
 
   const material = [
     characterId,
     normalize(ficha.motivations),
     normalize(ficha.weaknesses),
     normalize(ficha.socialTies)
-  ].join(' ');
+  ].join(SEPARADOR_DE_CAMPO);
 
   return crypto.createHmac('sha256', secret).update(material).digest('hex');
 }
