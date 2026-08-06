@@ -1,10 +1,12 @@
-# Afinidade da Alma (Soul Affinity) — análise do conselho
+# Afinidade da Alma (Soul Affinity) — desenho fechado
 
 **Proposta:** substituir Soul DNA por um sistema único de afinidades que explique magia, vampirismo, licantropia, bênçãos, maldições, corrupção, encantamento e linhagem nobre.
 
-**Estado: APROVADO NO CONCEITO, COM UM VETO E QUATRO CONDIÇÕES.** Nada disto vira código antes da Fase 0 (teste in-game).
+**Estado: DESENHO FECHADO.** Um veto e quatro condições, todos incorporados. Emendou a §8 da Constituição (v1.1). **Nada disto vira código antes da Fase 0** (teste in-game).
 
-O documento tem duas partes. A **Parte I** é a análise de 15 pontos exigida pela Constituição §15 — o que a proposta resolve e o que ela quebra. A **Parte II** é o desenho que sai dela: como o sistema vira jogo bom sem perder jogabilidade nem diversão. Se você só vai ler uma, leia a Parte II — ela contém a resposta, a Parte I contém o porquê.
+O documento tem três partes. A **Parte I** é a análise de 15 pontos exigida pela Constituição §15 — o que a proposta resolve e o que ela quebra. A **Parte II** é o desenho que sai dela: como o sistema vira jogo bom sem perder jogabilidade nem diversão. A **Parte III** é a especificação — valores, fórmula, schema, eventos e testes.
+
+Se você só vai ler uma: **Parte II**. Ela contém a resposta; a I contém o porquê e a III contém o como.
 
 Análise conforme [`CONSTITUICAO.md`](../CONSTITUICAO.md) §15.
 
@@ -308,6 +310,184 @@ Isso transforma "informação oculta" em **destino de viagem**. E dá função a
 Sinais, resultados, marcas e progressão na árvore são calculados pelo servidor a partir de eventos que já existem (`audit_logs`, transações, estado de personagem). A staff arbitra conflito — não opera o sistema.
 
 É o teste da Constituição §5, no Anexo A.2: *se a staff sumir por uma semana, o mundo continua produzindo eventos?* Aqui, continua.
+
+---
+
+# Parte III — Especificação final
+
+Esta parte fecha o desenho. As decisões abaixo foram tomadas pelo conselho por necessidade técnica ou de jogabilidade e **alteram a proposta original** — cada alteração diz o porquê.
+
+## III.1 Sete valores, não oito
+
+A proposta original tinha oito. **Cortamos um e derivamos outro**, porque botão a mais não é profundidade — é impossibilidade de balancear e de comunicar.
+
+**Quatro afinidades** — qual caminho é barato:
+
+| | Domínio | Árvore |
+|---|---|---|
+| **Arcana** | magia estruturada, encantamento, alteração | Alteração → Ritual → Arquimago |
+| **Divina** | bênção, cura, autoridade sagrada | Bênçãos → Milagres → Santo |
+| **Sombria** | necromancia, vampirismo, pacto | Vampirismo → Necromancia → Lorde Vampiro |
+| **Bestial** | licantropia, instinto, vínculo natural | Licantropia → Totens → Alfa → Lobo Ancestral |
+
+**Três traços** — como você aguenta o custo:
+
+| | O que faz |
+|---|---|
+| **Vontade** | resiste a ser mudado: por corrupção, por outro, por persuasão |
+| **Sensibilidade** | percebe o sobrenatural — vê, ouve, sente o que não está lá para os outros |
+| **Estabilidade** | mantém a integridade sob tensão |
+
+**Cortado: "Resistência à Corrupção".** Sobrepunha-se a Vontade e Estabilidade. Vira **valor derivado** — `resistência = f(Vontade, Estabilidade)` — sem ocupar espaço próprio. Menos knobs, mesma expressividade.
+
+**A tensão desenhada de propósito:** Sensibilidade alta + Estabilidade baixa é o vidente que está se desfazendo. Estabilidade alta + Sensibilidade baixa é quem nunca enlouquece e nunca vê nada. Nenhum dos dois é melhor.
+
+## III.2 Orçamento fixo — a garantia mecânica de que nenhuma alma é melhor
+
+A condição §14.4 não pode depender de boa vontade de quem escreve conteúdo. Ela vira **restrição do gerador**:
+
+- As quatro afinidades dividem um **orçamento constante**.
+- Os três traços dividem **outro orçamento constante**.
+
+Consequência: Arcana alta **obriga** algo mais a ser baixo. Não existe alma completa, não existe alma vazia, e "rolar bem" deixa de significar coisa alguma.
+
+**Bandas em vez de números.** Internamente 0–100; a resolução usa cinco bandas, e a distribuição concentra no meio:
+
+`Surdo · Fraco · Comum · Forte · Raro`
+
+Ninguém é nada. Quase ninguém é tudo.
+
+## III.3 A semente vem da ficha
+
+```
+semente = HMAC(SEGREDO_SERVIDOR, character_id ‖ normalizar(motivations, weaknesses, social_ties))
+```
+
+Os três campos **já existem** (migration v5). Mesma ficha aprovada → mesma alma, sempre. Isso mata o reroll-farming e faz a aplicação de whitelist valer mecanicamente.
+
+⚠️ **`SEGREDO_SERVIDOR` nunca sai do servidor.** Sem ele, qualquer um calcula a alma de qualquer personagem a partir da ficha pública — e o sistema inteiro deixa de ser oculto.
+
+## III.4 Resolução — como sai Limpo, Caro, Complicado ou Marcado
+
+```
+peso = banda(afinidade_relevante)
+     + circunstância      // mestre presente, componente certo, lugar consagrado, preparo
+     − dificuldade        // do ato tentado
+     − pressão            // ver III.5
+```
+
+O `peso` desloca a distribuição entre os quatro resultados. **Nenhum valor de `peso` produz falha** — pesos muito baixos concentram em Complicado e Marcado, que continuam sendo sucesso com história.
+
+**Rolagem determinística e auditável:**
+
+```
+resultado = f(semente_da_alma, id_do_evento, tentativa_n)
+```
+
+Grava em `audit_logs` (`soul:resolve`) as entradas, o `peso`, o resultado e a semente do evento. Oculto para o jogador; **reproduzível pela staff**. É a condição §14.3, e sem ela o sistema é indefensável no primeiro conflito de comunidade.
+
+## III.5 Pressão — o anti-spam que também é ficção
+
+Sem isto, o exploit é óbvio: tentar cem vezes até sair Limpo.
+
+Cada tentativa do mesmo ato numa janela **acumula pressão**, que empurra a distribuição para Complicado e Marcado. Insistir não converge para o sucesso limpo — **converge para marcas**.
+
+É honesto com a ficção: quem força a mesma coisa muitas vezes acaba pagando por isso. E é anti-exploit sem precisar dizer "não".
+
+## III.6 Marcas
+
+```sql
+character_marks (
+  id, character_id,
+  kind,                     -- 'fisica' | 'espiritual' | 'social'
+  visibility,               -- 'visivel' | 'sentida' | 'conhecida'
+  descriptor,               -- chave do texto; nunca texto livre do jogador
+  origin_event_id,          -- rastro até o audit_log que a gerou
+  created_at
+)
+```
+
+- **`visivel`** — outros veem. Conversa com `identity-service`: esconder marca é motivo real para capuz.
+- **`sentida`** — só o portador sabe, até alguém perceber.
+- **`conhecida`** — entrou na reputação; quem entende do assunto reconhece.
+
+**Marca nunca é removida.** No máximo é *coberta* — o que também é jogável, e caro.
+
+## III.7 Sinais
+
+```sql
+character_signs (id, character_id, sign_key, revealed_at, source)
+```
+
+O primeiro é revelado no **primeiro spawn**, não por tempo de jogo — é o que garante que a primeira sessão não seja vazia. Os seguintes chegam por evento: algo que o personagem fez, viu ou sofreu.
+
+Entrega pelo canal que **já existe**: property `panelData` + `core/panel-refresh-bus.js`. Nenhuma infraestrutura nova.
+
+## III.8 A árvore é máquina de estados, irmã de `character-state`
+
+```sql
+character_paths (
+  id, character_id,
+  tree,                     -- 'arcana' | 'divina' | 'sombria' | 'bestial'
+  node,                     -- nó atual
+  entered_at, consented_at, -- consentimento explícito onde é irreversível
+  metadata
+)
+```
+
+**Separada de `core/character-state.js` de propósito.** Aquele trata estado imediato de gameplay (`NORMAL`/`DOWNED`/`IMPRISONED`), com ciclo de vida de segundos. Este é trajetória de meses. Misturar os dois acoplaria coisas com tempos de vida incompatíveis — a §13 da Constituição.
+
+**`consented_at` é a implementação da condição §14.2:** nó irreversível não avança sem consentimento registrado. É também a resposta ao A.3 do Anexo (aviso antes do irreversível).
+
+## III.9 Contrato de eventos
+
+Tudo event-driven, **nada de polling** — já temos três serviços a 2 s e uma chamada Papyrus custa 13–35 ms.
+
+| Evento emitido | Quem consome |
+|---|---|
+| `soul.resolved` | marcas, painel, auditoria |
+| `soul.mark.created` | `identity-service` (se visível), painel |
+| `soul.sign.revealed` | painel |
+| `soul.path.advanced` | governança (crime tipificável), painel |
+| `soul.infection.started` | painel, e abre a janela de escolha |
+
+O `governance-service` escuta `soul.path.advanced` para tipificar necromancia e vampirismo como **crime** — o que transforma caçada em processo, e não em linchamento.
+
+## III.10 O que o servidor não consegue fazer, e a consequência
+
+Limite real do SkyMP, registrado antes que alguém desenhe em cima:
+
+| Manifestação | Viável hoje? |
+|---|---|
+| Mensagem, sonho, voz, aviso | ✅ direto |
+| Animação, efeito sonoro | ✅ Papyrus |
+| Bloquear ação (corrupção, transformação) | ✅ `core/action-policy.js` |
+| **Mudança física visível** | ❌ **exige plugin nosso** — `.esm` sem script, com FormIDs que controlamos, lógica em Node (padrão do `MODS_AND_GAMEMODE_CONTRACT.md` §5) |
+
+Enquanto o plugin não existir, marca física é **descrita**, não renderizada. Funciona — Heavy RP vive de descrição — mas é uma limitação a assumir, não a esconder.
+
+## III.11 Módulo e flag
+
+`soul-service.js`, registrado no `core/module-registry.js`, `enabledBy: 'ENABLE_SOUL_SERVICE'`, fase `lab`, desligado por padrão. Dependências: nenhuma no v1 (a integração com governança entra depois, por evento).
+
+## III.12 Testes obrigatórios antes de ligar
+
+Seguindo o `CONTRIBUTING.md` §6 — verificar o **argumento e o efeito**, nunca só o retorno:
+
+1. **Orçamento fixo é respeitado** em 10 000 almas geradas: nenhuma soma foge do orçamento.
+2. **Distribuição concentra no meio**: `Comum` é a banda mais frequente; `Raro` é raro de verdade.
+3. **Determinismo**: mesma ficha → mesma alma, entre execuções e entre processos.
+4. **A resolução nunca falha**: em 10 000 resoluções com o pior `peso` possível, zero resultados fora dos quatro.
+5. **Pressão empurra para marca**, nunca para Limpo — o teste do exploit de spam.
+6. **Nó irreversível recusa avançar sem `consented_at`.**
+7. **A semente não vaza**: nenhum payload de `panelData` contém número de afinidade. Este é o teste que protege o sistema inteiro; escrever primeiro.
+8. **Marca visível respeita o firewall de identidade**: quem não conhece o portador não recebe descritor que revele nome civil.
+
+## III.13 Fora do v1, deliberadamente
+
+- **Linhagem nobre hereditária** — depende da árvore provada e toca sucessão, que hoje é staff-autorada.
+- **Afinidade marcial** — o combate é do cliente; o servidor não arbitra golpe. Entra quando houver um caminho confiável, não antes.
+- **Detector institucional de alma** — a igreja **não** pode ter exame de sangue espiritual. Mataria o mistério e a fé de uma vez.
 
 ---
 

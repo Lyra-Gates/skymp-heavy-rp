@@ -52,7 +52,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
-| [design/SOUL_AFFINITY.md](design/SOUL_AFFINITY.md) | Afinidade da Alma: análise de 15 pontos da proposta que unifica magia, vampirismo, licantropia, corrupção e linhagem. **Aprovada no conceito, com um veto e quatro condições.** |
+| [design/SOUL_AFFINITY.md](design/SOUL_AFFINITY.md) | **Afinidade da Alma — desenho fechado.** Unifica magia, vampirismo, licantropia, corrupção, encantamento e linhagem. Parte I: análise de 15 pontos. Parte II: como isso vira jogo bom. Parte III: especificação. |
 
 ### Estudos de referência
 

@@ -11,6 +11,12 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **[Afinidade da Alma](docs/design/SOUL_AFFINITY.md) — desenho fechado**, e a **Constituição vai a v1.1** (a §8 deixa de ser "Soul DNA"). Sistema único que explica magia, encantamento, corrupção, vampirismo, licantropia e linhagem. Três partes: análise de 15 pontos, o desenho que preserva a diversão, e a especificação.
+
+  As decisões que fecharam o desenho: **o dado nunca diz não** (Limpo/Caro/Complicado/Marcado — os quatro dão certo); **nenhuma alma é estritamente melhor**, garantido por orçamento fixo no gerador e não por boa vontade; **a alma vem da ficha aprovada**, o que mata o reroll-farming e faz a aplicação de whitelist valer mecanicamente; **as marcas são a progressão** — não há nível, há o que ficou em você; e **prazo em sessões, não em meses**.
+
+  Vetado: a mordida com 70% de morte, que transformaria qualquer vampiro num `/permakill` ambulante. No lugar, infecção com janela de escolha entre curar, esconder ou aceitar.
+
 - **[CONSTITUICAO.md](docs/CONSTITUICAO.md) v1.0** — a constituição de design do projeto. Define que não estamos construindo um servidor, mas um mundo persistente capaz de produzir histórias por anos sem depender da staff; que toda mecânica responde "como isso gera histórias?" ou é descartada; e que todo poder cobra um preço. Vampirismo e licantropia são maldições com política e perseguição, nunca buffs. Nada de dinheiro, craft ou loot infinito.
 
   O **Anexo A** é parte do documento e registra as sete tensões que a própria constituição cria — entre elas: aplicar "nunca implementar primeiro" sem limite congelaria o teste in-game, que é o único bloqueio real do projeto; "sistema que depende da staff" lido ao pé da letra proibiria a whitelist; e uma economia de NPC conduzida por Papyrus não escala, dado o custo de 13–35 ms por chamada.

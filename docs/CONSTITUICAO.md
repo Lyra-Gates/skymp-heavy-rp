@@ -1,6 +1,6 @@
 # Constituição de Desenvolvimento — SkyMP Heavy RP
 
-**Versão 1.0** · ratificada em 06/08/2026
+**Versão 1.1** · ratificada em 06/08/2026 · emendada em 06/08/2026 (§8)
 
 Este documento governa o **design** do projeto. O [`CONTRIBUTING.md`](../CONTRIBUTING.md) governa a **técnica** — as invariantes que já foram quebradas no código. Os dois valem juntos; quando parecerem conflitar, ver o Anexo A.
 
@@ -42,11 +42,19 @@ Consequência · escassez · especialização · dependência entre profissões 
 
 **Todo poder cobra um preço.** Quanto maior o poder, maior o custo, o risco e a consequência. Nunca existe poder gratuito.
 
-## 8. Soul DNA
+## 8. Afinidade da Alma
 
-Todo personagem nasce com características ocultas. **Não são classes, não aparecem ao jogador e não impedem conteúdo.** Alteram apenas probabilidade, velocidade de aprendizado, dificuldade, resistência, risco, consequência e estabilidade.
+> *Emenda v1.1: substitui "Soul DNA". O conceito é o mesmo; o desenho fechado está em [`design/SOUL_AFFINITY.md`](design/SOUL_AFFINITY.md), e três regras abaixo saem de lá porque a versão original permitia construções que quebrariam o servidor.*
+
+Todo personagem nasce com características ocultas. **Não são classes, não aparecem ao jogador e não impedem conteúdo.** Alteram apenas probabilidade, dificuldade, custo, risco e consequência — **nunca tempo até desbloquear**, que é classe fechada com outro nome.
 
 Evoluem pelas escolhas do personagem. Nunca determinam completamente o destino dele.
+
+Três regras são inegociáveis:
+
+1. **Nenhuma alma é estritamente melhor que outra.** Afinidade alta cobra o seu preço — é a §7 aplicada ao nascimento. Garantida por orçamento fixo no gerador, não por boa vontade de quem escreve conteúdo.
+2. **O dado nunca diz não.** Toda tentativa produz Limpo, Caro, Complicado ou Marcado; os quatro dão certo. "Falhou, tente de novo" é ausência de jogo.
+3. **Toda rolagem é auditável.** Oculto para o jogador, reprodutível pela staff. Número invisível que decide resultado sem auditoria torna a acusação de favorecimento infalsificável — e servidor de RP morre disso, não de bug.
 
 ## 9. Maldições
 
@@ -133,9 +141,11 @@ A §5 proíbe escolha irreversível **sem aviso**; a §7 e o §18 exigem consequ
 
 Hoje `/permakill` exige motivo e grava auditoria. **Não existe nenhum mecanismo de aviso ao jogador** de que uma escolha está entrando em território irreversível. A constituição cria esse requisito; ele está em aberto.
 
-## A.4 Soul DNA é o maior risco de exploit do documento
+## A.4 Soul DNA era o maior risco de exploit do documento — *resolvido na v1.1*
 
-Precisa dos 15 pontos completos antes de qualquer linha de código. Os três problemas que o conselho já enxerga:
+> **Resolvido.** Os 15 pontos foram feitos em [`design/SOUL_AFFINITY.md`](design/SOUL_AFFINITY.md) e a §8 foi emendada. Os três problemas abaixo tinham sido levantados aqui e têm resposta lá: reroll → semente derivada da ficha (III.3); indistinguível de bug → sinais diegéticos e resolução sem falha (II.1, II.2); conflito com a whitelist → a ficha **é** a fonte da alma.
+
+Os três problemas originalmente enxergados:
 
 1. **Reroll.** Atributo oculto que altera probabilidade sempre é engenharia-reversa pela comunidade, e o resultado clássico é gente recriando personagem até tirar um bom. Aqui isso é parcialmente contido — whitelist + permadeath tornam o reroll caro —, mas **essa contenção é acidental e precisa virar decisão explícita**.
 2. **Indistinguível de bug.** Do lado do jogador, "falhei cinco encantamentos seguidos" por Soul DNA e por bug são a mesma experiência. Sem um canal narrativo que dê sentido ao fracasso (um mestre que comenta, um presságio, um livro), o sistema é lido como código quebrado.
@@ -169,7 +179,7 @@ Consequência direta: um sistema de vampirismo construído sobre o vampirismo va
 
 | Proposta | Veredito |
 |---|---|
-| [Afinidade da Alma](design/SOUL_AFFINITY.md) | Aprovada no conceito. **Veto** na mordida com 70% de morte (transforma vampiro em `/permakill` ambulante). Quatro condições, sendo a principal: nenhuma alma pode ser estritamente melhor que outra. |
+| [Afinidade da Alma](design/SOUL_AFFINITY.md) | **Desenho fechado** (Partes I–III). Veto na mordida com 70% de morte; quatro condições adotadas. Emendou a §8 desta constituição. Aguarda a Fase 0. |
 
 ## Como usar este documento
 
