@@ -12,6 +12,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Disparo manual (`gh workflow run CI --ref main` ou o botao "Run workflow"
+  # na aba Actions). Existe porque `push` e `pull_request` nem sempre disparam:
+  # quando o merge e feito pela API com um token de OAuth app, o GitHub nao
+  # cria o evento, e o commit entra na main sem nenhum check-run associado —
+  # foi o que aconteceu nos PRs #2 e #3, que entraram verificados so por
+  # execucao local. Sem este gatilho nao ha como pedir a verificacao depois,
+  # porque `workflow_dispatch` e o unico jeito de invocar um workflow a mao.
+  workflow_dispatch:
 
 # Um PR que recebe vários pushes seguidos cancela as execuções antigas em vez de
 # enfileirar — feedback mais rápido e menos minuto de runner desperdiçado.
