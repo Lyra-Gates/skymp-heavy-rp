@@ -165,6 +165,12 @@ Consequência direta: um sistema de vampirismo construído sobre o vampirismo va
 
 ---
 
+## Analises ja feitas sob a §15
+
+| Proposta | Veredito |
+|---|---|
+| [Afinidade da Alma](design/SOUL_AFFINITY.md) | Aprovada no conceito. **Veto** na mordida com 70% de morte (transforma vampiro em `/permakill` ambulante). Quatro condições, sendo a principal: nenhuma alma pode ser estritamente melhor que outra. |
+
 ## Como usar este documento
 
 - **Pediu uma feature?** A resposta vem primeiro como os 15 pontos da §15. Isso é lento de propósito.

@@ -48,6 +48,12 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [NAMETAG_IDENTITY_SYSTEM.md](technical/NAMETAG_IDENTITY_SYSTEM.md) | Por que o nome exibido depende de quem está olhando. |
 | [MARKET_STALL_VISUAL_ASSET_PLAN.md](technical/MARKET_STALL_VISUAL_ASSET_PLAN.md) | Assets visuais das barracas, com análise de licença mod a mod. |
 
+### Design de mundo
+
+| Documento | Sobre |
+|---|---|
+| [design/SOUL_AFFINITY.md](design/SOUL_AFFINITY.md) | Afinidade da Alma: análise de 15 pontos da proposta que unifica magia, vampirismo, licantropia, corrupção e linhagem. **Aprovada no conceito, com um veto e quatro condições.** |
+
 ### Estudos de referência
 
 | Documento | Fonte |
