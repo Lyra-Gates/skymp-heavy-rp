@@ -1,6 +1,6 @@
 # SkyMP Heavy RP — a roleplay server for Skyrim multiplayer
 
-*[Português](README.md) · **English***
+*[Português](README.md) · **English** · [Русский](README.ru.md) · [Español](README.es.md)*
 
 An open, current **RP server base for Skyrim Special Edition multiplayer**, built on [SkyMP](https://github.com/skyrim-multiplayer/skymp). Node.js gamemode, whitelist panel, Electron launcher and modpack parity verification.
 
@@ -24,7 +24,7 @@ Built for *strict roleplay*: server authority over economy, identity and consequ
 | Report a security issue | [SECURITY.en.md](SECURITY.en.md) — **do not open a public issue** |
 | Ask, propose, or show what you built | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
-**Language note:** entry-point documents (this README, contributing and security guides) are maintained in Portuguese and English. Deep technical documentation is **Portuguese only** — see [Documentation language](#documentation-language) below.
+**Language note:** entry-point documents (this README, contributing and security guides) are maintained in Portuguese, English, Russian and Spanish. Deep technical documentation is **Portuguese only** — see [Documentation language](#documentation-language) below.
 
 ---
 

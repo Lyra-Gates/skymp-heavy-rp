@@ -20,6 +20,6 @@ contact_links:
     url: https://github.com/vinicius3232/skymp-heavy-rp/security/advisories/new
     about: NÃO abra issue nem discussion pública. Use o canal privado de Security Advisory.
 
-  - name: Documentação em inglês
+  - name: English · Русский · Español
     url: https://github.com/vinicius3232/skymp-heavy-rp/blob/main/README.en.md
-    about: Entry points are available in English. Deep technical docs are Portuguese-only — ask in Discussions if a specific document blocks you.
+    about: Entry points exist in English, Russian and Spanish (README, CONTRIBUTING, SECURITY). Deep technical docs are Portuguese-only — ask in Discussions if a specific document blocks you.

@@ -1,6 +1,6 @@
 # Como contribuir
 
-***Português** · [English](CONTRIBUTING.en.md)*
+***Português** · [English](CONTRIBUTING.en.md) · [Русский](CONTRIBUTING.ru.md) · [Español](CONTRIBUTING.es.md)*
 
 Obrigado pelo interesse. Este projeto é uma build pública de servidor RP para SkyMP, sob AGPL-3.0 — o que você contribuir fica disponível para toda a comunidade.
 

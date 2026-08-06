@@ -1,6 +1,6 @@
 # SkyMP Heavy RP — servidor de roleplay para Skyrim multiplayer
 
-***Português** · [English](README.en.md)*
+***Português** · [English](README.en.md) · [Русский](README.ru.md) · [Español](README.es.md)*
 
 Base aberta e atual de **servidor de RP para Skyrim Special Edition multiplayer**, construída sobre o [SkyMP](https://github.com/skyrim-multiplayer/skymp). Gamemode em Node.js, painel de whitelist, launcher Electron e verificação de paridade de modpack.
 
@@ -18,9 +18,11 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 | Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
 | Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
-| Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 30 documentos |
+| Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 26 documentos |
 | Reportar falha de segurança | [SECURITY.md](SECURITY.md) — **não abra issue pública** |
 | Perguntar, propor ou mostrar o que fez | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
+
+**Sobre o idioma:** os documentos de entrada (este README, o guia de contribuição e a política de segurança) existem em português, inglês, russo e espanhol. A documentação técnica profunda fica **só em português** — traduzir 26 documentos que mudam toda semana produziria tradução desatualizada, que é pior que tradução nenhuma: é um documento em que as pessoas confiam e que mente calado. Se algum documento específico te travar, [peça nas Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions/categories/q-a) que a gente traduz aquele.
 
 ## Status Atual do Projeto (Auditoria Recente)
 

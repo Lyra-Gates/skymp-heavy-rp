@@ -1,6 +1,6 @@
 # Security Policy
 
-*[Português](SECURITY.md) · **English***
+*[Português](SECURITY.md) · **English** · [Русский](SECURITY.ru.md) · [Español](SECURITY.es.md)*
 
 This project handles Discord authentication, session tickets, persistent economy and staff permissions. A flaw in any of those affects real players on any server using this base.
 

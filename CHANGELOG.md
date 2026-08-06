@@ -7,6 +7,16 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [Não lançado]
+
+### Adicionado
+
+- **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
+
+A documentação técnica profunda continua **só em português**, por decisão registrada em `docs/README.md`: são muitos documentos que mudam com frequência, e tradução desatualizada é pior que tradução ausente.
+
+---
+
 ## [0.1.0] — 2026-08-06
 
 Primeira versão marcada. Consolida a auditoria completa do monorepo, a pesquisa no SkyMP upstream e a adoção de AGPL-3.0 como build pública.

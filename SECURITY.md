@@ -1,6 +1,6 @@
 # Política de Segurança
 
-***Português** · [English](SECURITY.en.md)*
+***Português** · [English](SECURITY.en.md) · [Русский](SECURITY.ru.md) · [Español](SECURITY.es.md)*
 
 Este projeto lida com autenticação de Discord, tickets de sessão, economia persistente e permissões de staff. Falha em qualquer um desses pontos afeta jogadores reais de qualquer servidor que use esta base.
 

@@ -1,6 +1,6 @@
 # Contributing
 
-*[Português](CONTRIBUTING.md) · **English***
+*[Português](CONTRIBUTING.md) · **English** · [Русский](CONTRIBUTING.ru.md) · [Español](CONTRIBUTING.es.md)*
 
 Thanks for your interest. This is a public RP server base for SkyMP under AGPL-3.0 — whatever you contribute stays available to the whole community.
 
