@@ -16,6 +16,7 @@ Built for *strict roleplay*: server authority over economy, identity and consequ
 
 | You want to | Start with |
 |---|---|
+| Understand what the project **means to be** | [CONSTITUICAO.md](docs/CONSTITUICAO.md) — the design constitution (Portuguese) |
 | Understand the real project status | [QA Report](docs/technical/QA_REPORT_2026-08.md) — includes what is **not** ready |
 | Understand how the pieces talk | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribute code | [CONTRIBUTING.en.md](CONTRIBUTING.en.md) — the rules that aren't obvious from reading the code |

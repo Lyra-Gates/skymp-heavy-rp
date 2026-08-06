@@ -16,6 +16,7 @@ Pensada para *rol estricto*: el servidor manda sobre economía, identidad y cons
 
 | Lo que quieres | Empieza por |
 |---|---|
+| Entender lo que el proyecto **quiere ser** | [CONSTITUICAO.md](docs/CONSTITUICAO.md) — la constitución de diseño (en portugués) |
 | Entender el estado real del proyecto | [Informe de QA](docs/technical/QA_REPORT_2026-08.md) — incluye lo que **no** está listo |
 | Entender cómo se comunican las piezas | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir código | [CONTRIBUTING.es.md](CONTRIBUTING.es.md) — las reglas que no son obvias leyendo el código |

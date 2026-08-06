@@ -14,6 +14,7 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 
 | Você quer | Comece por |
 |---|---|
+| Entender o que o projeto **quer ser** | [CONSTITUICAO.md](docs/CONSTITUICAO.md) — a constituição de design |
 | Entender o estado real do projeto | [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) — inclui o que **não** está pronto |
 | Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
