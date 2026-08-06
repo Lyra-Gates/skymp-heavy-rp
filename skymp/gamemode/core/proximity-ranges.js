@@ -23,17 +23,26 @@
  * JSON não altera nada em jogo — mexa aqui.
  */
 
+const serverOptions = require('./server-options');
+
+// Três raios vêm de `chat.*` no server-options; `emote` e `ooc` são derivados.
+// Derivar em vez de configurar é deliberado: são canais de apoio, e a relação
+// entre eles e a fala normal ("emote alcança um pouco mais porque ação é
+// visual", "OOC alcança mais porque é suporte, não cena") é uma decisão de
+// design do servidor, não um botão que cada operador deveria mexer sozinho.
+const say = serverOptions.get('chat.localRange');
+
 const RANGES = Object.freeze({
   /** Sussurro: precisa estar praticamente encostado. */
-  whisper: 450,
+  whisper: serverOptions.get('chat.whisperRange'),
   /** Fala normal (`/falar`, e a voz por proximidade em modo normal). */
-  say: 1200,
+  say,
   /** Emotes (`/me`, `/do`): um pouco mais largo que a fala, porque ação é visual. */
-  emote: 1500,
+  emote: Math.round((say * 5) / 4),
   /** OOC: mais largo de propósito, é canal de suporte e não de cena. */
-  ooc: 2000,
+  ooc: Math.round((say * 5) / 3),
   /** Grito: o mais largo, mas ainda longe de ser global. */
-  shout: 3500
+  shout: serverOptions.get('chat.shoutRange')
 });
 
 /**

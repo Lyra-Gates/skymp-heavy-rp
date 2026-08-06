@@ -217,3 +217,65 @@ describe('endpoints removidos continuam removidos', () => {
     assert.ok(!body.includes('dummy_hash_for_testing'), 'o stub de manifesto voltou');
   });
 });
+
+describe('rotação de crash reports', () => {
+  // O diretório crescia sem limite: até 64 KB de log por crash, e um cliente
+  // instável reporta em série.
+  const { pruneCrashReports, CRASH_REPORT_DIR } = require('./server.js');
+  const fs = require('fs');
+  const path = require('path');
+
+  function makeReport(name, ageDays) {
+    const p = path.join(CRASH_REPORT_DIR, name);
+    fs.writeFileSync(p, JSON.stringify({ id: name, crashes: [] }));
+    if (ageDays) {
+      const t = new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000);
+      fs.utimesSync(p, t, t);
+    }
+    return p;
+  }
+
+  function clearDir() {
+    if (!fs.existsSync(CRASH_REPORT_DIR)) return;
+    for (const f of fs.readdirSync(CRASH_REPORT_DIR)) {
+      if (f.endsWith('.json')) fs.unlinkSync(path.join(CRASH_REPORT_DIR, f));
+    }
+  }
+
+  beforeEach(() => {
+    fs.mkdirSync(CRASH_REPORT_DIR, { recursive: true });
+    clearDir();
+  });
+
+  after(clearDir);
+
+  test('remove relatórios mais velhos que o limite de idade', async () => {
+    makeReport('velho.json', 60);
+    makeReport('recente.json', 1);
+
+    await pruneCrashReports();
+
+    assert.equal(fs.existsSync(path.join(CRASH_REPORT_DIR, 'velho.json')), false);
+    assert.equal(fs.existsSync(path.join(CRASH_REPORT_DIR, 'recente.json')), true);
+  });
+
+  test('mantém os recentes quando nada passou da idade', async () => {
+    for (let i = 0; i < 5; i++) makeReport(`r${i}.json`, 1);
+    const removed = await pruneCrashReports();
+    assert.equal(removed, 0);
+    assert.equal(fs.readdirSync(CRASH_REPORT_DIR).filter(f => f.endsWith('.json')).length, 5);
+  });
+
+  test('não quebra com diretório vazio', async () => {
+    assert.equal(await pruneCrashReports(), 0);
+  });
+
+  test('sobrevive a arquivo que some no meio da poda', async () => {
+    // Concorrência real: dois relatórios chegando ao mesmo tempo disparam duas
+    // podas. A segunda encontra arquivos que a primeira já apagou.
+    makeReport('some.json', 60);
+    const [a, b] = await Promise.all([pruneCrashReports(), pruneCrashReports()]);
+    assert.equal(typeof a, 'number');
+    assert.equal(typeof b, 'number');
+  });
+});

@@ -89,7 +89,15 @@ function normalizeCrashReport(body) {
 if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
-app.use(cors({ origin: `http://localhost:${PORT}`, credentials: true }));
+// A origem era `http://localhost:${PORT}` fixo, o que quebra assim que o painel
+// sai da máquina de desenvolvimento. Em produção informe o domínio real em
+// PANEL_PUBLIC_URL (aceita lista separada por vírgula pra apex + www).
+const CORS_ORIGINS = (process.env.PANEL_PUBLIC_URL || `http://localhost:${PORT}`)
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
+app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '512kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
@@ -113,7 +121,9 @@ passport.deserializeUser((obj, done) => done(null, obj));
 passport.use(new DiscordStrategy({
     clientID: requireEnv('DISCORD_CLIENT_ID'),
     clientSecret: requireEnv('DISCORD_CLIENT_SECRET'),
-    callbackURL: process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/api/auth/discord/callback`,
+    // Precisa bater EXATAMENTE com a Redirect URI cadastrada no portal do
+    // Discord, senão a autenticação falha com `invalid_request`.
+    callbackURL: process.env.DISCORD_CALLBACK_URL || `${CORS_ORIGINS[0]}/api/auth/discord/callback`,
     scope: ['identify']
 }, async (accessToken, refreshToken, profile, done) => {
     try {
@@ -267,7 +277,13 @@ app.get('/api/dashboard', requireStaff, async (req, res) => {
     const [accounts]    = await pool.execute('SELECT COUNT(*) as c FROM accounts');
     const [chars]       = await pool.execute('SELECT COUNT(*) as c FROM characters');
     const [pending]     = await pool.execute("SELECT COUNT(*) as c FROM whitelist_applications WHERE status='pending'");
-    const [auditToday]  = await pool.execute("SELECT COUNT(*) as c FROM audit_logs WHERE DATE(created_at)=CURDATE()");
+    // `DATE(created_at)=CURDATE()` envolve a coluna numa função, o que impede o
+    // MySQL de usar índice — vira varredura da tabela inteira, justamente a que
+    // mais cresce no projeto. A comparação por intervalo faz o mesmo recorte e
+    // consegue usar `idx_audit_created` (migration v7).
+    const [auditToday]  = await pool.execute(
+      "SELECT COUNT(*) as c FROM audit_logs WHERE created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY"
+    );
     const [prisoners]   = await pool.execute("SELECT COUNT(*) as c FROM prison_records WHERE status='active'");
     const [factions]    = await pool.execute('SELECT COUNT(*) as c FROM factions');
     res.json({
@@ -483,6 +499,52 @@ app.get('/api/prison', requireStaff, async (req, res) => {
 
 // API: Crash reports do launcher
 const CRASH_REPORT_MAX_BYTES = 256 * 1024;
+const CRASH_REPORT_MAX_FILES = parseInt(process.env.CRASH_REPORT_MAX_FILES || '500', 10);
+const CRASH_REPORT_MAX_AGE_DAYS = parseInt(process.env.CRASH_REPORT_MAX_AGE_DAYS || '30', 10);
+
+/**
+ * Remove relatórios antigos demais ou excedentes.
+ *
+ * Dois limites em vez de um: a idade evita guardar log de uma versão do cliente
+ * que nem existe mais, e a contagem protege contra uma enxurrada num intervalo
+ * curto — um bug de crash em loop pode gerar centenas de relatórios no mesmo
+ * dia, e só o limite de idade não seguraria isso.
+ *
+ * Falha aqui nunca deve derrubar o recebimento: perder a poda é irrelevante
+ * perto de perder o relatório.
+ */
+async function pruneCrashReports() {
+  const names = (await fsp.readdir(CRASH_REPORT_DIR)).filter((name) => name.endsWith('.json'));
+
+  const entries = [];
+  for (const name of names) {
+    const fullPath = path.join(CRASH_REPORT_DIR, name);
+    try {
+      const stat = await fsp.stat(fullPath);
+      entries.push({ fullPath, mtimeMs: stat.mtimeMs });
+    } catch { /* sumiu no meio do caminho: nada a podar */ }
+  }
+
+  const cutoff = Date.now() - CRASH_REPORT_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const doomed = new Set(entries.filter((e) => e.mtimeMs < cutoff).map((e) => e.fullPath));
+
+  // Do mais novo pro mais velho; o que passar do teto entra na lista.
+  const survivors = entries
+    .filter((e) => !doomed.has(e.fullPath))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  for (const extra of survivors.slice(CRASH_REPORT_MAX_FILES)) {
+    doomed.add(extra.fullPath);
+  }
+
+  for (const fullPath of doomed) {
+    try { await fsp.unlink(fullPath); } catch { /* concorrência: já foi */ }
+  }
+
+  if (doomed.size > 0) {
+    console.log(`[crash-reports] ${doomed.size} relatorio(s) antigo(s) removido(s).`);
+  }
+  return doomed.size;
+}
 app.post('/api/crashes/client', async (req, res) => {
   try {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
@@ -501,6 +563,11 @@ app.post('/api/crashes/client', async (req, res) => {
     await ensureCrashReportDir();
     const filePath = path.join(CRASH_REPORT_DIR, `${report.id}.json`);
     await fsp.writeFile(filePath, JSON.stringify(report, null, 2));
+
+    // Sem isto o diretório cresce pra sempre: cada relatório carrega até 64 KB
+    // de log por crash, e um cliente instável reporta em série. Rodar depois da
+    // escrita (e não em cron) mantém a limpeza acoplada ao que a causa.
+    pruneCrashReports().catch((err) => console.error('[crash-reports] Falha ao podar:', err.message));
 
     res.json({ ok: true, id: report.id, received: report.crashes.length });
   } catch (err) {
@@ -668,4 +735,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, validateApplication, issueLaunchTicket, hashTicket };
+module.exports = { app, validateApplication, issueLaunchTicket, hashTicket, pruneCrashReports, CRASH_REPORT_DIR };

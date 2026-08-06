@@ -9,6 +9,7 @@ const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
 const commands      = require(path.join(gamemodeDir, 'commands'));
 const moduleRegistry = require(path.join(gamemodeDir, 'core', 'module-registry'));
 const uiEventRouter  = require(path.join(gamemodeDir, 'core', 'ui-event-router'));
+const serverOptions  = require(path.join(gamemodeDir, 'core', 'server-options'));
 const governance    = require(path.join(gamemodeDir, 'governance-service'));
 const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
@@ -127,6 +128,14 @@ moduleRegistry.register({
 
 async function boot() {
   try {
+    // Antes do banco: um valor de gameplay inválido aborta aqui, e é melhor
+    // descobrir isso com o servidor ainda vazio.
+    const options = serverOptions.load();
+    console.log(`[phase0] server-options: ${options.usedFile ? options.path : 'nenhum arquivo, usando defaults'}`);
+    for (const warning of options.warnings) {
+      console.warn(`[phase0] server-options: ${warning}`);
+    }
+
     db.init();
     console.log("[phase0] Database pool initialized");
 

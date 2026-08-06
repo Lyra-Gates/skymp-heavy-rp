@@ -1,12 +1,16 @@
 const DEFAULT_LIMITS = {
   maxLength: 240,
-  windowMs: 10000,
+  // Janela do anti-flood, configurável em `chat.oocRateLimitSeconds`. O nome
+  // da opção fala em OOC, mas o limitador vale pra todos os canais — quem
+  // ajusta está regulando o ritmo de mensagem em geral.
+  get windowMs() { return serverOptions.get('chat.oocRateLimitSeconds') * 1000 * 2; },
   maxMessagesPerWindow: 5,
   reportCooldownMs: 60000
 };
 
 // Raios vivem em core/proximity-ranges.js pra que chat e voz não divirjam.
 const { RANGES } = require('./core/proximity-ranges');
+const serverOptions = require('./core/server-options');
 
 function createRpChatService(options) {
   const limits = Object.assign({}, DEFAULT_LIMITS, options && options.limits);
@@ -201,6 +205,13 @@ function createRpChatService(options) {
       }
       case '/ooc':
       case '/b': {
+        // `chat.oocEnabled=false` desliga o canal fora-de-personagem. Alguns
+        // servidores Heavy RP fecham o OOC in-game de propósito, pra empurrar
+        // conversa fora de personagem pro Discord e manter a cena limpa.
+        if (!serverOptions.get('chat.oocEnabled')) {
+          sendNotification(actorId, 'O canal OOC esta desativado neste servidor. Use o Discord.');
+          return true;
+        }
         if (!requireArgs(actorId, args, `${command} <mensagem>`)) return true;
         const message = (observerActorId) => `(( OOC: ${getCharacterName(actorId, observerActorId)}: ${args} ))`;
         broadcast(actorId, message, RANGES.ooc);

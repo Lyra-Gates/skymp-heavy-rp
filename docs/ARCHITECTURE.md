@@ -15,7 +15,7 @@ O **MariaDB** é a fonte absoluta de verdade. Todos os serviços se conectam a e
 ### 1.2 Aplicativo Web e API (`apps/web`)
 Desenvolvido em **Express.js / Node.js**.
 - Fornece o Painel Web (Whitelist, Staff, perfis fora do jogo).
-- Fornece os Endpoints da API para o **Launcher** (download de manifesto de mods, versões atualizadas, controle de acesso).
+- Fornece ao **Launcher** a troca de OAuth do Discord (`POST /api/launcher/oauth/exchange`, que também emite o ticket de lançamento) e o recebimento de crash reports. O manifesto de mods **não** vem daqui — vem do `apps/game-api` e do GitHub Releases (ver 1.3.1 e `LAUNCHER_DISTRIBUTION.md`).
 - Autenticação obrigatória utilizando `passport-discord`.
 - Não confundir com o **Painel do Jogador in-game** (ver 1.4.2), que roda dentro do próprio HUD do SkyMP, não no navegador.
 - **Aplicação de personagem** (`/api/apply`, `apply.html`): além de nome/biografia, coleta `motivations`/`weaknesses`/`social_ties` (rubrica de whitelist Heavy RP — ver `SKYMP_RP_DEVELOPMENT_PLAN.md` 8.1). Uma heurística de palavras-chave (`detectsStrongConcept` em `server.js`) sinaliza `characters.needs_extra_review` pra conceitos fortes (nobreza, vampirismo, lycanthropia, Daedra, liderança de facção) — não é um gate automático, só um aviso pra staff prestar mais atenção na revisão; a staff pode anexar `extra_review_notes` pelo painel (`PATCH /api/whitelist/:id`). `skymp/gamemode/whitelist.js` lê `characters` com `ORDER BY id DESC LIMIT 1` ao liberar spawn.
@@ -23,7 +23,7 @@ Desenvolvido em **Express.js / Node.js**.
 ### 1.3 Bot do Discord (`apps/bot-discord`)
 Desenvolvido em **discord.js**.
 - Realiza a ponte entre a conta do Discord do usuário e o seu `profileId` no jogo (`POST /api/sync-role`, chamado pelo painel web na aprovação/rejeição de whitelist).
-- **Canais de voz temporários** (`voiceChannels.js`, comandos `/voz-criar <nome>` e `/voz-fechar`, staff-only): alternativa prática de voz enquanto o VOIP nativo in-game (`/voz`, ver 1.4.4) depende de um patch de client ainda não aplicado (`docs/technical/VOICE_CLIENT_PATCH.md`). Canal é apagado automaticamente ~30s depois de ficar vazio. Comandos precisam ser registrados manualmente com `npm run deploy-commands` sempre que mudarem.
+- **Canais de voz temporários** (`voiceChannels.js`, comandos `/voz-criar <nome>` e `/voz-fechar`, staff-only): alternativa prática de voz enquanto o VOIP nativo in-game (`/voz`, ver 1.4.4) depende de um patch de client ainda não aplicado (`docs/technical/VOICE_CLIENT_PATCH.md`). Canal é apagado automaticamente ~30s depois de ficar vazio. Os comandos são registrados no boot do bot (`deploy-commands.js` roda no evento `ready`); uma falha ali não derruba o bot, mas grita no log. `npm run deploy-commands` continua existindo pra rodar à mão.
 - Envio de logs pra canais de moderação **não está implementado** — apesar de ter sido a intenção original documentada aqui, hoje o bot só expõe o endpoint interno de sync de cargo e os comandos de voz acima.
 
 ### 1.3.1 API do Jogo (`apps/game-api`)
@@ -38,6 +38,8 @@ Localizado em `skymp/gamemode/`.
 - Lida com o ciclo de vida do jogador: conexão, desconexão, spawn, combate, comandos de chat e persistência de itens em tempo real.
 - Delega regras de negócio aos serviços ativos hoje (`governance-service.js`, `market-stalls-service.js`, `death-service.js`, `player-panel-service.js`, `voip-service.js`). Vários outros serviços existem no disco (`survival-service.js`, `economy-service.js`, `crafting-service.js`, `jobs-service.js`, `faction-service.js`, `housing-service.js`, `horse-service.js`, `trade-service.js`, `disguise-service.js`, `justice-service.js`, `economy-regional.js`) mas estão **PARKED** — nunca registrados em `core/module-registry.js`, logo nunca rodam em produção (ver comentário em `phase0-basic.js`). `justice-service.js` em especial é uma implementação anterior e redundante de algemas/prisão, superseded por `governance-service.js`.
 - Módulos são registrados e ligados/desligados via `core/module-registry.js` (flags `ENABLE_*` no `.env`), que também cuida de dependências entre módulos e do registro automático de comandos no `core/command-registry.js`.
+- **Configuração de gameplay** vem de `skymp/config/server-options.<env>.json`, carregada e validada por `core/server-options.js`. Só as opções listadas na `SPEC` daquele arquivo fazem efeito — o loader avisa no boot se encontrar uma opção ainda não implementada, e **aborta o boot** se um valor for de tipo errado ou fora do intervalo. Ver `docs/technical/SERVER_OPTIONS_SCHEMA.md`.
+- **Tipagem da API `mp`**: `skymp/gamemode/types/mp.d.ts` (o SkyMP não publica typings). `npm run typecheck` é informativo — o gamemode continua JS puro carregado direto pelo servidor, sem passo de build.
 
 #### 1.4.1 Bridge de UI (CEF)
 A comunicação entre o gamemode e a UI CEF (`skymp/ui/`) usa duas properties SkyMP registradas em `phase0-basic.js`:

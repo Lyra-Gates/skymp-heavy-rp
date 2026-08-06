@@ -4,6 +4,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 const app = express();
 const voiceChannels = require('./voiceChannels');
+const { deployCommands } = require('./deploy-commands');
 
 app.use(express.json());
 
@@ -30,8 +31,22 @@ requireEnv('GUILD_ID');
 requireEnv('WHITELIST_ROLE_ID');
 requireEnv('INTERNAL_API_SECRET');
 
-client.once('ready', () => {
+client.once('ready', async () => {
     console.log(`[discord-bot] Bot logado como ${client.user.tag}`);
+
+    // Registra os slash commands no boot. Antes isso era um passo manual
+    // (`npm run deploy-commands`) e nada avisava quando alguém esquecia — o
+    // comando simplesmente não aparecia no Discord, sem erro nenhum.
+    //
+    // Uma falha aqui NÃO derruba o bot: o sync de whitelist é a função crítica
+    // e continua funcionando sem os comandos de voz.
+    const result = await deployCommands();
+    if (result.ok) {
+        console.log(`[discord-bot] ${result.count} slash command(s) registrado(s) na guild.`);
+    } else {
+        console.error(`[discord-bot] NAO foi possivel registrar os slash commands: ${result.error}`);
+        console.error('[discord-bot] /voz-criar e /voz-fechar nao vao aparecer no Discord ate isso ser resolvido.');
+    }
 });
 
 // Canais de voz temporários (/voz-criar, /voz-fechar) — ver voiceChannels.js.

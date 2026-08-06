@@ -56,13 +56,46 @@ function removeStaffRole(actorId) {
   staffCache.delete(actorId);
 }
 
+/** Toda permissão que existe, derivada dos cargos. Fonte da validação abaixo. */
+const KNOWN_PERMISSIONS = new Set(Object.values(ROLE_PERMISSIONS).flat());
+
 /**
  * Verifica se um ator tem uma permissão específica.
+ *
  * @param {number} actorId
  * @param {string} permission - 'kick', 'ban', 'teleport', 'add_item', 'set_gold', etc.
  * @returns {boolean}
+ *
+ * Sobre a validação do argumento: doze chamadas nos módulos PARKED passam um
+ * NÚMERO (`hasPermission(actorId, 20)`), herança de um modelo antigo de níveis
+ * de staff. Como `permissions` é um `Set` de strings, `Set.has(20)` é sempre
+ * `false` — a checagem "funcionava" no sentido de nunca explodir, e negava
+ * tudo em silêncio.
+ *
+ * Um nome de permissão que não existe é igualmente perigoso na direção
+ * oposta: quem escreve `hasPermission(actorId, 'manage_factions')` acha que
+ * criou uma regra, e criou uma porta que nunca abre.
+ *
+ * Nos dois casos preferimos gritar no log a negar caladamente. Não lançamos
+ * exceção porque isso derrubaria o comando do jogador por um erro de
+ * programação — negar é o resultado seguro, o log é o que faz alguém corrigir.
  */
 function hasPermission(actorId, permission) {
+  if (typeof permission !== 'string') {
+    console.error(
+      `[admin] hasPermission recebeu ${typeof permission} (${JSON.stringify(permission)}) em vez de um nome de permissão. ` +
+      `Provavelmente um nível numérico legado — use um destes: ${[...KNOWN_PERMISSIONS].join(', ')}. Negando.`
+    );
+    return false;
+  }
+  if (!KNOWN_PERMISSIONS.has(permission)) {
+    console.error(
+      `[admin] hasPermission recebeu a permissão desconhecida '${permission}'. ` +
+      `Nenhum cargo a concede, então isso nega sempre. Conhecidas: ${[...KNOWN_PERMISSIONS].join(', ')}.`
+    );
+    return false;
+  }
+
   const staff = staffCache.get(actorId);
   if (!staff) return false;
   return staff.permissions.has(permission);

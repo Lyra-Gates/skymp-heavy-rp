@@ -97,3 +97,61 @@ describe('admin-service — retireCharacter (soft-delete)', () => {
     assert.strictEqual(characterUpdates[0].status, 'retired');
   });
 });
+
+/**
+ * Guarda de argumento do hasPermission.
+ *
+ * Doze chamadas nos módulos PARKED passam nível numérico (`hasPermission(id, 20)`),
+ * herança de um modelo antigo. Como `permissions` é um Set de strings,
+ * `Set.has(20)` sempre foi `false` — negava tudo caladamente. Estes testes
+ * garantem que o resultado seguro (negar) continua, mas agora com registro.
+ */
+describe('admin-service — hasPermission valida o argumento', () => {
+  const ACTOR = 0xff000abc;
+  let loggedErrors;
+  const originalError = console.error;
+
+  beforeEach(async () => {
+    staffRoleRow = { role: 'owner' };
+    await admin.registerStaffRole(ACTOR, 1);
+    loggedErrors = [];
+    console.error = (...args) => loggedErrors.push(args.join(' '));
+  });
+
+  const restore = () => { console.error = originalError; };
+
+  it('nega e registra quando recebe nível numérico legado', () => {
+    const allowed = admin.hasPermission(ACTOR, 20);
+    restore();
+    assert.strictEqual(allowed, false, 'nível numérico nunca deveria conceder acesso');
+    assert.ok(
+      loggedErrors.some(l => l.includes('em vez de um nome de permissão')),
+      'a chamada errada precisa aparecer no log, não sumir'
+    );
+  });
+
+  it('nega e registra quando recebe permissão inexistente', () => {
+    const allowed = admin.hasPermission(ACTOR, 'manage_factions');
+    restore();
+    assert.strictEqual(allowed, false);
+    assert.ok(
+      loggedErrors.some(l => l.includes('desconhecida')),
+      'permissão que nenhum cargo concede é uma porta que nunca abre — precisa avisar'
+    );
+  });
+
+  it('continua concedendo permissão válida do cargo, sem ruído no log', () => {
+    const allowed = admin.hasPermission(ACTOR, 'retire_character');
+    restore();
+    assert.strictEqual(allowed, true, 'owner tem retire_character');
+    assert.strictEqual(loggedErrors.length, 0, 'caminho feliz não deveria logar erro');
+  });
+
+  it('nega permissão válida que o cargo não tem', async () => {
+    staffRoleRow = { role: 'moderator' };
+    await admin.registerStaffRole(ACTOR, 1);
+    const allowed = admin.hasPermission(ACTOR, 'retire_character');
+    restore();
+    assert.strictEqual(allowed, false, 'moderador não pode aposentar personagem');
+  });
+});

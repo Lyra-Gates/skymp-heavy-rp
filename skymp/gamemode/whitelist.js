@@ -3,6 +3,8 @@ const commands = require('./commands');
 const inventoryService = require('./inventory-service');
 const adminService = require('./admin-service');
 const characterState = require('./core/character-state');
+const serverOptions = require('./core/server-options');
+const transactionService = require('./core/transaction-service');
 // NOTA: survival-service NÃO é importado aqui.
 // Módulos PARKED são inicializados exclusivamente pelo module-registry
 // quando ENABLE_SURVIVAL_SERVICE=true. Não carregar módulos PARKED no boot.
@@ -11,6 +13,38 @@ function allowLocalAutoWhitelist(profileId) {
   if (process.env.NODE_ENV === 'production') return false;
   if (process.env.ALLOW_LOCAL_AUTOWHITELIST !== 'true') return false;
   return profileId === 1 || profileId === 2;
+}
+
+/**
+ * Concede o ouro inicial (`economy.startingGold`) uma única vez por personagem.
+ *
+ * A garantia de "uma vez só" vem da `idempotency_key` UNIQUE de
+ * `gold_transactions`: a chave é derivada do characterId, então a segunda
+ * tentativa é ignorada pelo próprio `transaction-service`. Sem isso, o ouro
+ * seria concedido a cada login e viraria uma fonte infinita de dinheiro —
+ * exatamente o tipo de coisa que a economia server-authoritative existe pra
+ * impedir.
+ *
+ * Personagens criados pelo painel (`apps/web`) nascem com o default do banco;
+ * é aqui, no primeiro spawn, que a opção de gameplay é aplicada.
+ */
+async function grantStartingGold(characterId) {
+  const startingGold = serverOptions.get('economy.startingGold');
+  if (startingGold <= 0) return;
+
+  try {
+    await transactionService.addGold({
+      characterId,
+      amount: startingGold,
+      reason: 'starting_gold',
+      module: 'whitelist',
+      idempotencyKey: `starting_gold:${characterId}`
+    });
+  } catch (err) {
+    // Não bloqueia o spawn: entrar sem o ouro inicial é um problema pequeno
+    // perto de não conseguir entrar.
+    console.error(`[whitelist] Falha ao conceder ouro inicial para ${characterId}:`, err.message);
+  }
 }
 
 async function checkWhitelist(userId, profileId, actorId) {
@@ -123,6 +157,8 @@ async function checkWhitelist(userId, profileId, actorId) {
     
     // Inicializar máquina de estados (carrega IMPRISONED/RESTRAINED do banco)
     await characterState.initialize(character.id);
+
+    await grantStartingGold(character.id);
 
     // 5. Atualizar posição do jogador in-game a partir do banco de dados
     if (typeof mp !== 'undefined' && actorId) {

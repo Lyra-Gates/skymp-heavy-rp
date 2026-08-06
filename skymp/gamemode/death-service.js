@@ -30,8 +30,11 @@ const RESPAWN_CELL = '0x162e2'; // ID do Templo
 const DEATH_PENALTY_COINS = 50;
 const DEATH_PENALTY_PERCENTAGE = 0.1; // 10% do ouro atual, o que for maior
 
+const serverOptions = require('./core/server-options');
+
 const BLEED_OUT_MS = 4 * 60 * 1000; // janela de socorro: 4 minutos
-const RESPAWN_DELAY_MS = 5000; // pausa dramática entre "morreu" e respawn
+// Pausa entre "morreu" e respawn. Configurável em `spawn.playerRespawnSeconds`.
+const RESPAWN_DELAY_MS = serverOptions.get('spawn.playerRespawnSeconds') * 1000;
 const RESCUE_RANGE = 300;
 // Mesmo raio da fala normal: quem podia ouvir a cena é quem entra na evidência.
 const DEATH_CONTEXT_RANGE = require('./core/proximity-ranges').RANGES.say;
@@ -171,12 +174,58 @@ async function bleedOut(actorId, characterId) {
   commands.broadcastProximityMessage(actorId, '* O corpo para de se mexer.', 1500);
   panelRefreshBus.requestRefresh(actorId, 'status');
 
+  // Morte permanente: o personagem não respawna, é aposentado. Mesmo caminho do
+  // /permakill da staff (`status='retired'`, nunca DELETE) — a diferença é que
+  // aqui quem decidiu foi a mecânica, não uma pessoa, então o motivo registrado
+  // no audit log diz isso.
+  //
+  // Desligado por padrão. Ligar isto muda o significado de toda cena de
+  // combate do servidor, então é uma decisão de operação, não um detalhe.
+  if (serverOptions.get('rp.permadeathEnabled')) {
+    await retireOnPermadeath(actorId, characterId);
+    return penalty;
+  }
+
   const respawnTimer = setTimeout(() => {
     executeRespawn(actorId, characterId, penalty).catch(err => console.error('[death-service] Falha no respawn:', err.message));
   }, RESPAWN_DELAY_MS);
   if (typeof respawnTimer.unref === 'function') respawnTimer.unref();
 
   return penalty;
+}
+
+/**
+ * Aposenta o personagem por morte permanente.
+ *
+ * Não reaproveita `admin-service.retireCharacter` de propósito: aquele valida
+ * permissão de staff e exige um actorId de quem executou. Aqui não há
+ * executor — quem aposentou foi a regra do servidor.
+ */
+async function retireOnPermadeath(actorId, characterId) {
+  try {
+    await db.query('UPDATE characters SET status = ? WHERE id = ?', ['retired', characterId]);
+    await db.query(
+      'INSERT INTO audit_logs (action, target_account_id, details) VALUES (?, NULL, ?)',
+      ['death:permadeath', `characterId=${characterId} motivo=bleed_out com rp.permadeathEnabled`]
+    );
+
+    commands.sendNotification(
+      actorId,
+      'Seu personagem morreu permanentemente. Ele nao volta — crie um novo pelo painel.'
+    );
+    console.log(`[death-service] PERMADEATH: personagem ${characterId} aposentado.`);
+
+    // Kick com folga pra mensagem ser lida. `whitelist.js` só libera spawn com
+    // `status='approved'`, então uma reconexão já não encontra este personagem.
+    if (typeof mp !== 'undefined') {
+      const kickTimer = setTimeout(() => {
+        try { mp.kick(actorId); } catch (err) { console.error('[death-service] Falha ao kickar apos permadeath:', err.message); }
+      }, 8000);
+      if (typeof kickTimer.unref === 'function') kickTimer.unref();
+    }
+  } catch (err) {
+    console.error('[death-service] Falha ao aposentar personagem por permadeath:', err.message);
+  }
 }
 
 async function executeRespawn(actorId, characterId, penalty = 0) {
@@ -365,6 +414,7 @@ module.exports = {
   logDeathContext,
   logCombatInitiation,
   checkDamageSpike,
+  retireOnPermadeath,
   isDowned: (characterId) => _downedPlayers.has(characterId),
   // Exposto só pra testes: evita depender de setTimeout real pra exercitar o fluxo.
   _handlePlayerDowned: handlePlayerDowned,

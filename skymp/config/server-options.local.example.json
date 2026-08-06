@@ -1,5 +1,5 @@
 {
-  "_aviso": "AINDA NAO IMPLEMENTADO: nenhum codigo do gamemode le este arquivo hoje. Editar estes valores nao muda nada em jogo. Ver docs/technical/SERVER_OPTIONS_SCHEMA.md e docs/technical/QA_REPORT_2026-08.md.",
+  "_aviso": "PARCIALMENTE IMPLEMENTADO. As opcoes ligadas estao em skymp/gamemode/core/server-options.js (SPEC); o resto ainda nao faz nada e o servidor avisa no boot se voce configurar uma delas. Valor invalido aborta o boot de proposito.",
   "environment": "local",
   "rp": {
     "heavyRpEnabled": true,

@@ -1,9 +1,26 @@
 # Schema de Server Options RP
 
-> **Estado: projetado, não implementado.**
-> `Initialize-LocalConfig.ps1` gera `skymp/config/server-options.local.json` a partir do exemplo, mas **nenhum código do gamemode lê esse arquivo**. Todas as opções abaixo são um contrato de design, não configuração viva: mexer nelas hoje não muda nada em jogo.
-> As regras que este documento descreve estão hoje espalhadas como constantes em código — raios de chat/voz em `skymp/gamemode/core/proximity-ranges.js`, flags de módulo em `ENABLE_*` no `.env`, permissões de staff em `admin-service.js`/`governance-service.js`.
-> Ligar este schema de verdade (carregar, validar e aplicar) está no plano de melhorias — ver `docs/technical/QA_REPORT_2026-08.md`.
+> **Estado: parcialmente implementado.**
+> O arquivo passou a ser carregado e validado por `skymp/gamemode/core/server-options.js`. Mas **só as opções listadas na seção "O que está ligado hoje" fazem alguma coisa** — o resto continua sendo contrato de design.
+>
+> O loader avisa no boot quando encontra no arquivo uma opção que ainda não faz nada, e **aborta o boot** se um valor for de tipo errado ou estiver fora do intervalo. Falhar alto é deliberado: uma opção de gameplay mal digitada que "quase funciona" é pior que um servidor que não sobe.
+
+## 0. O que está ligado hoje
+
+| Opção | Onde age |
+|---|---|
+| `chat.whisperRange` | `core/proximity-ranges.js` — chat **e** voz |
+| `chat.localRange` | idem. `emote` e `ooc` são derivados dela (×5/4 e ×5/3) |
+| `chat.shoutRange` | idem |
+| `chat.oocEnabled` | `rp-chat-service.js` — desliga `/ooc` e `/b` in-game |
+| `chat.oocRateLimitSeconds` | `rp-chat-service.js` — janela do anti-flood |
+| `rp.permadeathEnabled` | `death-service.js` — bleed-out aposenta o personagem em vez de respawnar |
+| `spawn.playerRespawnSeconds` | `death-service.js` — pausa entre morrer e respawnar |
+| `economy.startingGold` | `whitelist.js` — concedido uma vez só por personagem, no primeiro spawn |
+
+Todas as demais opções documentadas abaixo estão em `DECLARED_BUT_UNWIRED` no loader. Ao implementar uma, mova-a para `SPEC` e atualize esta tabela — há um teste que impede o exemplo de ganhar chave nova sem alguém classificá-la.
+
+**Sobre `rp.permadeathEnabled`:** ligar isso muda o significado de toda cena de combate do servidor. O personagem que sangra até o fim vira `status='retired'` (nunca `DELETE`, mesmo caminho do `/permakill`), é notificado e desconectado. É decisão de operação, não detalhe de configuração.
 
 ## 1. Objetivo
 

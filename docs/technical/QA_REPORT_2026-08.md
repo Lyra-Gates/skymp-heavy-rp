@@ -12,9 +12,9 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 105/105 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
-| `apps/bot-discord` | 13/13 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
-| `apps/web` | 29/29 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
+| `skymp/gamemode` | 127/127 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
+| `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
+| `apps/web` | 33/33 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
 | `apps/game-api` | 24/24 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. |
 | Tipagem `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa a API do SkyMP (não há typings públicos upstream). Informativo, não trava build nem teste. Achou 2.13 e 2.14 na primeira execução. |
@@ -90,11 +90,13 @@ Isso significa que a verificação de paridade de mods — a coisa que sustenta 
 
 **Ponta solta (🟠 ABERTO):** o gamemode ainda **não lê o ticket de sessão**. `whitelist.js` deriva a identidade do `profileId` que o cliente informa, e o `launcherTicket` que o launcher grava em `skymp_config.json` não é verificado por ninguém. Ou seja, a fila hoje controla *quantos* entram, não *quem* entra. `/internal/session/resolve` já existe pro gamemode fechar o laço — falta descobrir como o SkyMP expõe o ticket ao gamemode no momento da conexão, o que precisa de teste com servidor real.
 
-### 2.10 🟡 **ABERTO** — `server-options.json` não é lido por ninguém
+### 2.10 🟡 `server-options.json` não era lido por ninguém — *resolvido em parte*
 
 `Initialize-LocalConfig.ps1` gera o arquivo, `SERVER_OPTIONS_SCHEMA.md` documenta 112 linhas de opções, e **nenhum código lê**. Configuração que parece existir e não faz nada é pior que configuração ausente: alguém vai ajustar `permadeathEnabled` ou `startingGold` e concluir que o servidor está bugado.
 
-**Mitigado nesta rodada:** aviso no topo do schema e chave `_aviso` nos exemplos. **A implementação continua pendente.**
+**Resolvido:** `core/server-options.js` carrega, valida e aplica. Oito opções estão ligadas de verdade (raios de chat/voz, `oocEnabled`, rate limit, `permadeathEnabled`, `playerRespawnSeconds`, `startingGold`) — as demais continuam inertes, mas agora o loader **avisa no boot** quando encontra uma delas no arquivo, e **aborta o boot** se um valor for de tipo errado ou fora do intervalo.
+
+O princípio adotado: só entra na `SPEC` opção que realmente muda comportamento. Declarar as 24 e ligar 8 recriaria o mesmo problema, só que mais difícil de perceber — porque aí o arquivo *é* lido, e a pessoa tem menos motivo pra desconfiar. Há um teste que impede o exemplo de ganhar chave nova sem alguém classificá-la. 18 testes em `core/server-options.test.js`.
 
 ### 2.11 🟡 `apps/web` sem dependências instaladas e sem testes — *resolvido*
 
@@ -102,9 +104,11 @@ Isso significa que a verificação de paridade de mods — a coisa que sustenta 
 
 **Resolvido:** dependências instaladas; 29 smoke tests em `server.test.js` (guard de autenticação em 12 rotas, validação da ficha, allowlist de `redirect_uri`, hash do ticket); `Start-AllServices.ps1` agora pré-checa entrada, `.env` e `node_modules` de cada serviço e reporta o que não subiu em vez de mentir "concluída".
 
-### 2.12 🟡 **ABERTO** — bot do Discord não registra comandos automaticamente
+### 2.12 🟡 bot do Discord não registrava comandos automaticamente — *resolvido*
 
-`/voz-criar` e `/voz-fechar` só existem depois de rodar `npm run deploy-commands` à mão. Não há nada que avise se isso foi esquecido; o comando simplesmente não aparece no Discord.
+`/voz-criar` e `/voz-fechar` só existiam depois de rodar `npm run deploy-commands` à mão. Nada avisava se isso fosse esquecido; o comando simplesmente não aparecia no Discord.
+
+**Resolvido:** `deploy-commands.js` virou módulo e roda no `ready` do bot. Falha ali **não derruba o bot** — o sync de whitelist é a função crítica e funciona sem os comandos de voz —, mas grita no log dizendo exatamente o que não vai aparecer. Continua funcionando standalone (`npm run deploy-commands`), onde aí sim sai com código de erro. 6 testes novos.
 
 ### 2.13 🔴 **ABERTO** — duas formas incompatíveis de chamar Papyrus, e ninguém sabe qual funciona
 
@@ -123,7 +127,7 @@ As duas nasceram no **mesmo commit** (`82625d2`, 11/07/2026): não houve migraç
 
 **É o item nº 1 a conferir no primeiro teste in-game** — e é barato conferir: entre um jogador e um `/additem`, dá para saber em minutos.
 
-### 2.14 🟡 **ABERTO** — módulos PARKED chamam `hasPermission` com número
+### 2.14 🟡 módulos PARKED chamam `hasPermission` com número — *resolvido na raiz*
 
 `admin-service.hasPermission(actorId, permission)` faz `staff.permissions.has(permission)`, onde `permissions` é um `Set` de **strings**. Doze chamadas passam um número (nível de staff: `10`, `20`):
 
@@ -131,7 +135,9 @@ As duas nasceram no **mesmo commit** (`82625d2`, 11/07/2026): não houve migraç
 
 `Set.has(20)` num Set de strings é sempre `false`, então **toda** verificação de permissão nesses módulos nega sempre. Não há impacto hoje — os cinco estão PARKED — mas significa que eles estão mais quebrados do que "apenas não registrados": ligar a flag não os faria funcionar, apenas travaria toda ação de staff dentro deles.
 
-Reforça o item 2.3 do plano (decidir o destino dos serviços PARKED): é dívida que não compila com a realidade atual do `admin-service`, não código pronto esperando uma flag.
+**Resolvido:** em vez de remendar 12 chamadas em código que não roda, `hasPermission` passou a validar o próprio argumento. Nível numérico e nome de permissão inexistente agora **negam e registram erro no log** com a lista do que é válido.
+
+Escolha deliberada de não lançar exceção: isso derrubaria o comando do jogador por um erro de programação. Negar é o resultado seguro; o log é o que faz alguém corrigir. Pega também o caso oposto — quem escreve `hasPermission(id, 'manage_factions')` acha que criou uma regra e criou uma porta que nunca abre. 4 testes novos.
 
 ---
 
@@ -156,19 +162,19 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 
 | # | Item | Por quê |
 |---|---|---|
-| 2.1 | **Carregar e validar `server-options.json` de verdade**, começando por `chat.*` (que já tem fonte única em `core/proximity-ranges.js`) e `rp.permadeathEnabled` | Resolve 2.10. Comece pequeno: um loader que valida e aplica dois blocos vale mais que um schema completo que ninguém lê. |
-| 2.2 | **`deploy-commands` no boot do bot** (ou verificação que loga alto se divergir) | Resolve 2.12. |
-| 2.3 | **Decidir sobre os 11 serviços PARKED**: reativar, reescrever ou apagar | São a maior parte do código do gamemode e nada roda. Cada um que fica é superfície de manutenção e confusão. `justice-service.js` em especial é redundante com `governance-service.js` — candidato claro a remoção. |
-| 2.4 | **Limpar as 6 tabelas órfãs** do schema ou marcá-las como reservadas para módulo PARKED | Mesma razão: schema deve descrever o sistema, não uma intenção. |
+| 2.1 | ✅ **Feito** — `core/server-options.js` com 8 opções ligadas, validação que aborta o boot e aviso pras inertes | |
+| 2.2 | ✅ **Feito** — registro no `ready` do bot, sem derrubar o processo em caso de falha | |
+| 2.3 | 📋 **Análise entregue** — `PARKED_SERVICES_DECISION.md`. Recomendo apagar 3 (`justice`, `economy`, `survival`), decidir 1 (`faction`), manter 7. **Apagar é decisão sua** | O mais urgente é `economy-service.js`: mexe em ouro sem atomicidade nem ledger, e 6 módulos PARKED o importam — reativar qualquer um traria a economia insegura junto. |
+| 2.4 | ✅ **Decidido** — manter e documentar como reservadas (`ARCHITECTURE.md` 1.1). Tabela vazia não tem caminho de execução nem duplica lógica; o custo de remover superaria o ganho | |
 
 ### Fase 3 — Endurecer para produção
 
 | # | Item | Por quê |
 |---|---|---|
-| 3.1 | **CORS e `DISCORD_CALLBACK_URL` configuráveis** no painel (hoje `http://localhost:${PORT}` fixo) | Quebra assim que sair da máquina de dev. |
-| 3.2 | **Rotação/expiração de crash reports** (`apps/web/crash-reports/`) | Cresce sem limite; cada arquivo pode ter 64 KB de log por crash. |
+| 3.1 | ✅ **Feito** — `PANEL_PUBLIC_URL` (aceita lista) define origem do CORS e fallback do callback | |
+| 3.2 | ✅ **Feito** — poda por idade **e** por contagem (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), disparada após cada recebimento | Dois limites porque um crash em loop gera centenas de relatórios no mesmo dia, e só a idade não seguraria. |
 | 3.3 | **Assinar o instalador do launcher** (as chaves já são lidas do ambiente pelo electron-builder) | Sem assinatura, SmartScreen bloqueia e jogador não instala. |
-| 3.4 | **Índices no schema** para as queries de leitura mais quentes (`audit_logs` por data, `character_inventory` por `character_id`) | Só importa com carga real, mas é barato fazer antes. |
+| 3.4 | ✅ **Feito** — migration v7. Junto: `DATE(created_at)=CURDATE()` no dashboard virou comparação por intervalo, porque envolver a coluna numa função impede o uso de índice | |
 
 ### Não fazer
 
