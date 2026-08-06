@@ -144,6 +144,20 @@ Anything `VITE_*` in the launcher is **inlined into the installer at build time*
 
 For the same reason: **no affinity number may reach the client.** The player receives signs and consequences, never values. See [`docs/design/SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) §III.12.7 (Portuguese) — it's the test that protects the whole system.
 
+### 3.11 An invisible character in source is always an escape, never the raw byte
+
+Write `'\u0000'`, `[\u0300-\u036f]`, `'\t'`. Never paste the character itself.
+
+`core/soul.js` carried two: the combining-marks class in `normalize()` and — the worse one — a NUL as the separator between the fields that go into the soul's HMAC. NUL is the right choice there, because it doesn't survive `normalize()` and therefore no player can type it into their application; without a separator that's impossible to type, `'ab'+'c'` and `'a'+'bc'` would sign the same material and two different applications would be born with the same soul.
+
+The problem was never the choice — it was that the choice was invisible. Three consequences, all silent:
+
+- **The line lies to the reader.** `].join('<NUL>')` shows up on screen as `].join('')` — a reviewer reads "join with no separator", which is the opposite of what happens.
+- **The file becomes binary.** `grep` answers `Binary file matches` instead of the snippet, and `file` says `data`. The tool everyone uses to find code stops working on that file.
+- **An editor may strip it on save.** Many clean up control characters. In that file, doing so would rewrite the seed of **every soul already derived**, without any error showing up.
+
+If an invisible value is going to carry meaning, it deserves a named constant and a comment saying why it's that value. `core/soul.test.js` has a static guard against both cases.
+
 ---
 
 ## 4. Code style
