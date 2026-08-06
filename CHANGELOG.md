@@ -11,6 +11,13 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Verificação de drift de schema** (`npm run check:schema`) — as migrations `v2`–`v8` são aplicadas à mão e nada conferia que todas tinham sido aplicadas. Um banco meio-migrado não quebra o boot: o servidor sobe, o login passa, e só a query que toca a coluna faltante falha, às vezes semanas depois, numa cena, com ouro no meio. O check lê `schema.sql` + migrations como fonte da verdade e confronta com `information_schema`. Roda no `Start-AllServices.ps1` e, na forma `--list` (sem banco), no CI.
+- **Teste de comportamento de permissão por cargo** (`permissions.behavior.test.js`) — matriz explícita de cargo × comando, chamando os handlers reais e olhando o efeito colateral, não o retorno. Pega as duas falhas que o teste unitário não pega: handler que esqueceu de chamar `hasPermission`, e cargo alargado em silêncio. Verificado por mutação: remover o gate do `/setgold` quebra o teste.
+- **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
+- **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
+
+Total de testes: 273 (190 gamemode + 40 web + 24 game-api + 19 bot) + 9 checks de sistema.
+
 - **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
 
 A documentação técnica profunda continua **só em português**, por decisão registrada em `docs/README.md`: são muitos documentos que mudam com frequência, e tradução desatualizada é pior que tradução ausente.

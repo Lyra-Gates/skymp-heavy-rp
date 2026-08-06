@@ -50,6 +50,9 @@ cd apps/web         && npm test
 cd apps/game-api    && npm test
 cd apps/bot-discord && npm test
 cd apps/launcher    && npm run typecheck
+
+# Нужна база: проверяет, что она соответствует версионированным миграциям
+cd skymp/gamemode   && npm run check:schema
 ```
 
 Используется встроенный тест-раннер Node (`node --test`) — без Jest, без Vitest, без конфигурации.

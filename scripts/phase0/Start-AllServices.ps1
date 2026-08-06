@@ -60,6 +60,26 @@ if (-not (Test-Path -LiteralPath $manifestPath)) {
   Write-Host ""
 }
 
+# Banco meio-migrado nao impede o boot: o servidor sobe, o login passa, e so a
+# query que toca a coluna faltante quebra -- as vezes semanas depois, numa cena,
+# com ouro no meio. Melhor descobrir aqui.
+$gamemodeDir = Join-Path $rootDir "skymp\gamemode"
+if (Test-Path -LiteralPath (Join-Path $gamemodeDir "node_modules")) {
+  Push-Location $gamemodeDir
+  try {
+    $driftOutput = & node "scripts\check-schema-drift.js" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Warning "Banco desalinhado das migrations. Os servicos sobem, mas vao falhar em runtime:"
+      foreach ($linha in $driftOutput) { Write-Host "  $linha" -ForegroundColor Yellow }
+      Write-Host ""
+    }
+  } catch {
+    Write-Warning "Nao foi possivel checar o schema: $($_.Exception.Message)"
+  } finally {
+    Pop-Location
+  }
+}
+
 if ($problems.Count -gt 0) {
   Write-Host "Servicos que NAO vao subir:" -ForegroundColor Red
   foreach ($p in $problems) { Write-Host "  - $p" -ForegroundColor Red }

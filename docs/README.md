@@ -26,6 +26,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [SKYMP_UPSTREAM_REFERENCE.md](technical/SKYMP_UPSTREAM_REFERENCE.md) | A API real do SkyMP, incluindo hooks que a documentação oficial não menciona. Onde achar a verdade quando a doc é omissa. |
 | [MODS_AND_GAMEMODE_CONTRACT.md](technical/MODS_AND_GAMEMODE_CONTRACT.md) | O que acontece com um mod dentro de um cliente conectado. Responde "esse mod funciona no servidor?" com critério. |
 | [SKYMP_SERVER_SETUP.md](technical/SKYMP_SERVER_SETUP.md) | Instalação e configuração do servidor SkyMP. |
+| [OPERATIONS.md](technical/OPERATIONS.md) | Runbook: subir, conferir schema, quem pode o quê, portas, e o que fazer quando algo dá errado. |
 | [SERVER_OPTIONS_SCHEMA.md](technical/SERVER_OPTIONS_SCHEMA.md) | Opções de gameplay — **e quais delas realmente fazem efeito hoje**. |
 
 ### Distribuição e publicação

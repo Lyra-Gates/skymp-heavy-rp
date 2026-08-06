@@ -75,6 +75,15 @@ jobs:
         working-directory: skymp/gamemode
         run: npm run test:systems
 
+      # Sem banco no CI, então não dá pra comparar com o schema real. O que dá
+      # pra garantir aqui é que o parser continua entendendo as migrations: se
+      # uma migration nova usar uma forma de DDL que ele não reconhece, ele
+      # passaria a aprovar um banco incompleto — falha silenciosa, que é
+      # exatamente o que o checador existe para evitar.
+      - name: Schema declarado pelas migrations é legível
+        working-directory: skymp/gamemode
+        run: npm run check:schema:list
+
       # Informativo: valida o uso da API `mp` contra types/mp.d.ts. Erros vindos
       # de dentro de node_modules/ws são ruído conhecido, por isso filtramos.
       - name: Typecheck (informativo)

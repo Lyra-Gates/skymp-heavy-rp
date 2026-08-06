@@ -14,7 +14,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 | Componente | Pruebas | Instalable | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 139/139 ✅ + 9/9 comprobaciones de sistema | ✅ | **Maduro.** La mejor parte del proyecto: transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. |
+| `skymp/gamemode` | 190/190 ✅ + 9/9 comprobaciones de sistema | ✅ | **Maduro.** La mejor parte del proyecto: transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
 | `apps/launcher` | ❌ ninguna | ✅ | **Estaba roto de punta a punta** (ver 2.1); corregido en esta ronda, pero sin validación en tiempo de ejecución. |
@@ -184,6 +184,17 @@ Ordenado por **qué desbloquea qué**. Los puntos de la Fase 1 son prerrequisito
 | 3.2 | ✅ **Hecho** — poda por edad **y** por conteo (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), disparada tras cada recepción | Dos límites porque un crash en bucle genera cientos de reportes el mismo día, y solo la edad no aguantaría. |
 | 3.3 | **Firmar el instalador del launcher** (electron-builder ya lee las claves del entorno) | Sin firma, SmartScreen lo bloquea y el jugador no instala. |
 | 3.4 | ✅ **Hecho** — migración v7. Junto: `DATE(created_at)=CURDATE()` en el dashboard pasó a ser una comparación por intervalo, porque envolver la columna en una función impide usar el índice | |
+
+### Fase 4 — Mantenimiento (añadida el 06/08/2026)
+
+Salió del estudio de integración con Chancelaria Real, un sistema en producción con prácticas que aquí faltaban. No depende de la prueba en el juego ni de ninguna integración.
+
+| # | Punto | Por qué |
+|---|---|---|
+| 4.1 | ✅ **Hecho** — `npm run check:schema` compara la base real contra las migraciones | Una base a medio migrar no rompe el arranque; rompe la consulta que toca la columna que falta, semanas después. |
+| 4.2 | ✅ **Hecho** — `permissions.behavior.test.js`, matriz de rol × comando contra los handlers reales | El bug `Set.has(20)` atravesó toda la suite unitaria. Esta es la clase a la que pertenece. |
+| 4.3 | ✅ **Hecho** — pruebas de `identity-service` (el firewall de disfraz) | El sistema que decide quién reconoce a quién no tenía pruebas. Filtrar el nombre civil mata el disfraz sin ningún error. |
+| 4.4 | ✅ **Hecho** — [OPERATIONS.md](OPERATIONS.md) (en portugués) | Había un informe de QA y nada de operación. |
 
 ### Qué no hacer
 

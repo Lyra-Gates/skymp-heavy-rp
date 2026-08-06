@@ -14,7 +14,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 139/139 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
+| `skymp/gamemode` | 190/190 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | ❌ nenhum | ✅ | **Estava quebrado ponta a ponta** (ver 2.1); corrigido nesta rodada, mas sem validação em runtime. |
@@ -185,6 +185,17 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 3.2 | ✅ **Feito** — poda por idade **e** por contagem (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), disparada após cada recebimento | Dois limites porque um crash em loop gera centenas de relatórios no mesmo dia, e só a idade não seguraria. |
 | 3.3 | **Assinar o instalador do launcher** (as chaves já são lidas do ambiente pelo electron-builder) | Sem assinatura, SmartScreen bloqueia e jogador não instala. |
 | 3.4 | ✅ **Feito** — migration v7. Junto: `DATE(created_at)=CURDATE()` no dashboard virou comparação por intervalo, porque envolver a coluna numa função impede o uso de índice | |
+
+### Fase 4 — Manutenção (adicionada em 06/08/2026)
+
+Nasceu do estudo de integração com a Chancelaria Real, que roda em produção com práticas que faltavam aqui. Não depende de teste in-game nem de integração nenhuma.
+
+| # | Item | Por quê |
+|---|---|---|
+| 4.1 | ✅ **Feito** — `npm run check:schema` compara o banco real com as migrations | Banco meio-migrado não quebra o boot; quebra a query que toca a coluna faltante, semanas depois. |
+| 4.2 | ✅ **Feito** — `permissions.behavior.test.js`, matriz de cargo × comando contra os handlers reais | O bug `Set.has(20)` atravessou toda a suíte unitária. Esta é a classe que ele pertence. |
+| 4.3 | ✅ **Feito** — testes do `identity-service` (firewall de disfarce) | O sistema que decide quem reconhece quem não tinha teste. Vazar o nome civil mata o disfarce sem erro nenhum. |
+| 4.4 | ✅ **Feito** — [OPERATIONS.md](OPERATIONS.md) | Havia relatório de QA e nada de operação. |
 
 ### Não fazer
 

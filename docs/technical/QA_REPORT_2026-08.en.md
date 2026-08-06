@@ -14,7 +14,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 | Component | Tests | Installable | Real state |
 |---|---|---|---|
-| `skymp/gamemode` | 139/139 ✅ + 9/9 system checks | ✅ | **Mature.** The best part of the project: atomic transactions, a state machine, a module registry, real test coverage. |
+| `skymp/gamemode` | 190/190 ✅ + 9/9 system checks | ✅ | **Mature.** The best part of the project: atomic transactions, a state machine, a module registry, real test coverage. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
 | `apps/launcher` | ❌ none | ✅ | **Was broken end to end** (see 2.1); fixed this round, but with no runtime validation. |
@@ -184,6 +184,17 @@ Ordered by **what unblocks what**. Phase 1 items are prerequisites for any test 
 | 3.2 | ✅ **Done** — pruning by age **and** by count (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), triggered after each receipt | Two limits because a crash loop generates hundreds of reports on the same day, and age alone wouldn't hold. |
 | 3.3 | **Sign the launcher installer** (the keys are already read from the environment by electron-builder) | Without a signature, SmartScreen blocks it and the player doesn't install. |
 | 3.4 | ✅ **Done** — migration v7. Along with it: `DATE(created_at)=CURDATE()` in the dashboard became a range comparison, because wrapping the column in a function prevents index use | |
+
+### Phase 4 — Maintenance (added 2026-08-06)
+
+Came out of the integration study with Chancelaria Real, a system running in production with practices that were missing here. Depends on no in-game test and no integration.
+
+| # | Item | Why |
+|---|---|---|
+| 4.1 | ✅ **Done** — `npm run check:schema` compares the live database against the migrations | A half-migrated database doesn't break the boot; it breaks the query touching the missing column, weeks later. |
+| 4.2 | ✅ **Done** — `permissions.behavior.test.js`, a role × command matrix against the real handlers | The `Set.has(20)` bug went through the whole unit suite. This is the class it belongs to. |
+| 4.3 | ✅ **Done** — `identity-service` tests (the disguise firewall) | The system deciding who recognizes whom had no tests. Leaking the civil name kills the disguise with no error at all. |
+| 4.4 | ✅ **Done** — [OPERATIONS.md](OPERATIONS.md) (Portuguese) | There was a QA report and nothing about operations. |
 
 ### Do not do
 

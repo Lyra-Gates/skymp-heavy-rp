@@ -54,6 +54,9 @@ cd apps/web         && npm test
 cd apps/game-api    && npm test
 cd apps/bot-discord && npm test
 cd apps/launcher    && npm run typecheck
+
+# Precisa de banco: confere se ele bate com as migrations versionadas
+cd skymp/gamemode   && npm run check:schema
 ```
 
 Usamos o test runner nativo do Node (`node --test`) — sem Jest, sem Vitest, sem configuração.
