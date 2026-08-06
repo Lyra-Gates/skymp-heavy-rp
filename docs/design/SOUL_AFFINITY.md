@@ -2,7 +2,9 @@
 
 **Proposta:** substituir Soul DNA por um sistema único de afinidades que explique magia, vampirismo, licantropia, bênçãos, maldições, corrupção, encantamento e linhagem nobre.
 
-**Estado: APROVADO NO CONCEITO, COM UM VETO E QUATRO CONDIÇÕES.** Nada disto vira código antes da Fase 0 (teste in-game) e antes de as condições estarem desenhadas.
+**Estado: APROVADO NO CONCEITO, COM UM VETO E QUATRO CONDIÇÕES.** Nada disto vira código antes da Fase 0 (teste in-game).
+
+O documento tem duas partes. A **Parte I** é a análise de 15 pontos exigida pela Constituição §15 — o que a proposta resolve e o que ela quebra. A **Parte II** é o desenho que sai dela: como o sistema vira jogo bom sem perder jogabilidade nem diversão. Se você só vai ler uma, leia a Parte II — ela contém a resposta, a Parte I contém o porquê.
 
 Análise conforme [`CONSTITUICAO.md`](../CONSTITUICAO.md) §15.
 
@@ -192,14 +194,131 @@ Com isso, **não existe rolagem boa.** Existe rolagem *diferente*, cada uma com 
 
 ---
 
+# Parte II — A solução: como isso vira jogo bom
+
+A Parte I diz o que não pode. Esta parte diz **o que fazemos**, e o critério é um só: um jogador que entra hoje precisa se divertir hoje.
+
+## II.0 Os quatro assassinos de diversão
+
+Todo sistema de alma oculta morre de uma destas quatro coisas. O desenho abaixo existe para matar as quatro.
+
+| Assassino | Como aparece | Como matamos |
+|---|---|---|
+| **A porta fechada** | "você não pode fazer isso" | O dado **nunca** diz não. Diz *como* dá certo. §II.2 |
+| **A espera** | "volte em dois anos" | Prazo medido em **sessões**, não em meses. §II.4 |
+| **O silêncio** | "nada acontece, tente de novo" | Todo resultado produz ficção. §II.2 |
+| **O invisível** | "não sei se isso está funcionando" | Sinais diegéticos desde a primeira sessão. §II.1 |
+
+## II.1 A alma não tem números. Tem sinais.
+
+Por dentro são 8 valores. **O jogador nunca interage com valor nenhum** — ele interage com *sinais*, que chegam como acontecimento:
+
+> *As chamas te obedecem rápido demais.*
+> *Cães rosnam quando você passa, e você não sabe por quê.*
+> *Você não sonha. Nunca sonhou.*
+> *O sacerdote te olha demais e não diz nada.*
+
+**Todo personagem recebe o primeiro sinal na primeira sessão.** Não é poder — é identidade. O jogador sai da primeira sessão com algo verdadeiro sobre o personagem que ninguém escreveu na ficha, e que **já dá para interpretar imediatamente**.
+
+Isso resolve o problema mais mortal de servidor de RP, que não é balanceamento: é a primeira hora ser vazia.
+
+E resolve o "indistinguível de bug" (§4.2 da Parte I) pelo lado certo — o jogador sempre recebe algo que lê como intencional, porque é.
+
+## II.2 O dado nunca diz não. Diz qual história você ganhou.
+
+**Regra de ouro do sistema:** toda tentagem ligada à alma produz um destes quatro resultados. **Os quatro dão certo.**
+
+| Resultado | O que acontece | Quem tira mais |
+|---|---|---|
+| **Limpo** | Funciona, sem custo extra | afinidade alta |
+| **Caro** | Funciona, mas consome mais — componente, tempo, exaustão | meio-termo |
+| **Complicado** | Funciona **e mais alguma coisa acontece** — um efeito colateral que é gancho de cena | afinidade baixa |
+| **Marcado** | Funciona e **deixa uma marca permanente** no personagem | afinidade baixa, tentativa grande demais |
+
+Nunca existe "falhou, tente de novo". Existe "funcionou, e agora tem isto".
+
+**Exemplo.** Dois personagens encantam a mesma lâmina.
+
+- *João (Arcana alta)* → **Limpo.** Lâmina encantada, bonita, funciona. Fim.
+- *Pedro (Arcana baixa)* → **Marcado.** A lâmina funciona — e ficou fria demais, e a mão que a forjou não esquenta mais. Pedro agora tem uma cicatriz que outros personagens **veem**, uma lâmina com nome, e uma história.
+
+Quem se divertiu mais? Essa é a pergunta que reorganiza o sistema inteiro.
+
+## II.3 A estrada difícil produz o personagem melhor — e o sistema torna isso legível
+
+Este é o giro que faz "tirar baixo" deixar de ser castigo.
+
+> **Talento é mais rápido. Teimosia é mais marcante.**
+
+O mago talentoso é elegante e eficiente. O mago que chegou lá **sem ter o dom** é coberto de marcas, tem uma reputação, e todo mundo no servidor sabe o preço que ele pagou. As duas fantasias são desejáveis — e a segunda gera mais história, que é o §4 da Constituição.
+
+**As marcas são a progressão.** Não há nível. Há o que ficou em você:
+
+- Marca **visível** — outros personagens podem ver, e isso conversa com `identity-service` (esconder marca é motivo real para capuz).
+- Marca **sentida** — só você sabe, até alguém perceber.
+- Marca **conhecida** — entrou na reputação; um sacerdote experiente reconhece o que te aconteceu.
+
+Uma pessoa com muitas marcas é obviamente alguém que foi longe. Isso é status **narrativo**, não numérico — e não pode ser farmado, porque cada marca custou uma cena.
+
+## II.4 Prazos em sessões, não em meses
+
+| Marco | Quando | Depende de afinidade? |
+|---|---|---|
+| Primeiro sinal | sessão 1 | não |
+| Primeira capacidade real | até ~5 sessões | **não** |
+| Competência reconhecida | ~1 mês de jogo | pouco |
+| Maestria | meses | **sim**, mais social que solitário |
+
+**Ninguém espera para começar a jogar.** A afinidade muda o topo da curva e o *sabor* do caminho, nunca a entrada.
+
+## II.5 A afinidade empurra você para outras pessoas
+
+Aprender sozinho é onde a afinidade pesa mais. **Aprender com um mestre achata a diferença.**
+
+Isso é deliberado e é o melhor efeito colateral do sistema: quem tirou baixo tem um **motivo mecânico para procurar gente** — e procurar gente é o loop central de Heavy RP. O sistema converte estatística oculta em vida social.
+
+E cria papéis que se sustentam sozinhos: quem ensina vira importante sem precisar de cargo da staff.
+
+## II.6 A mordida, refeita — três caminhos em vez de um dado
+
+Substitui os 70% de morte:
+
+**Mordida = infecção. Sempre sobrevivível. Sempre uma escolha.**
+
+Abre uma janela (dias de jogo) em que o personagem sente a mudança e o jogador decide:
+
+1. **Buscar cura** — cara, humilhante, exige terceiros. Cura de verdade, com preço.
+2. **Esconder** — jogável e tenso: sede, sintomas, gente notando.
+3. **Aceitar** — entra na árvore.
+
+Três ramos jogáveis de um evento, contra zero ramos de "você morreu".
+
+**E a raridade que você queria continua existindo — mas no lugar certo.** O "1% transformação perfeita" não é rolado na mordida: é **conquistado** pelo que o personagem fez durante a infecção. Quem se preparou, buscou mestre, conseguiu o ritual e resistiu chega estável. Quem só deixou acontecer vira o monstro caçado.
+
+Raridade merecida vale mais que raridade sorteada — e ninguém perde um personagem de meses por causa de um número.
+
+## II.7 Descobrir a própria alma é conteúdo
+
+O jogador nunca vê número. Mas o **personagem** pode descobrir sua inclinação, em ficção: um mestre que avalia, um ritual, um vidente, um sonho depois de algo grande.
+
+Isso transforma "informação oculta" em **destino de viagem**. E dá função a personagens que não lutam nem governam: quem lê almas é uma profissão.
+
+## II.8 Nada disto exige staff
+
+Sinais, resultados, marcas e progressão na árvore são calculados pelo servidor a partir de eventos que já existem (`audit_logs`, transações, estado de personagem). A staff arbitra conflito — não opera o sistema.
+
+É o teste da Constituição §5, no Anexo A.2: *se a staff sumir por uma semana, o mundo continua produzindo eventos?* Aqui, continua.
+
+---
+
 ## Proposta de implementação — em que ordem, e não agora
 
 **Pré-requisito absoluto: Fase 0** (teste in-game). O projeto ainda não rodou uma sessão. Construir um sistema de alma sobre um gamemode não validado é construir no escuro.
 
 Depois disso, a ordem que o conselho recomenda — cada etapa entrega história sozinha, nenhuma depende da seguinte para valer a pena:
 
-1. **`character_soul` + semente pela ficha.** Invisível, sem efeito nenhum. Só existe e é auditável. Permite validar distribuição antes de qualquer consequência.
-2. **Afinidade afeta custo e falha em UMA coisa só — encantamento.** Escopo pequeno, economia mensurável, e cria a primeira profissão de verdade.
+1. **`character_soul` + semente pela ficha + o primeiro sinal.** A alma existe, é auditável, e já entrega o sinal da sessão 1 (§II.1) — que não depende de nenhuma mecânica pesada e sozinho já melhora a primeira hora de jogo. Nenhum efeito mecânico ainda: dá pra validar distribuição e leitura antes de qualquer consequência.
+2. **Os quatro resultados (§II.2) em UMA coisa só — encantamento.** Limpo/Caro/Complicado/Marcado, com as primeiras marcas. Escopo pequeno, economia mensurável, primeira profissão de verdade — e valida o mecanismo central do sistema inteiro num lugar onde errar é barato.
 3. **Corrupção**, ligada a necromancia. Aqui entra a manifestação narrativa (§10) e o plugin próprio.
 4. **Árvore de Transformação**, começando por licantropia — mais simples que vampirismo, sem a política de clã.
 5. **Vampirismo**, por último, porque é o que mais toca política, religião e grief.
