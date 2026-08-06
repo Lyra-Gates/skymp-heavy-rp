@@ -23,7 +23,25 @@ const gamemodeDir = path.resolve(process.cwd(), '../gamemode');
 //
 // `quiet` evita o banner do dotenv no stdout do servidor; a ausência do
 // arquivo não é erro (defaults valem), então o resultado não é checado.
-require('dotenv').config({ path: path.join(gamemodeDir, '.env'), quiet: true });
+//
+// ⚠️ O caminho é ABSOLUTO, como todos os requires abaixo, e pelo mesmo motivo
+// que o comentário no topo deste arquivo explica: o SkyMP copia ESTE arquivo
+// para `%TEMP%\skymp5-server<random>\` e executa de lá. Um especificador nu
+// (`require('dotenv')`) é resolvido a partir do diretório do arquivo em
+// execução — o temp, que não tem `node_modules` — e o gamemode inteiro morre
+// no boot com `Cannot find module 'dotenv'`.
+//
+// Isso aconteceu de verdade: a primeira versão desta linha usava a forma nua,
+// passou nos 366 testes e no CI (que rodam a partir de `skymp/gamemode/`, onde
+// a resolução funciona) e só apareceu ao subir o servidor pela primeira vez.
+// É o exemplo mais limpo do que o cabeçalho do CI já dizia — "CI verde
+// significa que não quebrou o que já era verificado, não que funciona em jogo".
+//
+// Nenhum outro require deste arquivo pode ser nu, pela mesma razão. Os módulos
+// que ele carrega, sim: eles vivem em `skymp/gamemode/` e resolvem a partir de
+// lá normalmente.
+require(path.join(gamemodeDir, 'node_modules', 'dotenv'))
+  .config({ path: path.join(gamemodeDir, '.env'), quiet: true });
 
 const db            = require(path.join(gamemodeDir, 'database'));
 const whitelist     = require(path.join(gamemodeDir, 'whitelist'));

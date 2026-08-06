@@ -1,26 +1,29 @@
 # Load order de referencia da Fase 0 — SkyMP Heavy RP
 #
-# Jogo base + Creation Club + USSEP. NENHUM mod de gameplay, de proposito:
-# a Fase 0 testa o gamemode, nao o modpack, e todo plugin a mais ocupa um
-# indice de load order que desloca os FormIDs gravados no banco
-# (docs/technical/MODS_AND_GAMEMODE_CONTRACT.md secao 3).
+# Exatamente os cinco masters do jogo base. Nada mais.
 #
-# TODOS os testadores precisam desta mesma lista, exatamente nesta ordem.
+# Nao e escolha estetica: e o que o SERVIDOR carrega. Os dois scripts da
+# Fase 0 fixam esta mesma lista —
+#   scripts/phase0/Install-SkyMPServerArtifact.ps1 (settings.loadOrder)
+#   scripts/phase0/Prepare-SkyMPDataDir.ps1        ($masters)
+# — entao o servidor so conhece os records destes cinco.
 #
-# Fora daqui de proposito: JK's Skyrim (lista negra, docs/MODDING_GUIDELINES.md
-# secao "Lista Negra", item 1 — reposiciona NPCs e conflita com a autoridade
-# do servidor sobre atores, que as etapas 5 e 6 exercitam), alem de
-# Apothecary, Cloaks&Capes, Simple Fishing Overhaul e SkyUI, que sao mod de
-# gameplay/UI e nao precisam existir pra validar o gamemode.
+# Um cliente com plugin a mais ocupa um indice de load order que o servidor nao
+# tem, e o primeiro byte de todo FormID e esse indice
+# (docs/technical/MODS_AND_GAMEMODE_CONTRACT.md secao 3). O `base_id` gravado no
+# banco passaria a apontar pra outro record na tela daquele jogador — sem erro,
+# sem log: um bau com outra coisa dentro.
+#
+# TODOS os testadores precisam desta lista, exatamente nesta ordem, e nada
+# ativado alem dela. Isso inclui Creation Club, _ResourcePack.esl e USSEP:
+# uteis num servidor de verdade, irrelevantes pra validar o gamemode, e cada um
+# desloca a ordem.
+#
+# Quando o modpack oficial for montado, esta lista morre e o manifesto passa a
+# ser gerado do modpack, sem `--only-load-order`.
 
 *Skyrim.esm
 *Update.esm
 *Dawnguard.esm
 *HearthFires.esm
 *Dragonborn.esm
-*ccBGSSSE001-Fish.esm
-*ccQDRSSE001-SurvivalMode.esl
-*ccBGSSSE037-Curios.esl
-*ccBGSSSE025-AdvDSGS.esm
-*_ResourcePack.esl
-*unofficial skyrim special edition patch.esp
