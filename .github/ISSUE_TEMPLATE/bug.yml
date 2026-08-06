@@ -1,0 +1,67 @@
+name: Bug
+description: Algo não funciona como deveria
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de abrir: se for **falha de segurança**, não use este formulário —
+        veja [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: servico
+    attributes:
+      label: Onde acontece
+      options:
+        - gamemode (dentro do jogo)
+        - painel web (apps/web)
+        - api do jogo / fila (apps/game-api)
+        - bot do Discord
+        - launcher
+        - banco de dados / migrations
+        - não sei
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que você esperava
+    validations:
+      required: true
+
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu
+      description: Se houver mensagem de erro ou log, cole aqui.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduzir
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Liguei ENABLE_GOVERNANCE_SERVICE=true
+        2. Entrei com dois jogadores
+        3. Usei /prender no outro
+        4. ...
+
+  - type: textarea
+    id: ambiente
+    attributes:
+      label: Ambiente
+      placeholder: |
+        Node: v20.x
+        Banco: MariaDB 11
+        Flags ENABLE_* ligadas: governance, market-stalls
+        Commit: a16670e
+
+  - type: checkboxes
+    id: confirmacoes
+    attributes:
+      label: Antes de enviar
+      options:
+        - label: Conferi o [QA_REPORT](../blob/main/docs/technical/QA_REPORT_2026-08.md) — pode já estar documentado como conhecido
+        - label: Não colei nenhum segredo, token ou senha acima

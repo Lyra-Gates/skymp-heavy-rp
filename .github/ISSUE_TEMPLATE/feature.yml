@@ -1,0 +1,44 @@
+name: Ideia ou melhoria
+description: Sugerir um sistema, mecânica ou mudança
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Que problema isso resolve
+      description: |
+        O problema importa mais que a solução. Descrever a situação em que a
+        falta disso incomoda ajuda mais do que descrever a feature pronta.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposta
+    attributes:
+      label: O que você propõe
+
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo
+      options:
+        - Mecânica de RP (gameplay)
+        - Ferramenta de staff / moderação
+        - Infraestrutura ou performance
+        - Interface (in-game ou painel)
+        - Documentação
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: autoridade
+    attributes:
+      label: Autoridade do servidor
+      description: |
+        A regra de ouro do projeto é que o servidor decide e o cliente exibe
+        (ver [MODDING_GUIDELINES](../blob/main/docs/MODDING_GUIDELINES.md)).
+        Proposta que dependa do cliente decidir alguma coisa precisa de outro
+        desenho.
+      options:
+        - label: A proposta mantém a decisão no servidor
+        - label: Não tenho certeza — quero discutir

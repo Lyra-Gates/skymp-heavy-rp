@@ -1,0 +1,130 @@
+# CI — roda tudo que dá pra rodar sem um Skyrim e sem um banco.
+#
+# O que ESTE workflow NÃO cobre, e é bom ter claro: nada do comportamento
+# in-game. Os testes do gamemode usam um `mp` mockado, e mock aceita qualquer
+# coisa — foi assim que 22 chamadas Papyrus com argumento errado passaram meses
+# com a suíte verde. CI verde aqui significa "não quebrou o que já era
+# verificado", não "funciona em jogo".
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Um PR que recebe vários pushes seguidos cancela as execuções antigas em vez de
+# enfileirar — feedback mais rápido e menos minuto de runner desperdiçado.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.nome }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Não para nos outros serviços quando um falha: é melhor ver todos os
+      # problemas de uma vez do que descobrir um por execução.
+      fail-fast: false
+      matrix:
+        include:
+          - nome: gamemode
+            dir: skymp/gamemode
+          - nome: painel web
+            dir: apps/web
+          - nome: api do jogo
+            dir: apps/game-api
+          - nome: bot discord
+            dir: apps/bot-discord
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ${{ matrix.dir }}/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: ${{ matrix.dir }}
+        run: npm ci
+
+      - name: Testes
+        working-directory: ${{ matrix.dir }}
+        run: npm test
+
+  gamemode-extras:
+    name: gamemode — checks e typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: skymp/gamemode/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: skymp/gamemode
+        run: npm ci
+
+      # Confere migrations, comandos obrigatórios, permissões e flags de ambiente.
+      - name: Checks de sistema
+        working-directory: skymp/gamemode
+        run: npm run test:systems
+
+      # Informativo: valida o uso da API `mp` contra types/mp.d.ts. Erros vindos
+      # de dentro de node_modules/ws são ruído conhecido, por isso filtramos.
+      - name: Typecheck (informativo)
+        working-directory: skymp/gamemode
+        continue-on-error: true
+        run: |
+          npm run typecheck 2>&1 | grep -v '^node_modules' || true
+
+  launcher:
+    name: launcher — typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/launcher/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: apps/launcher
+        run: npm ci
+
+      # `tsc -b` e não `tsc`: o tsconfig.json da raiz é um solution file com
+      # `files: []`, então `tsc` sozinho não checa projeto nenhum.
+      - name: Typecheck
+        working-directory: apps/launcher
+        run: npm run typecheck
+
+  higiene:
+    name: higiene do repositório
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # O .gitignore cobre .env, mas um arquivo já rastreado antes da regra
+      # continuaria versionado. Esta checagem é barata e o custo de errar é alto.
+      - name: Nenhum .env versionado
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.(local|production|staging)$'; then
+            echo "::error::Arquivo .env versionado. Segredos nao entram no repositorio."
+            exit 1
+          fi
+          echo "OK: nenhum .env rastreado."
+
+      # Nunca redistribuímos asset da Bethesda — o jogador precisa possuir o jogo.
+      - name: Nenhum asset da Bethesda
+        run: |
+          if git ls-files | grep -iE '\.(esm|bsa)$'; then
+            echo "::error::Master ou BSA versionado. Ver LICENSE_AND_AFFILIATION_POLICY.md."
+            exit 1
+          fi
+          echo "OK: nenhum asset da Bethesda."

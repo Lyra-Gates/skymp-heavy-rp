@@ -1,0 +1,47 @@
+# Fim de linha
+#
+# O projeto é desenvolvido no Windows mas roda em Linux em produção, e sem esta
+# configuração o git avisava a cada commit que ia converter LF pra CRLF. Pior
+# que o ruído: dois devs em sistemas diferentes produziam diffs de arquivo
+# inteiro sem ter mudado nada de fato.
+#
+# `text=auto eol=lf` normaliza tudo pra LF **no repositório**, deixando o git
+# converter pro fim de linha local no checkout. Ninguém precisa mudar o editor.
+* text=auto eol=lf
+
+# Scripts que o Windows executa. PowerShell lida bem com LF, mas o .bat/.cmd
+# clássico do cmd.exe quebra sem CRLF — então estes ficam explicitamente CRLF.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Binários: nunca converter, nunca tentar fazer diff de texto.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.zip   binary
+*.7z    binary
+*.rar   binary
+*.exe   binary
+*.dll   binary
+*.pdf   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+
+# Formatos do Skyrim. São binários e grandes; um diff textual aqui não ajuda
+# ninguém e ainda corromperia o arquivo se o git tentasse converter.
+*.esm   binary
+*.esp   binary
+*.esl   binary
+*.bsa   binary
+*.nif   binary
+*.dds   binary
+*.pex   binary
+
+# Arquivos gerados: marcar como linguagem "gerada" faz o GitHub colapsá-los no
+# diff e tirá-los da estatística de linguagem do repositório.
+package-lock.json  linguist-generated=true
+LICENSE            linguist-vendored=true

@@ -3,19 +3,16 @@
 Bem-vindo ao repositório principal do servidor SkyMP Heavy RP. 
 Este projeto é uma plataforma multijogador de *Roleplay Estrito* para Skyrim, focada em estabilidade, autoridade do servidor, e imersão sem comprometer a sincronização de rede.
 
-## Documentação Oficial do Projeto
+## Para quem está chegando
 
-A documentação do projeto está dividida em diretórios para fácil manutenção técnica e legal. Por favor, leia os seguintes documentos antes de propor alterações na *Load Order* ou nos módulos Node.js:
-
-1. **[Arquitetura do Sistema (ARCHITECTURE.md)](docs/ARCHITECTURE.md):** Contém a explicação de como o Banco de Dados, o Bot do Discord, o Painel Web, o Launcher e o Gamemode nativo conversam entre si.
-2. **[Diretrizes de Modding (MODDING_GUIDELINES.md)](docs/MODDING_GUIDELINES.md):** A nossa Bíblia de arquitetura de mods. Explica as regras de ouro, as fases de lançamento (0A, 0B, 1, Alfa, Beta) e a Lista Negra de mods proibidos (como JK's Skyrim ou Survival Scripts no cliente).
-3. **[Contrato Mods × Gamemode (MODS_AND_GAMEMODE_CONTRACT.md)](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md):** O outro lado do anterior — o que tecnicamente acontece com um mod dentro de um cliente conectado, por que scripts Papyrus de mod não produzem estado, e o teste de 4 perguntas pra classificar um mod.
-4. **[Distribuição pelo Launcher (LAUNCHER_DISTRIBUTION.md)](docs/technical/LAUNCHER_DISTRIBUTION.md):** Como o cliente e o modpack são entregues e verificados, e por que não usamos Nexus Collections.
-5. **[Referência do SkyMP Upstream (SKYMP_UPSTREAM_REFERENCE.md)](docs/technical/SKYMP_UPSTREAM_REFERENCE.md):** O que o SkyMP já entrega e nós não usamos — `mp.makeEventSource` (eventos no lugar do nosso polling de 2s), DevTools do navegador in-game em `localhost:9000`, live reload da UI, e o mapa de portas.
-6. **[Decisão sobre Serviços PARKED (PARKED_SERVICES_DECISION.md)](docs/technical/PARKED_SERVICES_DECISION.md):** Análise dos serviços que existiam no disco sem nunca rodar. Quatro foram apagados em 06/08/2026 (o mais urgente mexia em ouro sem transação nem ledger); sete continuam estacionados.
-7. **[Guia da Build Pública (PUBLIC_BUILD_GUIDE.md)](docs/technical/PUBLIC_BUILD_GUIDE.md):** O que precisa estar verdadeiro antes de publicar a build pra comunidade — o que vai no pacote, o que nunca pode ir, e a exigência de AGPL §13 de dar o link da fonte aos jogadores.
-8. **[Relatório de QA e Plano de Melhorias](docs/technical/QA_REPORT_2026-08.md):** Estado real de cada componente, o que é stub, o que está estacionado e o plano priorizado pra deixar o servidor funcional ponta a ponta. **Comece por aqui se você acabou de chegar no projeto.**
-9. **[Registro de Assets (ASSET_LICENSE_REGISTRY.md)](docs/legal/ASSET_LICENSE_REGISTRY.md):** Controle rigoroso de direitos autorais e licenças de todos os assets (.nif, .dds) que inserimos nos nossos próprios plugins ESM.
+| Você quer | Comece por |
+|---|---|
+| Entender o estado real do projeto | [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) — inclui o que **não** está pronto |
+| Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
+| Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
+| Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 30 documentos |
+| Reportar falha de segurança | [SECURITY.md](SECURITY.md) — **não abra issue pública** |
 
 ## Status Atual do Projeto (Auditoria Recente)
 
