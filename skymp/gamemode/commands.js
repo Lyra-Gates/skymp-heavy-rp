@@ -25,6 +25,21 @@ function getActiveCharacterData(actorId) {
   return activeCharacters.get(actorId) || null;
 }
 
+/**
+ * actorIds com personagem carregado, agora.
+ *
+ * O `death-service` responde a mesma pergunta varrendo até 50 profileIds com
+ * `mp.getActorsByProfileId` — o que custa uma ida à API por profileId e devolve
+ * também quem não tem personagem. Este mapa já sabe a resposta exata e de graça:
+ * ele é escrito no login e limpo no `removeActiveCharacter`.
+ *
+ * Devolve cópia: quem itera não pode segurar referência para o Map interno, que
+ * é mutado por login e logout no meio de qualquer laço.
+ */
+function listActiveActorIds() {
+  return [...activeCharacters.keys()];
+}
+
 function getActiveActorByCharacterId(characterId) {
   for (const [actorId, character] of activeCharacters.entries()) {
     if (character.characterId === characterId) {
@@ -380,6 +395,7 @@ module.exports = {
   removeActiveCharacter,
   getActiveCharacterData,
   getActiveActorByCharacterId,
+  listActiveActorIds,
   handleChatInput,
   broadcastProximityMessage,
   sendNotification
