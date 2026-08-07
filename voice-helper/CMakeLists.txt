@@ -35,7 +35,13 @@ target_link_libraries(voice-helper PRIVATE
 if(WIN32)
   # WASAPI vem do backend do miniaudio; estas sao as libs de socket e de
   # enumeracao de dispositivo que ele e o ixwebsocket precisam no Windows.
-  target_link_libraries(voice-helper PRIVATE ws2_32 ole32 winmm)
+  #
+  # bcrypt: o ixwebsocket arrasta mbedtls (TLS), e o entropy_poll do mbedcrypto
+  # chama BCryptGenRandom, que mora em bcrypt.lib. Sem ela o link falha com
+  # LNK2019 mesmo sem usarmos TLS em lugar nenhum — o objeto entra na lib
+  # inteira, nao so o que a gente chama. Descoberto no primeiro build de
+  # verdade, 07/08/2026; ver VOICE_NATIVE_HELPER.md §8.3.
+  target_link_libraries(voice-helper PRIVATE ws2_32 ole32 winmm bcrypt)
   target_compile_definitions(voice-helper PRIVATE
     WIN32_LEAN_AND_MEAN
     NOMINMAX
