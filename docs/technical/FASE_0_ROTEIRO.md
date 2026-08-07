@@ -157,6 +157,89 @@ Com `ENABLE_VOIP_SERVICE=true`, entre em jogo e rode `/voz`. O esperado:
 
 Anote o que apareceu. **Isto nunca foi visto num CEF real** — `skymp/ui/` não tem suíte de teste, então o comportamento é conhecido por leitura de código apenas.
 
+### 8.2 Voz de verdade, com o helper nativo (1–2 pessoas, ~20 min)
+
+**Este passo não é a Fase 0.** É um teste focado só em voz, e pode rodar com bem
+menos gente — até com uma pessoa só, dois processos de helper e dois atores, como
+a bancada da Fase 1 já fez. O resto do roteiro não depende dele.
+
+**Pré-requisito que ainda não está fechado:** `voice-helper.exe` precisa existir.
+Ele **nunca foi compilado** — ver `VOICE_NATIVE_HELPER.md` §8 pro estado do
+toolchain. Enquanto não houver binário, os passos 3 em diante podem ser
+ensaiados com `node voice-helper/tools/frame-probe.js`, que fala exatamente o
+mesmo protocolo (inclusive `role: 'sender'`) com um tom de 440Hz no lugar do
+microfone. Isso valida tudo **menos a captura**, que é justamente o que falta.
+
+⚠️ **`VOIP_DEBUG_EXPOSE_TICKET` grava um ticket de voz em texto puro no disco.**
+Ele vale 30 segundos e autentica como aquele jogador na cena de voz. É andaime de
+bancada, com um engenheiro olhando — **não deixe ligado**. O passo 7 existe pra
+isso.
+
+**1. Ligue as duas flags** no `.env` do gamemode:
+
+```bash
+ENABLE_VOIP_SERVICE=true
+```
+
+```bash
+VOIP_DEBUG_EXPOSE_TICKET=true
+```
+
+A segunda **não está em nenhum `.env.example` de propósito** — ligue à mão.
+Ela é lida a cada `/voz`, então não precisa reiniciar o servidor pra desligar.
+
+**2. Se o teste for entre duas máquinas**, ajuste `VOIP_PUBLIC_HOST` para o IP
+que a outra máquina alcança (o padrão `127.0.0.1` só serve na mesma máquina), e
+`VOIP_BIND_HOST=0.0.0.0` pro servidor aceitar de fora. Numa máquina só, pule.
+
+**3. Jogador A: `/voz` no jogo.** Duas coisas acontecem — a UI conecta sozinha
+como `listener` (chip no topo muda), e o ticket de `sender` aparece em dois
+lugares: no log do servidor, em `warn`, já montado como linha de comando; e em
+`skymp/gamemode/.voip-debug-ticket.json`. Pegue de onde for mais cômodo.
+
+**4. Jogador A: rode o helper** com esse ticket, dentro de 30 segundos:
+
+```bash
+voice-helper.exe --actor-id 0xFF000A12 --ticket <do arquivo> --host 127.0.0.1 --port 7778
+```
+
+Vencido, é só rodar `/voz` de novo — o ticket novo não derruba a UI, porque são
+tickets de papéis diferentes (`VOICE_NATIVE_HELPER.md` §10). O helper deve
+imprimir `Autenticado. Capturando`. Se disser `Auth recusada`, quase sempre é
+ticket vencido entre um passo e outro.
+
+**5. Jogador B: `/voz`**, e registre qual dos dois casos você testou:
+
+- **só UI** (sem helper): B ouve A, mas não fala. É o caso do client oficial hoje.
+- **com helper também**: os dois falam. Precisa de outro `/voz` + outro helper,
+  com o `actorId` de B.
+
+**6. O que observar** — e anote o que de fato aconteceu, não o que era pra acontecer:
+
+| Observação | Esperado |
+|---|---|
+| A fala, B escuta | voz **inteligível**, não só "tem sinal" |
+| A se aproxima de B | volume **sobe** conforme a distância cai |
+| B se afasta além de ~1200 unidades | áudio **para**; pode demorar até 2s (o tick é de 2s) |
+| B volta pro alcance | áudio **volta**, também em até 2s |
+| A e B com helper, os dois falando | voz nos **dois sentidos**, ao mesmo tempo |
+| A fala e escuta ao mesmo tempo | A **não ouve a própria voz** — se ouvir, é eco e é defeito |
+| A fecha o helper (Ctrl+C) | A **para de falar** e **continua ouvindo** B |
+| A muta pela UI | B **para de ouvir** A, mesmo com o helper transmitindo |
+
+Sem cancelamento de eco: **use fone**. Em caixa de som a voz do outro volta pro
+microfone e reentra na cena — isso é limitação conhecida (`VOICE_NATIVE_HELPER.md`
+§9.5), não achado novo.
+
+Se o áudio sair **robótico, cortado ou picotado**, registre o sintoma e em que
+condição apareceu — não conclua sozinho se é bloqueador. Há um achado de
+re-bufferização já medido (§7) que pode ser a mesma coisa vista de outro ângulo.
+
+**7. Desligue `VOIP_DEBUG_EXPOSE_TICKET`** e apague
+`skymp/gamemode/.voip-debug-ticket.json`. O arquivo é ignorado pelo git, então
+ninguém vai commitá-lo por acidente — mas ele continua sendo uma credencial em
+texto puro no disco de quem testou.
+
 ---
 
 ## Etapa 9 — Os três sistemas do Red House (10 min, A e B) 🔴
