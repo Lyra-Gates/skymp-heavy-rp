@@ -14,15 +14,17 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 | Componente | Pruebas | Instalable | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 218/218 ✅ + 9/9 comprobaciones de sistema | ✅ | **Maduro.** La mejor parte del proyecto: transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. |
+| `skymp/gamemode` | 313/313 ✅ + 11/11 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
 | `apps/launcher` | 24/24 ✅ (paridad) | ✅ | **Estaba roto de punta a punta** (ver 2.1) y sin ninguna prueba. La lógica de paridad del modpack se extrajo a `electron/parity.mjs` y se probó — encontró el agujero del plugin extra (2.15). El resto de `main.ts` necesita Electron. |
-| `apps/game-api` | 24/24 ✅ | ✅ | **Nuevo.** Sirve el puerto 7758 que el launcher siempre llamó y que no existía. |
+| `apps/game-api` | 30/30 ✅ | ✅ | **Nuevo.** Sirve el puerto 7758 que el launcher siempre llamó y que no existía. |
 | Tipado `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa el API de SkyMP (no hay tipos públicos en upstream). Es informativo; no bloquea ni el build ni las pruebas. Encontró 2.13 y 2.14 en la primera ejecución. |
 | Esquema / migraciones | — | — | Consistentes. Sin desvío entre tablas referenciadas y definidas. |
 
 ### Lo que efectivamente corre hoy
+
+> ⚠️ **Hasta el 06/08/2026 las banderas no encendían nada** — el gamemode nunca cargó su propio `.env` (2.16). El primer arranque real del servidor ocurrió el 06/08/2026, con cuatro módulos activos y 33 comandos registrados.
 
 Seis módulos registrados en `core/module-registry.js`, todos detrás de una flag `ENABLE_*` y **todos apagados por defecto**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
 
@@ -146,6 +148,101 @@ Todavía vale confirmarlo en el juego, pero ahora como comprobación, no como in
 **Resuelto:** en vez de parchear 12 llamadas en código que no corre, `hasPermission` pasó a validar su propio argumento. Un nivel numérico o un nombre de permiso inexistente ahora **deniegan y registran un error en el log** con la lista de lo que es válido.
 
 Elección deliberada de no lanzar excepción: eso tumbaría el comando del jugador por un error de programación. Denegar es el resultado seguro; el log es lo que hace que alguien lo corrija. También pilla el caso opuesto — quien escribe `hasPermission(id, 'manage_factions')` cree que creó una regla y creó una puerta que nunca abre. 4 pruebas nuevas.
+
+---
+
+## 2-bis. Segunda pasada (06-07/08/2026)
+
+La primera pasada leyó código. Esta **instaló el servidor y lo encendió**, y la diferencia se nota en qué defectos encuentra cada una: nueve de los diez de abajo son de configuración o de ciclo de vida — la clase que ninguna prueba unitaria toca, porque no hay nada que probar en un archivo que nadie lee.
+
+### 2.16 🔴 El gamemode nunca cargó su propio `.env` — *corregido*
+
+`dotenv` estaba en `dependencies`, `.env.example` existía, y tanto `CONTRIBUTING.md` §1 como `FASE_0_ROTEIRO.md` mandaban rellenar `skymp/gamemode/.env`. **Ningún archivo del gamemode llamaba a `require('dotenv')`** — quien leía ese archivo era `apps/web/server.js`, para sí mismo, y eso es lo que hacía el fallo invisible.
+
+Efecto: `module-registry.bootAll()` veía `process.env[ENABLE_*]` siempre indefinido, así que gobernanza, puestos, muerte, panel y VOIP quedaban apagados de forma permanente. Sin error — el log decía `DESATIVADO (... no definido)`, exactamente lo que diría si alguien hubiera elegido apagarlos.
+
+La comprobación `flags de ambiente` daba `[PASS]` todo el tiempo porque sólo verificaba que la cadena existiera en `.env.example`: probaba que alguien escribió la línea, no que encender la línea hiciera algo.
+
+### 2.17 🔴 El cargo de staff sobrevivía a la desconexión — *corregido*
+
+`admin-service.removeStaffRole` existía, se exportaba y tenía prueba, y **ningún camino de producción la llamaba**. La caché se indexa por `actorId`, que SkyMP reutiliza entre sesiones, y `registerStaffRole` sólo corre al entrar: quien cayera en el `actorId` de un admin que se fue heredaba `ban`, `set_gold` y `retire_character`.
+
+No aparecía en ninguna prueba de permisos porque el cargo era correcto en ambos momentos — el defecto era de sesión, no de autorización.
+
+### 2.18 🔴 `npc-cleaner` borraba NPCs vitales, e implementaba la opción rechazada — *corregido*
+
+Recorría `mp.getActorsByProfileId(0)` y llamaba a `disable` **y `delete`** en todo actor, saltando sólo los de una allowlist — que estaba vacía. Mercaderes, guardias y NPCs de misión, cada 60 s, y `delete` sobre una referencia persistente no vuelve.
+
+`NPC_POLICY_DECISION.md` evaluó tres opciones y eligió la **C (Spawn Selectivo)**; el código implementaba la B, la rechazada, en su forma más extrema. Además, `safeRadius` estaba declarado con el comentario "sólo limpia NPCs lejos de los jugadores" y **nunca se leía**.
+
+La lista pasó a ser de bloqueo (vacía = no elimina nada), el radio empezó a existir, y `delete` se fue.
+
+### 2.19 🟠 `/setgold` era el único camino de dinero fuera del ledger — *corregido*
+
+Un `UPDATE characters SET gold = ?` directo, sin transacción y sin fila en `gold_transactions` — el patrón que motivó borrar `economy-service.js`. Es el comando que más necesita rastro: oro sin origen registrado es indistinguible de duplicación por bug, y quien puede hacerlo es justamente el staff.
+
+Vino con una guarda que faltaba: `/setgold <id>` sin valor pasaba `NaN`, que MySQL guarda como `0` — un error de tecleo vaciaba el patrimonio del jugador en silencio.
+
+### 2.20 🟠 La compra en puesto reimplementaba `transaction-service` — *corregido*
+
+`buyItem` escribía el SQL de saldo e inventario a mano. Era atómico y con ledger, así que no era inseguro; era una segunda implementación fuera del archivo que existe para ser la única, con `FOR UPDATE` y la guarda de saldo negativo duplicados.
+
+Las funciones públicas del servicio no lo resolvían (cada una abre su propia transacción, y la compra debe confirmar stock, oro, impuesto y objeto juntos). Las primitivas internas — que ya recibían la conexión — pasaron a exportarse como `tx.*`, con contrato explícito.
+
+`buyItem` no tenía **ninguna** prueba de comportamiento; ganó 10.
+
+### 2.21 🔴 `characters.gold` no existía en base migrada — *corregido (migración v9)*
+
+La columna está declarada en `schema.sql` y en **ninguna migración**. Una base nueva funciona; quien creó la suya antes de la columna y aplicó `v2`→`v8` en orden, como manda CONTRIBUTING, nunca la recibe. La v2 llega a crear `gold_transactions` — el ledger — sin garantizar la columna de saldo que ese ledger acompaña.
+
+No rompe el arranque: rompe en la primera operación de oro, que es todo `transaction-service`. En el guion de la Fase 0 la prueba moriría en el **paso 5.6**, tras cinco pasos correctos, con dos personas y Skyrim abiertos.
+
+Encontrado por `npm run check:schema` (punto 4.1 del plan) — precisamente la clase de problema para la que fue escrito.
+
+### 2.22 🟠 `core/soul.js` guardaba dos caracteres invisibles con significado — *corregido*
+
+El archivo contaba como binario para `grep` y para `file`. La causa no era la que parecía: además de la clase de marcas combinantes cruda en `normalize()`, había un **byte NUL** en el separador del material firmado, que se lee en pantalla como `].join('')`.
+
+NUL es la elección **correcta** (no sobrevive al `normalize()`, así que ningún jugador puede teclearlo en la ficha; con un separador tecleable, `'ab'+'c'` y `'a'+'bc'` firmarían el mismo material y dos fichas distintas nacerían con la misma alma). El problema era que fuera invisible: cualquier editor que limpie caracteres de control al guardar cambiaría la semilla de **toda alma ya derivada**.
+
+Verificado que las semillas no cambiaron, y la derivación ganó una prueba de valores dorados.
+
+### 2.23 🔴 Dos defectos que sólo el primer arranque real reveló — *corregidos*
+
+**`Cannot find module 'dotenv'`, y el gamemode no cargaba.** SkyMP copia el archivo de entrada a `%TEMP%` y lo ejecuta desde ahí — está escrito en la cabecera del propio archivo, y por eso todos sus require usan ruta absoluta. El de dotenv, añadido al corregir 2.16, era el único especificador desnudo, y un especificador desnudo se resuelve desde el directorio del archivo en ejecución.
+
+Pasó las 366 pruebas y el CI porque ambos corren desde `skymp/gamemode/`. **Es el ejemplo más limpio de lo que la cabecera de `ci.yml` ya advertía:** *"un CI verde significa que no rompiste lo que ya se verificaba, no que funciona en el juego"*.
+
+**Ninguna opción de gameplay se leía.** `.env.example` definía `NODE_ENV=development`, el cargador arma `server-options.<NODE_ENV>.json`, y el proyecto sólo tiene `local` y `production`. Tocar `permadeathEnabled`, los radios de chat o `startingGold` no hacía nada.
+
+### 2.24 🟡 `database.js` no tenía `close()` — *corregido*
+
+`verify-governance-market-stalls.js` ya llamaba a `db.close()` detrás de una guarda, y la función nunca existió: la guarda nunca disparaba y el pool de mysql2 retenía el event loop. `RUN_DB_CHECK=1 npm run test:systems` imprimía `10/10 passaram` y **quedaba colgado para siempre** (exit 124 por timeout; ahora exit 0). En un CI con base de datos, el job sólo terminaría en el timeout y el informe diría "cancelado".
+
+### 2.25 🟠 Un módulo PARKED podía encenderse esquivando el registro — *corregido*
+
+`governance-service` decidía si `economy-regional` corre leyendo `process.env.ENABLE_REGIONAL_ECONOMY` directamente, en dos puntos: la bandera bastaba para cargar y **ejecutar** un módulo aparcado sin resolución de dependencias, sin registro de comandos y sin shutdown. `CONTRIBUTING.md` §3.3 prohíbe exactamente eso, y la sección "No hacer" de este informe también.
+
+### 2.26 🟡 El generador de `mods.json` no tenía prueba — *corregido*
+
+Siendo lo que decide el contrato de FormID — lo que, cuando se equivoca, no produce error: produce un cofre con otra cosa dentro. Ganó 6 pruebas y la bandera `--only-load-order`, que permite correr la Fase 0 antes de que exista el modpack: sin ella, generar el manifiesto desde una `Data/` de trabajo produce un archivo que exige la máquina de quien lo generó.
+
+---
+
+## 2-ter. Aprovechamiento del Red House (06-07/08/2026)
+
+Los cuatro puntos que `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` §4.1 (en portugués) listó como aprovechables están implementados. **En tres de ellos se sondeó el servidor real antes de escribir** — asumir la forma de una API es lo que causó 2.13 y 2.23.
+
+| Punto | Qué cambió | Estado |
+|---|---|---|
+| Sondeo del panel | Leía 3 ActorValues por panel abierto cada 2 s, incluso de quien estaba en la pestaña Social (~450 ms por ventana con 10 paneles). La UI ya mandaba la pestaña activa y el servidor la descartaba | ✅ |
+| `isInSafeLocation` | `action-policy` pasa a bloquear por **lugar**, no sólo por estado. La regla de los dos lados vino incluida | ✅ mecanismo; la lista de zonas nace vacía (§15 de la Constitución) |
+| `lookupEspmRecordById` | Valida `base_id` contra los plugins cargados, en `/additem` y en el anuncio de puesto | ✅ forma confirmada por sonda |
+| `_onHit` | La agresión reportada por el cliente se vuelve evidencia de combate, sustituyendo la heurística de pico de daño | ✅ registrado; **el snippet de cliente espera la Fase 0** |
+
+**Una diferencia deliberada respecto a ellos:** el Red House recalcula el daño a partir del evento de golpe y lo aplica. Nosotros no — quien manda el evento es la máquina del jugador, y `CONTRIBUTING.md` §3.6 es explícito en que un evento de cliente es una pista, no una prueba. Se vuelve evidencia para arbitrar RDM, y la fila guardada declara de dónde vino.
+
+**Corrección de licencia:** el §4.1 del estudio afirmaba "GPL-3.0 — no se puede copiar código". Era falso, y `LICENSE_AND_AFFILIATION_POLICY.md` §4 ya decía lo contrario: somos `AGPL-3.0-or-later`, la GPLv3 §13 permite la combinación, y se puede aprovechar código de ahí con atribución. El error empujaba a reescribir desde cero lo que se podía portar.
 
 ---
 
