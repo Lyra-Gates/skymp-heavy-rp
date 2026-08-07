@@ -14,15 +14,17 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 | Component | Tests | Installable | Real state |
 |---|---|---|---|
-| `skymp/gamemode` | 218/218 ✅ + 9/9 system checks | ✅ | **Mature.** The best part of the project: atomic transactions, a state machine, a module registry, real test coverage. |
+| `skymp/gamemode` | 313/313 ✅ + 11/11 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
 | `apps/launcher` | 24/24 ✅ (parity) | ✅ | **Was broken end to end** (see 2.1) and had no tests at all. The modpack parity logic was extracted into `electron/parity.mjs` and tested — it found the extra-plugin hole (2.15). The rest of `main.ts` needs Electron. |
-| `apps/game-api` | 24/24 ✅ | ✅ | **New.** Serves port 7758, which the launcher always called and which didn't exist. |
+| `apps/game-api` | 30/30 ✅ | ✅ | **New.** Serves port 7758, which the launcher always called and which didn't exist. |
 | `mp` typings | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` types SkyMP's API (there are no public upstream typings). Informational; it blocks neither build nor tests. It found 2.13 and 2.14 on its first run. |
-| Schema / migrations | — | — | Consistent. No drift between referenced and defined tables. |
+| Schema / migrations | `npm run check:schema` | — | Consistent **after v9**. The checker found `characters.gold` declared in `schema.sql` and in no migration (2.21) — a fresh database worked, a migrated one did not. |
 
 ### What actually runs today
+
+> ⚠️ **Until 2026-08-06 the flags turned nothing on** — the gamemode never loaded its own `.env` (2.16). The server's first real boot happened on 2026-08-06, with four active modules and 33 registered commands.
 
 Six modules registered in `core/module-registry.js`, all behind an `ENABLE_*` flag and **all off by default**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
 
@@ -146,6 +148,101 @@ Confirming in game is still worth doing, but now as a check, not an investigatio
 **Resolved:** rather than patching 12 calls in code that doesn't run, `hasPermission` now validates its own argument. A numeric level or an unknown permission name now **denies and logs an error** with the list of what's valid.
 
 Deliberate choice not to throw: that would kill the player's command over a programming mistake. Denying is the safe outcome; the log is what makes someone fix it. It also catches the opposite case — someone writing `hasPermission(id, 'manage_factions')` thinks they created a rule and actually created a door that never opens. 4 new tests.
+
+---
+
+## 2-bis. Second pass (2026-08-06/07)
+
+The first pass read code. This one **installed the server and turned it on**, and the difference shows in which defects each finds: nine of the ten below are configuration or lifecycle — the class no unit test touches, because there is nothing to test in a file nobody reads.
+
+### 2.16 🔴 The gamemode never loaded its own `.env` — *fixed*
+
+`dotenv` was in `dependencies`, `.env.example` existed, and both `CONTRIBUTING.md` §1 and `FASE_0_ROTEIRO.md` told you to fill in `skymp/gamemode/.env`. **No gamemode file called `require('dotenv')`** — the one reading that file was `apps/web/server.js`, for itself, which is what made the failure invisible.
+
+Effect: `module-registry.bootAll()` saw `process.env[ENABLE_*]` always undefined, so governance, stalls, death, panel and VOIP stayed permanently off. No error — the log said `DESATIVADO (... not defined)`, exactly what it would say if someone had chosen to turn them off.
+
+The `flags de ambiente` check passed the whole time because it only verified the string existed in `.env.example`: it proved someone wrote the line, not that turning the line on did anything.
+
+### 2.17 🔴 Staff rank survived disconnect — *fixed*
+
+`admin-service.removeStaffRole` existed, was exported and had tests, and **no production path called it**. The cache is keyed by `actorId`, which SkyMP reuses across sessions, and `registerStaffRole` only runs at login: whoever landed on a departed admin's `actorId` inherited `ban`, `set_gold` and `retire_character`.
+
+It never showed up in a permission test because the rank was correct at both moments — the defect was about sessions, not authorization.
+
+### 2.18 🔴 `npc-cleaner` deleted vital NPCs, and implemented the rejected option — *fixed*
+
+It swept `mp.getActorsByProfileId(0)` and called `disable` **and `delete`** on every actor, skipping only those in an allowlist — which was empty. Merchants, guards and quest NPCs, every 60 s, and `delete` on a persistent reference does not come back.
+
+`NPC_POLICY_DECISION.md` weighed three options and chose **C (Selective Spawn)**; the code implemented B, the rejected one, in its most extreme form. On top of that, `safeRadius` was declared with the comment "only cleans NPCs far from players" and **never read**.
+
+The list became a blocklist (empty = removes nothing), the radius came into existence, and `delete` is gone.
+
+### 2.19 🟠 `/setgold` was the only money path outside the ledger — *fixed*
+
+A bare `UPDATE characters SET gold = ?`, no transaction and no row in `gold_transactions` — the very pattern that motivated deleting `economy-service.js`. It is the command that most needs a trail: gold with no recorded origin is indistinguishable from duplication by bug, and the people who can do it are staff.
+
+A missing guard came along: `/setgold <id>` with no value passed `NaN`, which MySQL stores as `0` — a typo silently wiped out a player's fortune.
+
+### 2.20 🟠 Stall purchase reimplemented `transaction-service` — *fixed*
+
+`buyItem` wrote the gold and inventory SQL by hand. It was atomic and ledgered, so not unsafe; it was a second implementation outside the file that exists to be the only one, with `FOR UPDATE` and the negative-balance guard duplicated.
+
+The service's public functions could not solve it (each opens its own transaction, and the purchase must commit stock, gold, tax and item together). The internal primitives — which already took the connection — are now exported as `tx.*`, with an explicit contract.
+
+`buyItem` had **no** behavioural test at all; it gained 10.
+
+### 2.21 🔴 `characters.gold` did not exist in a migrated database — *fixed (migration v9)*
+
+The column is declared in `schema.sql` and in **no migration**. A fresh database works; anyone who created theirs before the column and applied `v2`→`v8` in order, as CONTRIBUTING instructs, never gets it. v2 even creates `gold_transactions` — the ledger — without guaranteeing the balance column it tracks.
+
+It does not break the boot: it breaks on the first gold operation, which is all of `transaction-service`. In the Phase 0 script the test would die at **step 5.6**, after five steps went right, with two people and Skyrim open.
+
+Found by `npm run check:schema` (plan item 4.1) — precisely the class of problem it was written for.
+
+### 2.22 🟠 `core/soul.js` held two invisible characters that carried meaning — *fixed*
+
+The file counted as binary to `grep` and to `file`. The cause was not the obvious one: besides the raw combining-marks class in `normalize()`, there was a **NUL byte** in the separator of the signed material, which reads on screen as `].join('')`.
+
+NUL is the **right** choice (it does not survive `normalize()`, so no player can type it into an application; with a typeable separator, `'ab'+'c'` and `'a'+'bc'` would sign the same material and two different applications would be born with the same soul). The problem was that it was invisible: any editor that strips control characters on save would change the seed of **every soul already derived**.
+
+Verified that the seeds did not change, and the derivation gained a golden-value test.
+
+### 2.23 🔴 Two defects only the first real boot revealed — *fixed*
+
+**`Cannot find module 'dotenv'`, and the gamemode did not load.** SkyMP copies the entry file to `%TEMP%` and runs it from there — this is written at the top of the file itself, and it is why every require in it uses an absolute path. The dotenv one, added while fixing 2.16, was the only bare specifier, and a bare specifier resolves from the directory of the running file.
+
+It passed 366 tests and CI because both run from `skymp/gamemode/`. **It is the cleanest example of what the `ci.yml` header already warned about:** *"a green CI means you did not break what was already verified, not that it works in game"*.
+
+**No gameplay option was being read.** `.env.example` set `NODE_ENV=development`, the loader builds `server-options.<NODE_ENV>.json`, and the project only ships `local` and `production`. Changing `permadeathEnabled`, the chat ranges or `startingGold` did nothing.
+
+### 2.24 🟡 `database.js` had no `close()` — *fixed*
+
+`verify-governance-market-stalls.js` already called `db.close()` behind a guard, and the function never existed: the guard never fired and the mysql2 pool held the event loop. `RUN_DB_CHECK=1 npm run test:systems` printed `10/10 passed` and **hung forever** (exit 124 by timeout; now exit 0). In a CI with a database, the job would only end at the timeout and the report would say "cancelled".
+
+### 2.25 🟠 A PARKED module could be enabled around the registry — *fixed*
+
+`governance-service` decided whether `economy-regional` runs by reading `process.env.ENABLE_REGIONAL_ECONOMY` directly, in two places: the flag alone was enough to load and **execute** a parked module with no dependency resolution, no command registration and no shutdown. `CONTRIBUTING.md` §3.3 forbids exactly this, and so does this report's own "Do not do" section.
+
+### 2.26 🟡 The `mods.json` generator had no test — *fixed*
+
+Being the thing that decides the FormID contract — the one that, when wrong, produces no error: it produces a chest with something else inside. It gained 6 tests and the `--only-load-order` flag, which makes it possible to run Phase 0 before the modpack exists: without it, generating the manifest from a working `Data/` produces a file that demands the generating machine.
+
+---
+
+## 2-ter. Harvesting the Red House (2026-08-06/07)
+
+The four items `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` §4.1 (Portuguese) listed as worth taking have been implemented. **In three of them the real server was probed before writing** — assuming an API shape is what caused 2.13 and 2.23.
+
+| Item | What changed | Status |
+|---|---|---|
+| Panel polling | Read 3 ActorValues per open panel every 2 s, including for someone sitting on the Social tab (~450 ms per window with 10 panels). The UI already sent the active tab and the server discarded it | ✅ |
+| `isInSafeLocation` | `action-policy` now blocks by **place**, not only by state. The both-sides rule came with it | ✅ mechanism; the zone list is born empty (Constitution §15) |
+| `lookupEspmRecordById` | Validates `base_id` against the loaded plugins, in `/additem` and in stall listing | ✅ shape confirmed by probe |
+| `_onHit` | Client-reported aggression becomes combat evidence, replacing the damage-spike heuristic | ✅ registered; **client snippet awaits Phase 0** |
+
+**One deliberate difference from them:** the Red House recomputes damage from the hit event and applies it. We do not — the machine sending the event is the player's, and `CONTRIBUTING.md` §3.6 is explicit that a client event is a hint, not proof. It becomes evidence for RDM arbitration, and the stored row states where it came from.
+
+**A licence correction:** §4.1 of the study claimed "GPL-3.0 — you cannot copy code". That was wrong, and `LICENSE_AND_AFFILIATION_POLICY.md` §4 already said the opposite: we are `AGPL-3.0-or-later`, GPLv3 §13 permits the combination, and code from there can be reused with attribution. The error pushed towards rewriting from scratch what could have been ported.
 
 ---
 

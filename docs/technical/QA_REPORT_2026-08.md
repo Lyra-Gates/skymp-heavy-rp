@@ -14,17 +14,19 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 218/218 ✅ + 9/9 checks de sistema | ✅ | **Maduro.** Melhor parte do projeto: transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. |
+| `skymp/gamemode` | 313/313 ✅ + 11/11 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
 | `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | 24/24 ✅ (paridade) | ✅ | **Estava quebrado ponta a ponta** (ver 2.1) e sem teste nenhum. A lógica de paridade de modpack foi extraída pra `electron/parity.mjs` e testada — achou o buraco do plugin extra (2.15). O resto do `main.ts` depende de Electron. |
-| `apps/game-api` | 24/24 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. |
+| `apps/game-api` | 30/30 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. O gerador de manifesto ganhou teste e a flag `--only-load-order` (2.26). |
 | Tipagem `mp` | `npm run typecheck` | — | `skymp/gamemode/types/mp.d.ts` tipa a API do SkyMP (não há typings públicos upstream). Informativo, não trava build nem teste. Achou 2.13 e 2.14 na primeira execução. |
-| Schema / migrations | — | — | Consistente. Sem drift entre tabelas referenciadas e definidas. |
+| Schema / migrations | `npm run check:schema` | — | Consistente **depois da v9**. O checador achou `characters.gold` declarada no `schema.sql` e em migration nenhuma (2.21) — banco novo funcionava, banco migrado não. |
 
 ### O que efetivamente roda hoje
 
 Seis módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
+
+> ⚠️ **Até 06/08/2026 as flags não ligavam nada** — o gamemode nunca carregou o próprio `.env` (2.16). O primeiro boot real do servidor aconteceu em 06/08/2026, com quatro módulos ativos e 33 comandos registrados.
 
 Sete serviços existem no disco e **nunca são registrados** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Outros quatro foram apagados em 06/08/2026 (`economy-service`, `justice`, `faction`, `survival`) por duplicarem sistema ativo ou serem inseguros — ver `PARKED_SERVICES_DECISION.md`. Os que ficaram e mexiam em ouro foram migrados pro `core/transaction-service`.
 
@@ -161,6 +163,101 @@ Junto veio um segundo caso: quando o servidor não informava load order, o códi
 
 ---
 
+## 2-bis. Segunda rodada (06-07/08/2026)
+
+A primeira rodada leu codigo. Esta **instalou o servidor e o ligou**, e a diferenca aparece em quais defeitos cada uma acha: nove dos dez abaixo sao de configuracao ou de ciclo de vida — a classe que nenhum teste unitario toca, porque nao ha o que testar num arquivo que ninguem le.
+
+### 2.16 🔴 O gamemode nunca carregou o proprio `.env` — *corrigido*
+
+`dotenv` estava em `dependencies`, o `.env.example` existia, e tanto o `CONTRIBUTING.md` §1 quanto o `FASE_0_ROTEIRO.md` mandavam preencher `skymp/gamemode/.env`. **Nenhum arquivo do gamemode chamava `require('dotenv')`** — quem lia esse arquivo era o `apps/web/server.js`, para si mesmo, o que tornava a falha invisivel.
+
+Efeito: `module-registry.bootAll()` via `process.env[ENABLE_*]` sempre indefinido, entao governanca, barracas, morte, painel e VOIP ficavam desligados de forma permanente. Sem erro — o log dizia `DESATIVADO (... nao definido)`, exatamente o que diria se a pessoa tivesse escolhido desligar.
+
+O check `flags de ambiente` dava `[PASS]` o tempo todo porque so conferia que a string existia no `.env.example`: provava que alguem escreveu a linha, nao que ligar a linha fazia algo.
+
+### 2.17 🔴 Cargo de staff sobrevivia a desconexao — *corrigido*
+
+`admin-service.removeStaffRole` existia, era exportada e tinha teste, e **nenhum caminho de producao a chamava**. O cache e chaveado por `actorId`, que o SkyMP reaproveita entre sessoes, e `registerStaffRole` so roda no login: quem entrasse no `actorId` de um admin que saiu herdava `ban`, `set_gold` e `retire_character`.
+
+Nao aparecia em nenhum teste de permissao porque o cargo estava correto nos dois momentos — o defeito era de sessao, nao de autorizacao.
+
+### 2.18 🔴 `npc-cleaner` apagava NPCs vitais, e implementava a opcao rejeitada — *corrigido*
+
+Varria `mp.getActorsByProfileId(0)` e chamava `disable` **e `delete`** em todo ator, pulando so os de uma allowlist — que estava vazia. Mercadores, guardas e NPCs de quest, a cada 60 s, e `delete` numa referencia persistente nao volta.
+
+O `NPC_POLICY_DECISION.md` avaliou tres opcoes e escolheu a **C (Spawn Seletivo)**; o codigo implementava a B, rejeitada, na forma mais extrema. Alem disso, `safeRadius` era declarado com o comentario "limpa apenas NPCs longe dos players" e **nunca lido**.
+
+A lista virou de bloqueio (vazia = remove nada), o raio passou a existir, e o `delete` saiu.
+
+### 2.19 🟠 `/setgold` era o unico caminho de dinheiro fora do ledger — *corrigido*
+
+`UPDATE characters SET gold = ?` direto, sem transacao e sem linha em `gold_transactions` — o padrao que motivou apagar o `economy-service.js`. E o comando que mais precisa de rastro: ouro sem origem registrada e indistinguivel de duplicacao por bug, e quem pode fazer isso e a staff.
+
+Junto veio um guard que faltava: `/setgold <id>` sem valor passava `NaN`, que o MySQL grava como `0` — um erro de digitacao zerava o patrimonio do jogador em silencio.
+
+### 2.20 🟠 A compra em barraca reimplementava o `transaction-service` — *corrigido*
+
+`buyItem` escrevia o SQL de saldo e de inventario a mao. Era atomico e com ledger, entao nao era inseguro; era uma segunda implementacao fora do arquivo que existe para ser a unica, com o `FOR UPDATE` e a guarda de saldo negativo duplicados.
+
+Nao dava para resolver com as funcoes publicas do servico (cada uma abre a propria transacao, e a compra precisa commitar estoque, ouro, imposto e item juntos). As primitivas internas — que ja recebiam a conexao — passaram a ser exportadas como `tx.*`, com contrato explicito.
+
+`buyItem` nao tinha **nenhum** teste de comportamento; ganhou 10.
+
+### 2.21 🔴 `characters.gold` nao existia em banco migrado — *corrigido (migration v9)*
+
+A coluna esta declarada no `schema.sql` e em **nenhuma migration**. Banco novo funciona; quem criou o banco antes dela e aplicou `v2`->`v8` em ordem, como o CONTRIBUTING manda, nunca a recebe. A v2 chega a criar a `gold_transactions` — o ledger — sem garantir a coluna de saldo que ele acompanha.
+
+Nao quebra o boot: quebra na primeira operacao de ouro, que e todo o `transaction-service`. No roteiro da Fase 0, o teste morreria na **etapa 5.6**, depois de cinco etapas dando certo, com duas pessoas e o Skyrim abertos.
+
+Achado pelo `npm run check:schema` (4.1 do plano) — exatamente a classe de problema para a qual ele foi escrito.
+
+### 2.22 🟠 `core/soul.js` guardava dois caracteres invisiveis com significado — *corrigido*
+
+O arquivo contava como binario para o `grep` e para o `file`. A causa nao era a que parecia: alem da classe de marcas combinantes crua no `normalize()`, havia um **byte NUL** no separador do material assinado, que se le na tela como `].join('')`.
+
+O NUL e a escolha **certa** (nao sobrevive ao `normalize()`, entao ninguem consegue digita-lo na ficha; com separador digitavel, `'ab'+'c'` e `'a'+'bc'` assinariam o mesmo material e duas fichas nasceriam com a mesma alma). O problema era ele estar invisivel: qualquer editor que limpe caracteres de controle ao salvar mudaria a semente de **toda alma ja derivada**.
+
+Verificado que as sementes nao mudaram, e a derivacao ganhou teste de valores dourados.
+
+### 2.23 🔴 Dois defeitos que so o primeiro boot revelou — *corrigidos*
+
+**`Cannot find module 'dotenv'`, e o gamemode nao carregava.** O SkyMP copia o arquivo de entrada para o `%TEMP%` e executa de la — esta escrito no topo do proprio arquivo, e e por isso que todos os requires dele usam caminho absoluto. O do dotenv, adicionado ao corrigir 2.16, era o unico nu, e especificador nu resolve a partir do diretorio do arquivo em execucao.
+
+Passou nos 366 testes e no CI porque os dois rodam a partir de `skymp/gamemode/`. **E o exemplo mais limpo do que o cabecalho do `ci.yml` ja avisava:** *"CI verde significa que nao quebrou o que ja era verificado, nao que funciona em jogo"*.
+
+**Nenhuma opcao de gameplay era lida.** O `.env.example` definia `NODE_ENV=development`, o loader monta `server-options.<NODE_ENV>.json`, e o projeto so tem `local` e `production`. Mexer em `permadeathEnabled`, nos raios de chat ou no `startingGold` nao fazia nada.
+
+### 2.24 🟡 `database.js` nao tinha `close()` — *corrigido*
+
+O `verify-governance-market-stalls.js` ja chamava `db.close()` atras de um guard, e a funcao nunca existiu: o guard nunca disparava e o pool do mysql2 segurava o event loop. `RUN_DB_CHECK=1 npm run test:systems` imprimia `10/10 passaram` e **ficava pendurado para sempre** (exit 124 por timeout; agora exit 0). Num CI com banco, o job so terminaria no timeout e o relatorio diria "cancelado".
+
+### 2.25 🟠 Modulo PARKED podia ser ligado por fora do registry — *corrigido*
+
+O `governance-service` decidia se o `economy-regional` roda lendo `process.env.ENABLE_REGIONAL_ECONOMY` direto, em dois pontos: a flag bastava para carregar e **executar** um modulo estacionado sem resolucao de dependencia, sem registro de comando e sem shutdown. O `CONTRIBUTING.md` §3.3 proibe exatamente isso, e a secao "Nao fazer" deste relatorio tambem.
+
+### 2.26 🟡 O gerador de `mods.json` nao tinha teste — *corrigido*
+
+Sendo o que decide o contrato de FormID — a coisa que, quando erra, nao produz erro: produz um bau com outra coisa dentro. Ganhou 6 testes e a flag `--only-load-order`, que permite rodar a Fase 0 antes de o modpack existir: sem ela, gerar o manifesto de uma `Data/` de trabalho produz um arquivo que exige a maquina de quem gerou.
+
+---
+
+## 2-ter. Aproveitamento do Red House (06-07/08/2026)
+
+Os quatro itens que o `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` §4.1 listou como aproveitaveis foram implementados. **Em tres deles o servidor real foi sondado antes de escrever** — assumir formato de API e o que causou 2.13 e 2.23.
+
+| Item | O que mudou | Estado |
+|---|---|---|
+| Polling do painel | Lia 3 ActorValues por painel aberto a cada 2 s, inclusive de quem estava na aba Social (~450 ms por janela com 10 paineis). A UI ja mandava a aba ativa e o servidor descartava | ✅ |
+| `isInSafeLocation` | A `action-policy` passa a bloquear por **lugar**, nao so por estado. Regra dos dois lados incluida | ✅ mecanismo; lista de zonas nasce vazia (§15 da Constituicao) |
+| `lookupEspmRecordById` | Valida `base_id` contra os plugins carregados, em `/additem` e no anuncio de barraca | ✅ formato confirmado por sonda |
+| `_onHit` | Agressao relatada pelo cliente vira evidencia de combate, substituindo a heuristica de damage spike | ✅ registrado; **snippet de cliente aguarda a Fase 0** |
+
+**Uma diferenca deliberada em relacao a eles:** o Red House recalcula dano a partir do evento de hit e aplica. Nos nao — quem manda o evento e a maquina do jogador, e o `CONTRIBUTING.md` §3.6 e explicito sobre evento de cliente ser dica e nao prova. Vira evidencia para arbitragem de RDM, e a linha gravada declara de onde veio.
+
+**Correcao de licenca:** o §4.1 do estudo afirmava "GPL-3.0 — nao da pra copiar codigo". Estava errado, e a `LICENSE_AND_AFFILIATION_POLICY.md` §4 ja dizia o contrario: somos `AGPL-3.0-or-later`, a GPLv3 §13 permite a combinacao, e da para aproveitar codigo de la com atribuicao. O erro empurrava para reescrever do zero o que dava para portar.
+
+---
+
 ## 3. Plano de melhorias
 
 Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisito pra qualquer teste com jogadores reais.
@@ -174,7 +271,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 | 1.2 | ✅ **Feito** — `apps/game-api/scripts/generate-mods-manifest.js` | |
 | 1.3 | ✅ **Feito** — `Start-AllServices.ps1` pré-checa cada serviço e reporta o que não subiu | |
 | 1.4 | ✅ **Feito** — 29 smoke tests em `apps/web/server.test.js` | |
-| 1.5 | **Rodar o [roteiro da Fase 0](FASE_0_ROTEIRO.md)** — passo a passo, ~50 min, 2 pessoas | Todo o gamemode está verificado só por teste unitário com `mp` mockado. **É o próximo bloqueio real.** |
+| 1.5 | **Rodar o [roteiro da Fase 0](FASE_0_ROTEIRO.md)** — passo a passo, ~50 min, 2 pessoas | **Etapa 0 concluída em 06/08/2026** (ambiente, banco migrado, servidor instalado, primeiro boot real — ver [o registro](../roadmap/FASE_0_LOG_2026-08-06.md)). Falta credencial do Discord, o painel no ar na 3001, e uma segunda pessoa. **Continua sendo o único bloqueio real.** |
 | 1.5a | ✅ **Resolvido sem servidor** — os testes oficiais do SkyMP responderam. As 22 chamadas foram convertidas. Confirmar in-game continua valendo, mas como checagem, não investigação | |
 | 1.6 | ✅ **Feito** — `apps/web` serve o master API, `game_sessions` (v8) guarda a sessão, `offlineMode: false` nos exemplos. Falta confirmar in-game | |
 | 1.7 | ✅ **Feito** — `mp.onDeath` é o gatilho primário e a autoria vai pra `audit_logs` (`death:killer`). O polling continua como rede de segurança até o hook ser confirmado in-game | |
@@ -219,7 +316,8 @@ Nasceu do estudo de integração com a Chancelaria Real, que roda em produção 
 
 ## 4. O que este relatório não cobre
 
-- **Comportamento em jogo.** Nenhum comando (`/painel`, `/socorrer`, `/iniciar`, `/permakill`, `/voz`) foi executado numa sessão real. Os testes usam `mp` mockado.
+- **Comportamento em jogo.** Nenhum comando (`/painel`, `/socorrer`, `/iniciar`, `/permakill`, `/voz`) foi executado numa sessão real. Os testes usam `mp` mockado. O servidor **subiu** em 06/08/2026 e o gamemode carregou, mas ninguém conectou.
+- **O snippet de cliente do `_onHit`.** `mp.makeEventSource` foi confirmada por sonda e o boot registra o evento, mas o trecho que roda no Skyrim Platform só executa quando alguém conecta.
 - **Interação real com a API do Discord.** O bot e a nova rota de OAuth não foram exercitados contra bot/guild reais.
 - **Build empacotado do launcher.** A correção de `define` foi validada por typecheck, não por instalador gerado.
 - **Carga.** Nenhuma medição com múltiplos jogadores, que é onde o polling de 2s do `death-service`/`player-panel`/`voip` tende a aparecer primeiro.
