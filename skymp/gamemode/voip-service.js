@@ -1,6 +1,6 @@
 /**
  * voip-service.js
- * Servidor de Sinalização WebRTC para VOIP por Proximidade.
+ * VOIP por proximidade: sinalização WebRTC (caminho antigo) + relay de áudio (caminho novo).
  *
  * Arquitetura:
  * - Um WebSocketServer (porta 7778, bind local por padrão) recebe conexoes dos clientes CEF.
@@ -9,9 +9,27 @@
  *   jogador roda /voz — sem isso, qualquer processo que conecte no WebSocket local
  *   poderia reivindicar o actorId de outro jogador e sequestrar o slot de voz dele.
  * - O servidor calcula a distancia entre atores a cada 2 segundos.
- * - Com base na distancia, envia { type: 'proximity', peerId, volume } ao cliente.
- * - Os clientes usam essa informacao para ajustar o GainNode do WebRTC AudioContext.
- * - Para estabelecer chamadas P2P, o servidor repassa offer/answer/ice entre pares.
+ * - Com base na distancia, envia { type: 'proximity_update', peers: [...] } ao cliente.
+ *
+ * Dois caminhos convivem aqui de propósito, e a Fase 2 remove o primeiro:
+ *
+ * 1. WebRTC P2P (offer/answer/ice). O servidor só repassa sinalização; o áudio vai
+ *    direto entre os clientes, e o `index.html` ajusta o GainNode com o
+ *    `proximity_update`. É o que roda no client SkyMP oficial — e é o caminho que
+ *    *não funciona*, porque a captura (`getUserMedia`) é bloqueada no CEF embutido.
+ *
+ * 2. Relay pelo servidor (`audio_frame`). Um helper nativo fora do CEF captura o
+ *    microfone via WASAPI e manda os frames por este mesmo WebSocket; o servidor
+ *    retransmite pra quem está em alcance, com o volume já calculado. O navegador
+ *    do jogo só *toca* — tocar nunca foi bloqueado pela CEF, só a captura era.
+ *    Ver `docs/technical/VOICE_NATIVE_HELPER.md`.
+ *
+ * Por que relay e não P2P: reverter a flag do Chromium que libera o microfone é
+ * um caminho descartado (`docs/technical/VOICE_CLIENT_PATCH.md`) — a remoção foi
+ * deliberada na SkyrimPlatform 2.1, e reabri-la exporia o microfone do jogador a
+ * qualquer servidor SkyMP que ele conectasse depois, não só a este. De quebra, o
+ * relay resolve NAT/CGNAT: dois jogadores em redes residenciais distintas não
+ * fecham conexão direta, mas os dois alcançam o servidor.
  */
 
 const crypto = require('crypto');
@@ -33,8 +51,51 @@ const TICKET_TTL_MS = 30 * 1000;
 // pra que falar e escrever cheguem exatamente nas mesmas pessoas.
 const { VOICE_RANGES } = require('./core/proximity-ranges');
 
+/**
+ * Formato do áudio no fio (Fase 1): PCM cru, 16-bit little-endian, mono, 48kHz,
+ * quadros de 20ms (960 amostras = 1920 bytes → 2560 chars em base64).
+ *
+ * O servidor não decodifica nem transcodifica nada — ele é um relay burro que
+ * anexa o volume e repassa os bytes. Estas constantes existem só pra derivar o
+ * teto de tamanho abaixo e pra que helper, servidor e UI citem a mesma fonte.
+ * Ver `docs/technical/VOICE_NATIVE_HELPER.md` §2 pro porquê de PCM antes de Opus.
+ */
+const AUDIO_SAMPLE_RATE = 48000;
+const AUDIO_CHANNELS = 1;
+const AUDIO_FRAME_MS = 20;
+
+/**
+ * Teto do payload base64 de um `audio_frame`, em caracteres.
+ *
+ * Um `audio_frame` é o único ponto onde um cliente autenticado faz o servidor
+ * escrever dados controlados por ele nos sockets de *outros* jogadores. Sem
+ * teto, um helper com bug (ou um cliente hostil que passou pelo ticket) manda um
+ * frame de megabytes e o servidor o multiplica por todo mundo em alcance —
+ * amplificação, e a memória que estoura é a do servidor, não a de quem mandou.
+ *
+ * 8192 dá folga de 3x sobre o quadro nominal de 20ms: quadros de até 60ms passam
+ * (o helper pode agrupar sob carga), qualquer coisa acima disso é bug ou abuso.
+ */
+const MAX_AUDIO_FRAME_B64 = 8192;
+
 let wss = null;
 let _proximityTimer = null;
+
+/**
+ * Audiência por locutor, recalculada a cada `tickProximity()`:
+ *   actorId do locutor -> [{ actorId: ouvinte, volume }]
+ *
+ * É a transposta do que o tick já calculava e jogava fora. A proximidade custa
+ * O(n²) de distância 3D; um frame chega a 50/s por locutor, então recalcular por
+ * frame seria pagar esse O(n²) cinquenta vezes por segundo por pessoa falando.
+ * O relay só consulta esta tabela.
+ *
+ * O preço é que a audiência tem até 2s de idade: quem sai do alcance continua
+ * ouvindo até o próximo tick. Não é uma imprecisão nova — o `proximity_update`
+ * que ajusta o ganho do WebRTC sempre teve exatamente a mesma defasagem; o relay
+ * herda a propriedade em vez de introduzi-la.
+ */
+const _audienceByActor = new Map();
 
 /**
  * Emite um ticket de uso único para um actorId poder se autenticar no VOIP.
@@ -116,6 +177,29 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
           }
           break;
 
+        case 'audio_frame': {
+          // Caminho novo: o helper nativo manda PCM capturado fora do CEF e o
+          // servidor retransmite pra quem está em alcance. Só para autenticados
+          // — sem isso, uma conexão anônima injetaria áudio na cena de todo
+          // mundo, que é o mesmo furo que o ticket fechou no `auth`.
+          if (clientActorId === null) break;
+          if (typeof msg.data !== 'string') break;
+          if (msg.data.length > MAX_AUDIO_FRAME_B64) {
+            const client = voipClients.get(clientActorId);
+            // Loga uma vez por conexão: o descarte é barato, o log em 50Hz não.
+            if (client && !client.oversizedFrameLogged) {
+              client.oversizedFrameLogged = true;
+              console.warn(
+                `[voip] Actor 0x${clientActorId.toString(16)} mandou audio_frame de ` +
+                `${msg.data.length} chars (teto ${MAX_AUDIO_FRAME_B64}); descartando.`
+              );
+            }
+            break;
+          }
+          relayAudioFrame(clientActorId, msg);
+          break;
+        }
+
         case 'mute':
           // Jogador solicita mute de si mesmo
           if (clientActorId && voipClients.has(clientActorId)) {
@@ -149,9 +233,16 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
 }
 
 /**
- * Calcula a distancia 3D entre dois atores e envia os volumes ajustados.
+ * Calcula a distancia 3D entre dois atores, envia os volumes ajustados e
+ * reconstrói a audiência de cada locutor (usada pelo relay de `audio_frame`).
  */
 function tickProximity() {
+  // Zera antes de qualquer saída: sem posição não há proximidade, e sem
+  // proximidade nada deve ser retransmitido. Uma audiência velha sobrevivendo a
+  // um tick que falhou faria o relay continuar entregando com base em onde as
+  // pessoas estavam, não onde estão.
+  _audienceByActor.clear();
+
   if (typeof mp === 'undefined') return;
 
   const clientList = [...voipClients.values()];
@@ -186,6 +277,17 @@ function tickProximity() {
 
       if (volume > 0) {
         proximityData.push({ actorId: peer.actorId, volume, dist: Math.round(dist) });
+
+        // Mesmo par, visto do outro lado: `peer` fala, `client` ouve naquele
+        // volume. É exatamente o número que o `proximity_update` manda pro
+        // ganho do WebRTC — os dois caminhos ficam obrigados a concordar
+        // porque leem a mesma conta, não uma cópia dela.
+        let audience = _audienceByActor.get(peer.actorId);
+        if (!audience) {
+          audience = [];
+          _audienceByActor.set(peer.actorId, audience);
+        }
+        audience.push({ actorId: client.actorId, volume });
       }
     }
 
@@ -194,6 +296,45 @@ function tickProximity() {
       client.ws.send(JSON.stringify({ type: 'proximity_update', peers: proximityData }));
     }
   }
+}
+
+/**
+ * Retransmite um `audio_frame` para quem está em alcance do locutor, anexando o
+ * volume que aquele ouvinte específico deve aplicar.
+ *
+ * O servidor não olha dentro de `data` — não decodifica, não mistura, não
+ * transcodifica. Mixagem no servidor economizaria banda de descida, mas exigiria
+ * decodificar e somar N fluxos por ouvinte a cada 20ms; para uma prova de
+ * conceito isso é trocar um problema provado por um não provado. Ver
+ * `docs/technical/VOICE_NATIVE_HELPER.md` §5.
+ *
+ * @param {number} fromActorId locutor já autenticado
+ * @param {object} msg mensagem recebida (usa-se apenas `seq` e `data`)
+ * @returns {number} quantos ouvintes receberam — usado por teste e log
+ */
+function relayAudioFrame(fromActorId, msg) {
+  const audience = _audienceByActor.get(fromActorId);
+  if (!audience || audience.length === 0) return 0;
+
+  let delivered = 0;
+  for (const listener of audience) {
+    const client = voipClients.get(listener.actorId);
+    if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
+
+    // Serializado por ouvinte porque o `volume` muda por ouvinte. Custa uma
+    // cópia do payload por destinatário; com PCM cru isso é ~2,5KB cada. Está
+    // registrado como item da Fase 2 (com Opus o payload cai ~30x, e aí o
+    // desperdício deixa de importar).
+    client.ws.send(JSON.stringify({
+      type: 'audio_frame',
+      fromActorId,
+      volume: listener.volume,
+      seq: msg.seq,
+      data: msg.data
+    }));
+    delivered++;
+  }
+  return delivered;
 }
 
 /**
@@ -247,6 +388,7 @@ function getListeningPort() {
 function stopVoipServer() {
   if (_proximityTimer) clearInterval(_proximityTimer);
   _proximityTimer = null;
+  _audienceByActor.clear();
   if (!wss) return;
   wss.close();
   wss = null;
@@ -300,7 +442,17 @@ module.exports = {
   getListeningPort,
   issueTicket,
   requestVoiceConnection,
+  // Formato do áudio no fio — o helper nativo e a UI precisam concordar com isto.
+  AUDIO_SAMPLE_RATE,
+  AUDIO_CHANNELS,
+  AUDIO_FRAME_MS,
+  MAX_AUDIO_FRAME_B64,
+  // `tickProximity` é chamado pelo ticker de 2s em produção; exposto porque o
+  // teste do relay precisa de um tick determinístico em vez de esperar o timer.
+  tickProximity,
+  calcVolume,
   // Exposto só pra testes
   _consumeTicket,
-  _pendingTickets
+  _pendingTickets,
+  _audienceByActor
 };
