@@ -7,10 +7,34 @@
  * - O servidor valida ingredientes, station proximity e perks.
  * - Consome os ingredientes do inventário seguro.
  * - Entrega o resultado.
+ *
+ * ⚠️ PARKED: não é registrado no `core/module-registry.js` e não roda em
+ * produção. A migração abaixo é de segurança interna — reativar é outra
+ * decisão, e misturar as duas é o erro que a Fase 2 do QA_REPORT existe pra
+ * não repetir. Ver docs/technical/PARKED_SERVICES_DECISION.md §7.2.
+ *
+ * ─── Por que este arquivo mudou ──────────────────────────────────────────────
+ *
+ * O `craftItem` anunciava `// 4. Consome ingredientes (transação segura: tudo
+ * ou nada)` e não era nenhuma das duas coisas. Era um laço de
+ * `inventoryService.removeItem()` independentes seguido de um `giveItem()`, e
+ * cada uma dessas funções **abre a própria transação** no transaction-service.
+ * Uma receita de três ingredientes eram quatro transações separadas: se a
+ * segunda falhasse, a primeira já tinha commitado, o jogador perdia o
+ * ingrediente e não recebia nada.
+ *
+ * É `economy-service.transfer` (`removeGold` seguido de `addGold`, sem
+ * transação) com outro substantivo — o mesmo defeito que motivou apagar aquele
+ * arquivo, transposto de ouro para item.
+ *
+ * Agora é uma transação só, pelas primitivas `tx.*`, no mesmo formato que a
+ * compra em barraca usa desde que ela deixou de escrever o próprio SQL.
  */
 
 const db = require('./database');
 const commands = require('./commands');
+const transactionService = require('./core/transaction-service');
+const MODULE = 'crafting';
 
 // Tipos de estação e seus formDescs (objetos de referência do Skyrim)
 // Esses IDs são verificados por proximidade (futuro: mp.get distance)
@@ -44,8 +68,6 @@ async function listRecipes(actorId, stationType) {
  * Executa um craft. /craft [recipeId].
  */
 async function craftItem(actorId, characterId, recipeId) {
-  const inventoryService = require('./inventory-service');
-
   // 1. Carrega a receita
   const recipeRows = await db.query('SELECT * FROM crafting_recipes WHERE id = ?', [recipeId]);
   if (recipeRows.length === 0) {
@@ -56,31 +78,69 @@ async function craftItem(actorId, characterId, recipeId) {
 
   // 2. Carrega os ingredientes
   const ingredients = await db.query('SELECT base_id, count FROM crafting_ingredients WHERE recipe_id = ?', [recipeId]);
-
-  // 3. Verifica se tem todos os ingredientes
-  for (const ing of ingredients) {
-    const has = await inventoryService.hasItem(characterId, ing.base_id, ing.count);
-    if (!has) {
-      if (typeof mp !== 'undefined') {
-        mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
-          `Ingrediente faltando: 0x${ing.base_id.toString(16)} (x${ing.count}).`
-        ]);
-      }
-      return false;
-    }
+  if (ingredients.length === 0) {
+    // Receita sem ingrediente cadastrado criaria item do nada. `addRecipe` e
+    // `addIngredient` sao dois comandos separados, entao a janela entre os dois
+    // existe de verdade — e um craft nela seria duplicacao de item pela staff.
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Receita incompleta: nenhum ingrediente cadastrado.']);
+    return false;
   }
 
-  // 4. Consome ingredientes (transação segura: tudo ou nada)
-  for (const ing of ingredients) {
-    const removed = await inventoryService.removeItem(actorId, characterId, ing.base_id, ing.count);
-    if (!removed) {
-      if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Erro ao consumir ingredientes. Craft cancelado.']);
-      return false;
+  // 3. Uma chave por (personagem, receita, instante) — se o comando for
+  // reenviado, o ledger recusa a segunda gravacao em vez de craftar duas vezes.
+  const idempotencyKey = `craft_${characterId}_${recipeId}_${Date.now()}`;
+
+  // 4. Consome ingredientes e entrega o resultado — UMA transacao.
+  //
+  // A checagem de estoque nao precisa de passo proprio: `applyInventoryDelta`
+  // le com `FOR UPDATE` e lanca se faltar, o que e estritamente melhor que o
+  // `hasItem` que existia antes. Aquele lia fora da transacao, entao entre a
+  // checagem e o consumo o item podia ter saido por outro caminho (venda em
+  // barraca, /removeitem da staff) e o craft consumia o que nao existia mais.
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    for (const ing of ingredients) {
+      await transactionService.tx.applyInventoryDelta(conn, characterId, ing.base_id, -ing.count);
+      await transactionService.tx.recordInventoryLedger(conn, {
+        characterId, baseId: ing.base_id, delta: -ing.count,
+        reason: 'craft_consume', module: MODULE,
+        idempotencyKey: `${idempotencyKey}_in_${ing.base_id}`
+      });
     }
+
+    await transactionService.tx.applyInventoryDelta(conn, characterId, recipe.result_base_id, recipe.result_count);
+    await transactionService.tx.recordInventoryLedger(conn, {
+      characterId, baseId: recipe.result_base_id, delta: recipe.result_count,
+      reason: 'craft_result', module: MODULE,
+      idempotencyKey: `${idempotencyKey}_out`
+    });
+
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    // `err.message` das primitivas carrega nome de tabela e coluna quando o
+    // erro e de SQL — mesma correcao que a compra em barraca ja levou. As
+    // mensagens de regra ("Estoque insuficiente") o jogador precisa ver.
+    console.error(`[crafting] Craft falhou (char=${characterId} recipe=${recipeId}):`, err.message);
+    if (typeof mp !== 'undefined') {
+      const regra = /insuficiente|nao possui|não possui/i.test(err.message);
+      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
+        regra ? `Craft cancelado: ${err.message}` : 'Nao foi possivel concluir o craft.'
+      ]);
+    }
+    return false;
+  } finally {
+    conn.release();
   }
 
-  // 5. Entrega o resultado
-  await inventoryService.giveItem(actorId, characterId, recipe.result_base_id, recipe.result_count);
+  // 5. Cliente APOS o commit — o banco ja e a fonte de verdade, e uma falha
+  // aqui e reconciliada no proximo login pelo inventory-service.
+  for (const ing of ingredients) {
+    transactionService.tx.applyToClient(actorId, ing.base_id, -ing.count);
+  }
+  transactionService.tx.applyToClient(actorId, recipe.result_base_id, recipe.result_count);
 
   if (typeof mp !== 'undefined') {
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, [

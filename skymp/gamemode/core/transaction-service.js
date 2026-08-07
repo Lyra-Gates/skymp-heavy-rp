@@ -443,6 +443,9 @@ module.exports = {
    *   serializam em vez de ambas lerem o valor obsoleto.
    * - Mudança de saldo ou de item **sem** o `record*Ledger` correspondente é
    *   ouro ou item sem rastro. Sempre chame os dois.
+   * - `applyToClient` é a **única** que roda depois do `commit`, nunca dentro
+   *   da transação: o banco é a fonte de verdade, e o cliente é reconciliado
+   *   no login se essa chamada falhar.
    *
    * Use as funções públicas sempre que a operação for isolada; use estas só
    * quando ela precisar commitar junto com outra coisa.
@@ -451,7 +454,14 @@ module.exports = {
     applyGoldDelta: _applyGoldDelta,
     applyInventoryDelta: _applyInventoryDelta,
     recordGoldLedger: _recordGoldLedger,
-    recordInventoryLedger: _recordInventoryLedger
+    recordInventoryLedger: _recordInventoryLedger,
+    // Exportada quando o `crafting-service` migrou: ele precisava entregar o
+    // resultado no cliente depois do commit, e as três cópias que já existiam
+    // desse mesmo `AddItem`/`RemoveItem` (aqui, no `market-stalls-service` e no
+    // `inventory-service`) mostraram que a quarta era o caminho errado. É a
+    // mesma função que `giveItem`/`removeItem` já usavam por dentro — o que
+    // muda é só quem pode chamá-la.
+    applyToClient: _applyToClient
   },
 
   // Exposto só pra teste: garante que o `self` do Papyrus vai como objeto
