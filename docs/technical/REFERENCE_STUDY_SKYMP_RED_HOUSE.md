@@ -297,11 +297,19 @@ Dois detalhes que economizariam horas de depuração:
 
 Para Heavy RP isso abre coisas que hoje não temos: dano diferenciado por tipo de arma, armadura importando de verdade, e sobretudo o item seguinte.
 
-### `isInSafeLocation` — zonas seguras
+### `isInSafeLocation` — zonas seguras ✅ *mecanismo implementado em 06/08/2026*
 
 Antes de aplicar dano, eles checam uma property `isInSafeLocation` no alvo **e** no agressor. Se qualquer um dos dois estiver numa zona segura, o dano não é aplicado — o evento ainda é registrado, mas não machuca.
 
 É exatamente o que falta pra proteger área de spawn, taverna de RP passivo ou cidade sob trégua. Combina com a nossa `action-policy.js`: hoje bloqueamos ações por **estado do personagem**, isso bloquearia por **lugar**.
+
+**O que foi feito:** `core/safe-zones.js` responde onde alguém está e o que aquele lugar proíbe; a `action-policy.canPerform` ganhou a segunda dimensão, usando o `context` que já estava lá declarado como "para validações futuras". Estado continua sendo checado antes de lugar — para quem está algemado dentro de uma zona segura, "você está algemado" é a explicação útil.
+
+A regra dos dois lados veio junto e tem teste próprio: proteger só o alvo deixaria alguém atirar de dentro da zona para fora dela.
+
+**O que deliberadamente não foi feito:** decidir quais zonas existem. `skymp/config/safe-zones.json` nasce vazio, e sem ele o módulo responde "não há zona nenhuma" — mesmo padrão do `npc-cleaner.js`, pelo mesmo motivo. Zona segura é mecânica de mundo, e a Constituição §15 pede as 15 perguntas antes. As quatro que mais mudam o desenho estão listadas no `safe-zones.example.json`; a mais importante é se cidade sob trégua deve ser zona segura ou acordo IC que a guarda faz cumprir — a segunda gera história, a primeira gera regra.
+
+**Nenhum chamador atual passou a ser afetado.** A checagem de lugar só acontece quando quem chama informa `context.actorId`, e nenhum dos quatro chamadores existentes informa. Isso é coberto por teste: uma regressão aí ligaria zona segura no servidor inteiro sem ninguém pedir.
 
 ### ⚠️ O aviso de performance que veio de graça
 

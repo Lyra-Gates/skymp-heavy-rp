@@ -1,0 +1,30 @@
+{
+  "enabled": false,
+  "notes": "Copie para safe-zones.json. Enquanto 'zones' estiver vazia ou 'enabled' for false, NENHUMA zona existe e nada muda. Ver core/safe-zones.js e docs/CONSTITUICAO.md secao 15.",
+
+  "_antes_de_preencher": [
+    "Zona segura e mecanica de mundo, nao configuracao de infraestrutura. A secao 15 da Constituicao pede 15 respostas antes de mecanica nova existir; estas quatro sao as que mais mudam o desenho:",
+    "1. Cidade sob tregua e zona segura, ou tregua e acordo IC que a guarda faz cumprir? A segunda gera historia, a primeira gera regra.",
+    "2. Zona segura protege de roubo, ou so de dano?",
+    "3. Quem ja esta em combate e corre pra dentro de uma: tatica legitima ou exploit?",
+    "4. A area de spawn precisa ser permanente, ou so ate o personagem sair da primeira cena?"
+  ],
+
+  "_sobre_blocks": "Categorias da action-policy. Validas: gameplay, combat, trade, craft, gather, move, move_world, use_item, speak_rp, sell. Categoria desconhecida e ignorada com erro no log — regra que voce acha que criou e nao criou e pior que regra ausente.",
+
+  "_sobre_area": "Sem 'pos' e 'radius' validos, a zona e a CELULA INTEIRA. E grosseiro de proposito: 'a taverna toda' e mais facil de acertar que um raio em unidades do Skyrim, e nao exige medir nada in-game. Use raio so quando a celula for grande demais.",
+
+  "_sobre_os_dois_lados": "A checagem vale pro agressor E pro alvo. Proteger so o alvo deixaria alguem atirar de dentro da zona pra fora dela.",
+
+  "zones": [
+    {
+      "id": "exemplo-templo",
+      "label": "Templo de Kynareth",
+      "cellId": "0x162e2",
+      "pos": null,
+      "radius": null,
+      "blocks": ["combat"],
+      "_comentario": "EXEMPLO, nao ativo (enabled=false). O 0x162e2 e o ponto de spawn e respawn atual (ver whitelist.js e death-service.js) — e o candidato obvio a primeira zona, mas a decisao nao foi tomada."
+    }
+  ]
+}
