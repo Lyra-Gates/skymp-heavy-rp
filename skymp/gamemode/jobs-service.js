@@ -1,5 +1,42 @@
+/**
+ * jobs-service.js
+ * Coleta de recursos: lenha, minério e peixe.
+ *
+ * ⚠️ PARKED: não é registrado no `core/module-registry.js` e não roda em
+ * produção. A migração abaixo é de segurança interna — reativar é outra
+ * decisão. Ver docs/technical/PARKED_SERVICES_DECISION.md §7.3.
+ *
+ * ─── Por que este arquivo mudou ──────────────────────────────────────────────
+ *
+ * Ele entregava recurso chamando `AddItem` do Papyrus direto no ator,
+ * contornando `inventory-service` e `core/transaction-service` inteiros. A
+ * consequência: lenha, minério e peixe nasciam **sem linha em
+ * `character_inventory` e sem linha no ledger** — não existiam para o servidor.
+ *
+ * Isso é mais forte que o achado do `/setgold` (ouro que aparecia sem origem
+ * registrada, mas ao menos mudava o saldo no banco). Aqui o item existia só no
+ * cliente até a próxima sincronização, e o `syncInventoryToClient` reconcilia a
+ * partir do **banco**, que nunca soube dele. Inverte a regra que o resto do
+ * projeto segue: inventário só existe se o MariaDB confirmar.
+ *
+ * Agora toda entrega passa por `transactionService.giveItem`, que é atômico,
+ * grava no ledger e só então aplica no cliente. A função pública é a certa
+ * aqui (e não as primitivas `tx.*`): a entrega é uma perna só, não precisa
+ * commitar junto com mais nada.
+ *
+ * ─── O que continua pendente ─────────────────────────────────────────────────
+ *
+ * `Math.random()` decide quantidade e raridade. Não cai sob a §14.3 da
+ * Afinidade da Alma (que rege rolagem *oculta de alma*, e esta não é), mas
+ * produção de recurso irreproduzível é um problema de economia por si só —
+ * registrado na §7.3 do PARKED_SERVICES_DECISION, não resolvido aqui.
+ */
+
 const commands = require('./commands');
+const transactionService = require('./core/transaction-service');
 const { actorRef } = require('./core/papyrus');
+
+const MODULE = 'jobs';
 
 // IDs Base de itens do Skyrim
 const ITEM_FIREWOOD = 0x00033760; // Lenha
@@ -15,27 +52,91 @@ const FISH_SALMON = 0x00065C34;
 const FISH_RIVER_BETTY = 0x00106E1A;
 const FISH_SPADETAIL = 0x00106E19;
 
-// Previne spam mantendo controle de quem esta coletando
+// Previne spam mantendo controle de quem esta coletando.
+//
+// Chaveado por characterId, nao por actorId. O actorId e um slot que o SkyMP
+// reaproveita entre sessoes: com a chave antiga, quem entrasse no slot de
+// alguem que saiu no meio de uma coleta ficava bloqueado ate o timer daquela
+// outra pessoa expirar. E a mesma classe do cache de vida do death-service.
 const activeGatherers = new Set();
 
-function chopWood(actorId) {
+function notify(text) {
   if (typeof mp === 'undefined') return;
+  mp.callPapyrusFunction('global', 'Debug', 'notification', null, [text]);
+}
 
-  if (activeGatherers.has(actorId)) {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você já está ocupado fazendo algo.']);
-    return;
+/**
+ * Abre uma coleta: resolve o personagem, checa a ferramenta e marca ocupado.
+ *
+ * @returns {{characterId: number}|null} null quando a coleta nao pode comecar
+ */
+function _beginGather(actorId, toolBaseId, toolName) {
+  if (typeof mp === 'undefined') return null;
+
+  // Item so existe se o banco confirmar, e o banco fala em characterId. Sem
+  // personagem carregado nao ha onde creditar — coletar seria criar item do
+  // nada, que e exatamente o que esta migracao veio consertar.
+  const character = commands.getActiveCharacterData(actorId);
+  if (!character) {
+    notify('Personagem nao carregado.');
+    return null;
   }
 
-  // Opcionalmente: Checar pelo servidor se o jogador tem o machado
-  const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [ITEM_WOODCUTTER_AXE]);
-  if (hasItem <= 0) {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você precisa de um Machado de Lenhador.']);
-    return;
+  if (activeGatherers.has(character.characterId)) {
+    notify('Você já está ocupado fazendo algo.');
+    return null;
   }
 
-  activeGatherers.add(actorId);
+  // Ferramenta continua sendo lida do cliente, e isso e aceitavel aqui: ela
+  // decide se a acao COMECA, nao o que o jogador recebe. Quem burlar ganha uma
+  // animacao; o item so nasce pelo transaction-service, no fim.
+  if (toolBaseId !== null) {
+    const hasTool = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [toolBaseId]);
+    if (hasTool <= 0) {
+      notify(`Você precisa de ${toolName}.`);
+      return null;
+    }
+  }
 
-  // RP Action
+  activeGatherers.add(character.characterId);
+  return { characterId: character.characterId };
+}
+
+/**
+ * Fecha uma coleta e credita o resultado.
+ *
+ * Confere que o slot ainda e da mesma pessoa antes de entregar: entre o inicio
+ * e o fim passam 10 a 20 segundos, tempo de sobra pra alguem cair e outro
+ * jogador entrar no mesmo actorId. Sem esta checagem, o recurso ia pro
+ * personagem errado — o banco registraria a entrega corretamente, no dono
+ * errado, que e pior que nao entregar.
+ */
+async function _finishGather(actorId, characterId, baseId, count, reason) {
+  activeGatherers.delete(characterId);
+
+  const atual = commands.getActiveCharacterData(actorId);
+  if (!atual || atual.characterId !== characterId) {
+    console.log(`[jobs-service] Coleta descartada: actor ${actorId.toString(16)} nao e mais o char ${characterId}.`);
+    return false;
+  }
+
+  const ok = await transactionService.giveItem({
+    actorId, characterId, baseId, count,
+    reason, module: MODULE,
+    idempotencyKey: `${MODULE}_${reason}_${characterId}_${Date.now()}`
+  });
+
+  if (!ok) {
+    notify('A coleta se perdeu antes de chegar na sua mochila.');
+    return false;
+  }
+  return true;
+}
+
+function chopWood(actorId) {
+  const sessao = _beginGather(actorId, ITEM_WOODCUTTER_AXE, 'um Machado de Lenhador');
+  if (!sessao) return;
+
   commands.broadcastProximityMessage(actorId, `* Começa a cortar lenha energicamente.`, 1500);
 
   // Toca a animacao do Skyrim (se disponivel no ator).
@@ -45,121 +146,105 @@ function chopWood(actorId) {
   // linha passava `actorId` cru na posicao do self, que e invalida nas duas
   // contas; ficaria assim se alguem descomentasse sem reler o contrato.
   // mp.callPapyrusFunction('global', 'Debug', 'SendAnimationEvent', null, [actorRef(actorId), 'WoodChopping']);
-  
-  mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Cortando lenha... aguarde.']);
 
-  // Timer de 10 segundos canalizando
+  notify('Cortando lenha... aguarde.');
+
   setTimeout(() => {
-    activeGatherers.delete(actorId);
-    
-    // Verifica se ele ainda esta conectado
-    if (!mp.get(actorId, 'isDead')) { // Simulacao de checagem
-      const woodAmount = Math.floor(Math.random() * 3) + 1; // 1 a 3 madeiras
-      
-      // Entrega o item via papyrus
-      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [ITEM_FIREWOOD, woodAmount, false]);
-      
-      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você coletou ${woodAmount}x Lenha.`]);
-      console.log(`[jobs-service] Actor ${actorId.toString(16)} successfully chopped ${woodAmount} wood.`);
-    }
+    const woodAmount = Math.floor(Math.random() * 3) + 1; // 1 a 3 madeiras
+    _finishGather(actorId, sessao.characterId, ITEM_FIREWOOD, woodAmount, 'woodcutting')
+      .then(ok => {
+        if (ok) {
+          notify(`Você coletou ${woodAmount}x Lenha.`);
+          console.log(`[jobs-service] Char ${sessao.characterId} chopped ${woodAmount} wood.`);
+        }
+      })
+      .catch(err => console.error('[jobs-service] Falha ao entregar lenha:', err.message));
   }, 10000);
 }
 
 function mineOre(actorId) {
-  if (typeof mp === 'undefined') return;
+  const sessao = _beginGather(actorId, ITEM_PICKAXE, 'uma Picareta');
+  if (!sessao) return;
 
-  if (activeGatherers.has(actorId)) {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você já está ocupado fazendo algo.']);
-    return;
-  }
-
-  const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [ITEM_PICKAXE]);
-  if (hasItem <= 0) {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você precisa de uma Picareta.']);
-    return;
-  }
-
-  activeGatherers.add(actorId);
   commands.broadcastProximityMessage(actorId, `* Começa a bater a picareta contra a rocha vigorosamente.`, 1500);
-  mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Minerando... aguarde 15 segundos.']);
-  
-  setTimeout(() => {
-    activeGatherers.delete(actorId);
-    
-    if (!mp.get(actorId, 'isDead')) {
-      const chance = Math.random();
-      let oreItem = ITEM_IRON_ORE;
-      let oreName = "Minério de Ferro";
-      
-      if (chance > 0.9) {
-          oreItem = ITEM_EBONY_ORE;
-          oreName = "Minério de Ébano";
-      } else if (chance > 0.6) {
-          oreItem = ITEM_CORUNDUM_ORE;
-          oreName = "Minério de Corundum";
-      }
+  notify('Minerando... aguarde 15 segundos.');
 
-      const amount = Math.floor(Math.random() * 2) + 1; 
-      
-      mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [oreItem, amount, false]);
-      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você extraiu ${amount}x ${oreName}.`]);
-      console.log(`[jobs-service] Actor ${actorId.toString(16)} successfully mined ${amount}x ${oreItem.toString(16)}.`);
+  setTimeout(() => {
+    const chance = Math.random();
+    let oreItem = ITEM_IRON_ORE;
+    let oreName = 'Minério de Ferro';
+
+    if (chance > 0.9) {
+      oreItem = ITEM_EBONY_ORE;
+      oreName = 'Minério de Ébano';
+    } else if (chance > 0.6) {
+      oreItem = ITEM_CORUNDUM_ORE;
+      oreName = 'Minério de Corundum';
     }
+
+    const amount = Math.floor(Math.random() * 2) + 1;
+
+    _finishGather(actorId, sessao.characterId, oreItem, amount, 'mining')
+      .then(ok => {
+        if (ok) {
+          notify(`Você extraiu ${amount}x ${oreName}.`);
+          console.log(`[jobs-service] Char ${sessao.characterId} mined ${amount}x 0x${oreItem.toString(16)}.`);
+        }
+      })
+      .catch(err => console.error('[jobs-service] Falha ao entregar minerio:', err.message));
   }, 15000);
 }
 
 function catchFish(actorId) {
-  if (typeof mp === 'undefined') return;
+  // TODO: passar ITEM_FISHING_ROD no lugar de null quando o FormID correto do
+  // mod for confirmado. Enquanto for null, a pesca nao exige ferramenta.
+  const sessao = _beginGather(actorId, null, 'uma Vara de Pescar');
+  if (!sessao) return;
 
-  if (activeGatherers.has(actorId)) {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você já está ocupado fazendo algo.']);
-    return;
-  }
-
-  // TODO: Descomentar quando o ITEM_FISHING_ROD for configurado corretamente
-  // const hasItem = mp.callPapyrusFunction('method', 'Actor', 'GetItemCount', actorRef(actorId), [ITEM_FISHING_ROD]);
-  // if (hasItem <= 0) {
-  //   mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você precisa de uma Vara de Pescar.']);
-  //   return;
-  // }
-
-  activeGatherers.add(actorId);
   commands.broadcastProximityMessage(actorId, `* Lança a linha na água e aguarda pacientemente.`, 1500);
-  mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Pescando... aguarde 20 segundos.']);
-  
-  setTimeout(() => {
-    activeGatherers.delete(actorId);
-    
-    if (!mp.get(actorId, 'isDead')) {
-      const chance = Math.random();
-      let fishItem = null;
-      let fishName = "";
-      
-      if (chance > 0.8) {
-          fishItem = FISH_RIVER_BETTY;
-          fishName = "River Betty";
-      } else if (chance > 0.5) {
-          fishItem = FISH_SPADETAIL;
-          fishName = "Cyrodilic Spadetail";
-      } else if (chance > 0.2) {
-          fishItem = FISH_SALMON;
-          fishName = "Carne de Salmão";
-      }
+  notify('Pescando... aguarde 20 segundos.');
 
-      if (fishItem) {
-          mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', actorRef(actorId), [fishItem, 1, false]);
-          mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você pescou: ${fishName}.`]);
-          console.log(`[jobs-service] Actor ${actorId.toString(16)} successfully caught fish ${fishItem.toString(16)}.`);
-      } else {
-          mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`O peixe escapou!`]);
-          commands.broadcastProximityMessage(actorId, `* Puxa a vara de pescar vazia com frustração.`, 1000);
-      }
+  setTimeout(() => {
+    const chance = Math.random();
+    let fishItem = null;
+    let fishName = '';
+
+    if (chance > 0.8) {
+      fishItem = FISH_RIVER_BETTY;
+      fishName = 'River Betty';
+    } else if (chance > 0.5) {
+      fishItem = FISH_SPADETAIL;
+      fishName = 'Cyrodilic Spadetail';
+    } else if (chance > 0.2) {
+      fishItem = FISH_SALMON;
+      fishName = 'Carne de Salmão';
     }
+
+    if (!fishItem) {
+      // Nao houve item, entao nao ha nada pra creditar — mas o "ocupado"
+      // precisa sair do mesmo jeito, senao o jogador fica travado pra sempre.
+      activeGatherers.delete(sessao.characterId);
+      notify('O peixe escapou!');
+      commands.broadcastProximityMessage(actorId, `* Puxa a vara de pescar vazia com frustração.`, 1000);
+      return;
+    }
+
+    _finishGather(actorId, sessao.characterId, fishItem, 1, 'fishing')
+      .then(ok => {
+        if (ok) {
+          notify(`Você pescou: ${fishName}.`);
+          console.log(`[jobs-service] Char ${sessao.characterId} caught fish 0x${fishItem.toString(16)}.`);
+        }
+      })
+      .catch(err => console.error('[jobs-service] Falha ao entregar peixe:', err.message));
   }, 20000);
 }
 
 module.exports = {
   chopWood,
   mineOre,
-  catchFish
+  catchFish,
+  // Exposto so pra teste: permite exercitar o bloqueio de coleta concorrente e
+  // a liberacao sem depender de timer real.
+  _activeGatherers: activeGatherers
 };

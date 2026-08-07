@@ -254,6 +254,98 @@ describe('death-service', () => {
       deathService.checkDamageSpike(VICTIM_ACTOR_ID, 0);
       assert.strictEqual(auditEntries.find(p => p[0] === 'death:context'), undefined);
     });
+
+    /**
+     * O actorId é um slot que o SkyMP reaproveita entre sessões — a mesma coisa
+     * que fazia o cargo de staff ficar preso ao slot (ver commands.js). Aqui o
+     * estrago é uma evidência falsa de RDM: quem entra herdaria a última
+     * leitura de vida de quem saiu.
+     *
+     * Os dois testes abaixo são o par de mutação: se `cleanup()` deixar de
+     * apagar a entrada, o primeiro passa a gravar um `damage_spike` que
+     * ninguém causou e o segundo passa a esconder uma agressão real.
+     */
+    describe('desconexão limpa a última leitura de vida', () => {
+      const NOVO_OCUPANTE_CHARACTER_ID = 8009;
+
+      it('quem entra no actorId de quem saiu ferido não gera damage_spike falso', () => {
+        deathService.checkDamageSpike(VICTIM_ACTOR_ID, 500);
+
+        // Jogador sai. É o que `commands.removeActiveCharacter` chama.
+        deathService.cleanup(VICTIM_ACTOR_ID);
+
+        // Slot reaproveitado por outra pessoa, que entra com 100 de vida.
+        commands.registerActiveCharacter(
+          VICTIM_ACTOR_ID,
+          { id: NOVO_OCUPANTE_CHARACTER_ID, first_name: 'Recem', last_name: 'Chegado' }, 9, 9
+        );
+        characterState.set(NOVO_OCUPANTE_CHARACTER_ID, STATES.NORMAL, {});
+        deathService.checkDamageSpike(VICTIM_ACTOR_ID, 100);
+
+        assert.strictEqual(
+          auditEntries.find(p => p[0] === 'death:context'), undefined,
+          'a queda de 500 pra 100 é troca de jogador, não dano — não pode virar evidência'
+        );
+      });
+
+      it('sem a limpeza, a leitura antiga também mascararia uma agressão real', () => {
+        // Prova o outro lado: entrada obsoleta BAIXA (saiu ferido) faz a
+        // primeira leitura do novo jogador parecer cura, e o golpe seguinte
+        // ser medido contra o baseline errado.
+        deathService.checkDamageSpike(VICTIM_ACTOR_ID, 20);
+        deathService.cleanup(VICTIM_ACTOR_ID);
+
+        // Novo ocupante entra cheio e leva 60 de dano no tick seguinte.
+        deathService.checkDamageSpike(VICTIM_ACTOR_ID, 100);
+        deathService.checkDamageSpike(VICTIM_ACTOR_ID, 40);
+
+        const entry = auditEntries.find(p => p[0] === 'death:context');
+        assert.ok(entry, 'a agressão real depois da troca de slot precisa ser registrada');
+        assert.strictEqual(JSON.parse(entry[3]).cause, 'damage_spike');
+      });
+
+      it('cleanup só apaga o actorId pedido', () => {
+        deathService.checkDamageSpike(VICTIM_ACTOR_ID, 100);
+        deathService.checkDamageSpike(RESCUER_ACTOR_ID, 100);
+
+        deathService.cleanup(VICTIM_ACTOR_ID);
+
+        assert.strictEqual(deathService._lastHealth.has(VICTIM_ACTOR_ID), false);
+        assert.strictEqual(
+          deathService._lastHealth.get(RESCUER_ACTOR_ID), 100,
+          'a desconexão de um jogador não pode zerar o baseline dos outros'
+        );
+      });
+    });
+  });
+});
+
+/**
+ * A limpeza precisa estar ligada no caminho de desconexão, não só existir.
+ *
+ * `phase0-basic.js` chama `commands.removeActiveCharacter(actorId)` quando o
+ * polling detecta `connected === false`; é ali que toda memória por actorId
+ * morre. Um `cleanup()` exportado e nunca chamado seria o mesmo tipo de defeito
+ * que o `.env` que ninguém carregava: existe, tem teste, e não roda em jogo.
+ */
+describe('death-service — desconexão pelo caminho real (removeActiveCharacter)', () => {
+  const SAINDO_ACTOR_ID = 0xff00d00a;
+  const SAINDO_CHARACTER_ID = 8010;
+
+  it('removeActiveCharacter apaga a última leitura de vida do slot', () => {
+    commands.registerActiveCharacter(
+      SAINDO_ACTOR_ID,
+      { id: SAINDO_CHARACTER_ID, first_name: 'Vai', last_name: 'Embora' }, 10, 10
+    );
+    deathService.checkDamageSpike(SAINDO_ACTOR_ID, 480);
+    assert.strictEqual(deathService._lastHealth.has(SAINDO_ACTOR_ID), true);
+
+    commands.removeActiveCharacter(SAINDO_ACTOR_ID);
+
+    assert.strictEqual(
+      deathService._lastHealth.has(SAINDO_ACTOR_ID), false,
+      'o caminho de desconexão precisa chamar death-service.cleanup()'
+    );
   });
 });
 

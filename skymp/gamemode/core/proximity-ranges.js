@@ -18,9 +18,17 @@
  * A tabela abaixo é a que vale. Os valores vieram do `rp-chat-service.js`, que
  * é o único dos três que estava de fato em uso e com testes.
  *
- * IMPORTANTE: `server-options.*.json` NÃO é lido por nenhum código do gamemode
- * (ver docs/technical/QA_REPORT_2026-08.md). Enquanto isso não mudar, mexer no
- * JSON não altera nada em jogo — mexa aqui.
+ * IMPORTANTE: os três raios de chat vêm do `server-options.<env>.json` — mexer
+ * no JSON altera o jogo. É `core/server-options.js` que o lê, valida e aplica
+ * os defaults; `emote` e `ooc` continuam derivados aqui, de propósito (ver a
+ * nota logo abaixo).
+ *
+ * Até 06/08/2026 este cabeçalho dizia o contrário — que o JSON não era lido por
+ * ninguém e que se devia "mexer aqui". Era verdade quando o `QA_REPORT_2026-08`
+ * registrou o achado, e deixou de ser quando o `core/server-options.js` nasceu;
+ * o comentário ficou. Um comentário obsoleto sobre configuração é a mesma
+ * classe de defeito que a configuração que ninguém lê: nos dois casos alguém
+ * edita um lugar e o jogo não muda. Só que este mandava editar o lugar errado.
  */
 
 const serverOptions = require('./server-options');

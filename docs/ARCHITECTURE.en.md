@@ -10,7 +10,7 @@ The infrastructure splits into the following modules:
 
 ### 1.1 Database (MariaDB/MySQL)
 **MariaDB** is the absolute source of truth. Every service connects to it.
-- **Main tables:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. The full schema lives in `skymp/packages/database/schema.sql` plus migrations `v2`–`v9`, applied **in order** (v6 = `launch_tickets`, v7 = indexes for the hot queries, v8 = `game_sessions`, v9 = `characters.gold` for databases predating the column).
+- **Main tables:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. The full schema lives in `skymp/packages/database/schema.sql` plus migrations `v2`–`v10`, applied **in order** (v6 = `launch_tickets`, v7 = indexes for the hot queries, v8 = `game_sessions`, v9 = `characters.gold` for databases predating the column, v10 = the four Soul Affinity tables: `character_soul`, `character_signs`, `character_marks`, `character_paths`).
 - Some tables exist in the schema but aren't read by any active code (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — they belong to PARKED modules (see 1.4).
 - **Strict rule:** no game state change (money, positions, items) happens without being written to or read from MariaDB. Node.js does not trust loose in-memory data over long stretches without persistence.
 
@@ -37,7 +37,24 @@ Sessions live in `game_sessions`, stored as a SHA-256 hash, with `expires_at`, `
 Built with **discord.js**.
 - Bridges the user's Discord account to their in-game `profileId` (`POST /api/sync-role`, called by the web panel on whitelist approval/rejection).
 - **Temporary voice channels** (`voiceChannels.js`, commands `/voz-criar <name>` and `/voz-fechar`, staff-only): a practical voice alternative while native in-game VOIP (`/voz`, see 1.4.4) depends on a client patch that hasn't been applied (`docs/technical/VOICE_CLIENT_PATCH.md`). A channel is deleted automatically ~30s after going empty. Commands are registered at bot boot (`deploy-commands.js` runs on the `ready` event); a failure there doesn't take the bot down, but it shouts in the log. `npm run deploy-commands` still exists for manual runs.
-- Sending logs to moderation channels is **not implemented** — despite being the original intent documented here, today the bot only exposes the internal role-sync endpoint and the voice commands above.
+- **Moderation log** (`moderationLog.js`, internal endpoint `POST /api/moderation-log`): posts an embed to a configurable channel (`MODERATION_LOG_CHANNEL_ID`) on every moderation action. It was the original intent recorded here and went years without an implementation; it landed on 2026-08-07.
+
+  **The channel is not the record - it is a notification.** The record is still `audit_logs`, written by the gamemode and by the panel in the same flow as the action, before anything leaves for Discord. That distinction decides the failure behaviour: if Discord is down, the moderation action happens anyway, nothing is undone and nothing gets slower. The endpoint answers **202 before** talking to Discord, and no producer awaits the send.
+
+  | Event | Producer | Source |
+  |---|---|---|
+  | `kick` | `admin-service.kickPlayer` (`/kick`) | `gamemode` |
+  | `permakill` | `admin-service.retireCharacter` (`/permakill`) | `gamemode` |
+  | `whitelist_approve` / `whitelist_reject` / `whitelist_reset` | `apps/web` `PATCH /api/whitelist/:id` | `painel` |
+  | `ban` | **none** - see below | - |
+
+  **`ban` is declared and has no producer.** `ban` is a permission granted by the `admin` and `owner` roles in `admin-service.js` that **no command consumes**: there is no `/ban` in the gamemode nor in the panel. The event type stays declared (with a test locking its shape) so that the day the command exists it costs one line - but the log does not invent an action the server does not have.
+
+  **Why push and not polling `audit_logs`.** The bot has `mysql2` in `dependencies` without using it, so reading the table was possible. Discarded: it would hand database credentials to a third process to read what it does not write, in exchange for polling latency. The push leaves from where the action happens, and the only secret crossing is the `INTERNAL_API_SECRET` the panel already shares with the bot. The gamemode uses core `http.request` instead of `fetch` - the Node version embedded in SkyMP is not under our control, and global `fetch` only exists from Node 18 on.
+
+  **An empty channel disables the send.** Without `MODERATION_LOG_CHANNEL_ID` the endpoint still answers 202 and posts nothing; without `BOT_INTERNAL_URL`/`INTERNAL_API_SECRET` in the gamemode `.env`, the gamemode does not even try. A server that does not want the channel pays nothing and sees no error. The channel must be staff-private: the embeds carry kick reasons and whitelist review notes.
+
+  Tested with `discord.js` mocked (21 tests), in the same pattern as the 19 that already existed. Not covered: posting to a real channel, which needs a real bot and guild.
 
 ### 1.3.1 Game API (`apps/game-api`)
 Express, port `GAME_API_PORT` (7758) — the port the launcher always called and for which no server existed. Details in `docs/technical/LAUNCHER_DISTRIBUTION.md`.
@@ -50,7 +67,7 @@ Express, port `GAME_API_PORT` (7758) — the port the launcher always called and
 Located in `skymp/gamemode/`.
 - Runs on Node.js using SkyMP's internal libraries (`mp.events`, `mp.players`).
 - Handles the player lifecycle: connection, disconnection, spawn, combat, chat commands and real-time item persistence.
-- Delegates business rules to the services active today (`governance-service.js`, `market-stalls-service.js`, `death-service.js`, `player-panel-service.js`, `voip-service.js`). Seven other services exist on disk (`economy-regional.js`, `crafting-service.js`, `jobs-service.js`, `housing-service.js`, `horse-service.js`, `trade-service.js`, `disguise-service.js`) but are **PARKED** — never registered in `core/module-registry.js`, therefore never running in production (see the comment in `phase0-basic.js`). Four others (`economy-service`, `justice-service`, `faction-service`, `survival-service`) were **deleted** on 2026-08-06 for duplicating active systems or being unsafe — see `docs/technical/PARKED_SERVICES_DECISION.md`.
+- Delegates business rules to the services active today (`governance-service.js`, `market-stalls-service.js`, `death-service.js`, `player-panel-service.js`, `voip-service.js`, `soul-service.js`). Six other services exist on disk (`economy-regional.js`, `crafting-service.js`, `jobs-service.js`, `housing-service.js`, `horse-service.js`, `trade-service.js`) but are **PARKED** — never registered in `core/module-registry.js`, therefore never running in production (see the comment in `phase0-basic.js`). Five others (`economy-service`, `justice-service`, `faction-service`, `survival-service`, `disguise-service`) were **deleted** for duplicating active systems or being unsafe — see `docs/technical/PARKED_SERVICES_DECISION.md`.
 - Modules are registered and toggled through `core/module-registry.js` (`ENABLE_*` flags in `.env`), which also handles inter-module dependencies and automatic command registration in `core/command-registry.js`.
 - **Gameplay configuration** comes from `skymp/config/server-options.<env>.json`, loaded and validated by `core/server-options.js`. Only the options listed in that file's `SPEC` take effect — the loader warns at boot if it finds an option not yet implemented, and **aborts the boot** if a value has the wrong type or is out of range. See `docs/technical/SERVER_OPTIONS_SCHEMA.en.md`.
 - **Soul Affinity domain** in `core/soul.js` — generator with a fixed budget, bands, a seed derived from the approved application, and resolution into four outcomes. It is a **pure function**: no database, no `mp`, no side effects. That is exactly why it exists ahead of the service — it is provable outside the server, and it is where being wrong costs the most later. Design in [`docs/design/SOUL_AFFINITY.md`](design/SOUL_AFFINITY.md) (Portuguese); the **service** that talks to the world (signs, marks, tree) is still blocked by in-game testing.

@@ -6,6 +6,8 @@ Este documento existe pra que a decisão seja tomada com dados em vez de por ac�
 
 **Status: executado em 06/08/2026.** Quatro serviços foram apagados (`economy`, `justice`, `faction`, `survival`) e os sete restantes continuam estacionados. O que segue é a análise que embasou a decisão — o histórico do git guarda o código removido.
 
+**Segunda rodada, 06/08/2026 (§7).** Os três classificados como "independentes, coerentes" — `crafting`, `jobs`, `disguise` — foram reavaliados com dado que não existia na primeira: o `identity-service` ganhou testes, o `player-panel-service` passou a existir com aba Social, e a Afinidade da Alma fechou o desenho. Resultado: `disguise-service` **apagado** (quinto), `crafting` e `jobs` mantidos estacionados mas **com a mesma dívida do item 2, em item em vez de ouro**. A §6 abaixo está corrigida por §7 — leia as duas.
+
 Levantado em 05/08/2026.
 
 ---
@@ -19,12 +21,12 @@ Levantado em 05/08/2026.
 | ~~`faction-service.js`~~ | 222 | 12/07 | (X) **Apagado.** Modelo de membros concorrente com `governance_memberships` |
 | `economy-regional.js` | 302 | 04/08 | Mantido. Migrado pro `transaction-service` |
 | ~~`survival-service.js`~~ | 236 | 11/07 | (X) **Apagado.** Mexe em ActorValue, que o death-service lê |
-| `crafting-service.js` | 139 | 11/07 | Independente, coerente |
+| `crafting-service.js` | 139 | 11/07 | Mantido. **Corrigido por §7:** dívida do item 2 em item |
 | `housing-service.js` | 187 | 11/07 | Independente, coerente |
-| `jobs-service.js` | 159 | 12/07 | Independente, coerente |
+| `jobs-service.js` | 159 | 12/07 | Mantido. **Corrigido por §7:** cria item sem banco nem ledger |
 | `horse-service.js` | 179 | 12/07 | Independente, coerente |
 | `trade-service.js` | 90 | 11/07 | Independente, coerente |
-| `disguise-service.js` | 149 | 12/07 | Independente, coerente |
+| ~~`disguise-service.js`~~ | 149 | 12/07 | (X) **Apagado (§7).** Segunda autoridade sobre nome exibido |
 
 Todos exceto `economy-regional` estão parados desde julho.
 
@@ -93,6 +95,8 @@ Depende do `economy-service` (item 2). Reativar exige migrar pra `core/transacti
 
 ## 6. Os cinco independentes — **manter estacionados**
 
+> ⚠️ **Corrigido pela §7.** Esta seção afirmou que os cinco "não duplicam nada ativo", e isso continua verdade no nível de *serviço*. A segunda rodada mostrou que `crafting` e `jobs` duplicam um **padrão** (mexer em item fora do `transaction-service`), e que `disguise` duplicava sim um serviço ativo. Leia a §7 antes de agir sobre esta seção.
+
 `crafting`, `housing`, `jobs`, `horse`, `trade`. Não duplicam nada ativo, são coerentes internamente e correspondem a fases futuras do backlog. O custo de mantê-los é baixo: ninguém os importa, e o `module-registry` garante que não rodem por acidente.
 
 Os três que mexem em ouro (`housing`, `horse`, `trade`) carregam a mesma dívida do item 2 — precisam migrar pro `transaction-service` antes de qualquer reativação.
@@ -113,6 +117,90 @@ Nada foi portado nesta rodada, e **ler o `trade` deles antes da reativação é 
 
 ---
 
+## 7. Segunda rodada (06/08/2026) — os três "independentes", reavaliados
+
+A primeira rodada classificou `crafting`, `jobs` e `disguise` como "independentes, coerentes" e parou aí. Essa avaliação foi feita **antes** de três coisas: o `identity-service` ganhar testes (QA 4.3), o `player-panel-service` existir com aba Social, e a Afinidade da Alma fechar o desenho que explica disfarce como consequência de marca.
+
+A pergunta é a mesma que eliminou `justice`/`faction`/`survival`: **algum deles duplica ou compete com algo que já está ativo?** Para dois, a resposta mudou.
+
+### 7.1 `disguise-service.js` — **apagado**
+
+Sobrepõe o `identity-service`, que está ativo e testado. Mas o problema não é só duplicação: é que as duas implementações **não têm a mesma forma**, e a dele é a errada.
+
+| | `identity-service` (ativo) | `disguise-service` |
+|---|---|---|
+| Chave | `(observador, alvo)` | `alvo` |
+| Autoridade sobre o nome | `getDisplayName(observador, alvo)` | `getPublicName(alvo, observador)` — ignora o observador |
+| Persistência | `character_known_identities` | `disguises` |
+| Padrão de desconhecido | `Desconhecido` | nome real |
+
+Quatro consequências, em ordem de peso:
+
+**1. Duas fontes de verdade para "que nome o observador X vê do alvo Y".** É literalmente o motivo pelo qual o `justice-service` foi apagado (§1), aplicado a identidade em vez de prisão. Nada liga os dois arquivos: reativar o disfarce criaria duas respostas possíveis pra mesma pergunta, e a do `disguise` venceria ou perderia dependendo de quem chamasse primeiro.
+
+**2. A forma dele não expressa o único caso que importa.** Sob o `identity-service`, quem não te conheceu já te vê como `Desconhecido` — **anonimato é o padrão**, não uma feature. O que o disfarce precisa resolver é o caso oposto: parecer *outra pessoa específica* pra quem **já te conhece**. Isso é necessariamente por observador, e `activateDisguise` grava um nome falso global. Não há o que migrar: a estrutura de dados está errada para o requisito.
+
+**3. O lugar certo já existe e já está preparado.** `character_known_identities.source` aceita o valor `'disguise'` desde o `schema.sql` (linha 73), e `skymp/ui/player-panel.js` já rotula esse valor como "disfarce" na aba Social. O [`NAMETAG_IDENTITY_SYSTEM.md`](NAMETAG_IDENTITY_SYSTEM.md) também já registra o requisito na forma certa — *"disfarce ativo deve poder sobrescrever nome público sem alterar conhecimento real"* — como uma **regra dentro da escada de exibição**, não como um serviço paralelo. O trabalho pendente é um degrau em `getDisplayName()`, não um arquivo.
+
+**4. A rolagem de detecção contradiz um desenho já fechado.** `detectDisguise` faz `Math.random()` contra uma DC:
+
+- [`SOUL_AFFINITY.md`](../design/SOUL_AFFINITY.md) §4.2 e §14.3 exigem que **toda rolagem oculta** seja determinística, semeada e reproduzível em `audit_logs`, para que a staff possa provar um resultado contestado. `Math.random()` é irreproduzível por construção — não é um detalhe a ajustar, é a propriedade contrária à exigida.
+- §II.0 e §II.2 fecharam que **o dado nunca diz não**. A falha aqui devolve *"Você não consegue identificar nada suspeito"* — o "silêncio" que aquele documento lista como um dos quatro assassinos de diversão.
+- §15 posiciona o disfarce como ligação do `identity-service` (*"vampiro descoberto = identidade revelada; conecta ao disfarce"*), isto é, consequência de marca. Não um sistema à parte com DC própria.
+
+**5. Nunca foi exercitado, e dá pra provar lendo.** Três defeitos que qualquer sessão real teria mostrado no primeiro minuto:
+
+- `staffReveal` monta a mensagem com `commands.getActiveCharacterData(actorId)` — a **própria staff** —, então `/revealid` responde *"X é na verdade \<nome de quem digitou o comando\>"*. O parâmetro `targetActorId` é usado pra achar o disfarce e ignorado pra achar o nome.
+- Em `detectDisguise`, a mensagem do detector e o aviso *"alguém percebeu seu disfarce"* saem os dois por `Debug.notification` com `self = null`, que é global: o disfarçado nunca é avisado e todo mundo é.
+- `getPublicName` calcula `obsData` na linha 26 e não usa (o próprio comentário abaixo admite que o bypass de staff "é feito no commands.js").
+
+**Nada depende dele** — a única citação fora do arquivo era o comentário de PARKED no `phase0-basic.js`. **A tabela `disguises` fica**, pelo mesmo critério das seis órfãs abaixo: tabela vazia não tem caminho de execução e o requisito continua válido, só muda de dono.
+
+### 7.2 `crafting-service.js` — **mantido estacionado, mas entra na fila de migração**
+
+Não mexe em ouro e nunca importou o `economy-service` — pela pergunta literal da primeira rodada, passava. Mas carrega **a mesma dívida do item 2, transposta de ouro para item**, e ela estava escondida atrás de um comentário que afirma o contrário.
+
+O passo 4 do `craftItem` diz `// 4. Consome ingredientes (transação segura: tudo ou nada)`. Não é. É um laço de `removeItem()` independentes, seguido de um `giveItem()` — e cada uma dessas funções **abre a própria transação** no `core/transaction-service`. Uma receita de três ingredientes são quatro transações separadas: se a segunda falhar, a primeira já commitou, o jogador perdeu o ingrediente e não recebeu nada.
+
+É `economy-service.transfer` (`removeGold` seguido de `addGold`, sem transação) com outro substantivo. E a solução já existe e já foi exercitada: as primitivas `tx.*` (`applyInventoryDelta`, `recordInventoryLedger`), que a compra em barraca usa exatamente porque move várias pernas e precisa commitar junto.
+
+**Entra na Fase 3**, junto com os que mexem em ouro. Continua PARKED depois disso — migrar não é reativar.
+
+### 7.3 `jobs-service.js` — **mantido estacionado, e é o mais grave dos três**
+
+Também não mexe em ouro. Não mexe em banco **nenhum**: importa só `commands` e `core/papyrus`.
+
+Ele entrega item chamando `mp.callPapyrusFunction('method', 'ObjectReference', 'AddItem', ...)` direto no ator — contornando `inventory-service` e `core/transaction-service` inteiros. Consequência: lenha, minério e peixe nascem **sem linha em `character_inventory` e sem linha no ledger**. Não existem para o servidor.
+
+Isso é mais forte que o achado do `/setgold` (ouro que aparecia sem origem registrada, mas ao menos mudava o saldo no banco). Aqui o item existe apenas no cliente até a próxima sincronização, e o `syncInventoryToClient` reconcilia a partir do **banco** — que nunca soube do item. Inverte a regra que o resto do projeto segue: *inventário só existe se o MariaDB confirmar*.
+
+Dois problemas menores, registrados para quem migrar:
+
+- `Math.random()` decide quantidade e raridade (ferro/corundum/ébano). Não é rolagem oculta de alma, então não cai sob a §14.3 da Afinidade — mas produção de recurso irreproduzível é um problema de economia à parte.
+- `activeGatherers` é `Set` chaveado por `actorId` com liberação por `setTimeout` de 10–20 s. Se o jogador cai no meio, o timer ainda dispara e o `AddItem` vai para o ator seguinte do slot reaproveitado. É a classe de bug da auditoria estática §5, e some sozinha quando a entrega passar pelo `transaction-service`, que trabalha por `characterId`.
+
+**Entra na Fase 3** pelo mesmo motivo do `crafting`.
+
+### 7.4 Candidato registrado, não decidido: permissão numérica em três lugares
+
+Encontrado pelo `npm run typecheck` durante a migração da Fase 3, e **deixado como está de propósito**.
+
+`crafting-service.js` (linhas 162 e 183) e `economy-regional.js` (linha 238) chamam `adminService.hasPermission(actorId, 20)` — um **nível numérico**, herança de um modelo antigo. O `admin-service` hoje trabalha com permissões nomeadas e trata esse caso explicitamente: grita no log e **nega**. O `disguise-service` tinha a mesma coisa (`hasPermission(actorId, 10)`) e saiu junto com o arquivo.
+
+Consequência: `/addrecipe`, `/addingredient` e o comando de staff do `economy-regional` **negam sempre**, para todo mundo, inclusive para admin. Como os três serviços estão PARKED, ninguém sente isso hoje.
+
+**Por que não foi corrigido nesta rodada:** o modo de falha aponta pro lado seguro (nega, não concede), então não é urgente; e escolher *qual* permissão nomeada cada comando exige é decisão de desenho, não de migração. `add_item`? Uma `manage_recipes` nova? A resposta muda quem no servidor pode criar receita, que é uma questão de economia e não de código. Quem reativar qualquer um dos dois decide — e o log já grita o suficiente para que não passe despercebido.
+
+### 7.5 O que esta rodada mostra sobre a pergunta da primeira
+
+A primeira rodada perguntou *"duplica algo ativo?"* e, para os três, respondeu não — corretamente, pelo critério dela. `crafting` e `jobs` de fato não duplicam nenhum serviço.
+
+O que escapou é que **duplicar um serviço não é a única forma de carregar a dívida**: os dois duplicam um *padrão* — "mexer em patrimônio do jogador fora do arquivo que existe pra ser o único caminho" — sem duplicar nenhum serviço. Foi o que o item 2 apagou no ouro, e o filtro daquela rodada (`importa economy-service?`) só pegava a instância em ouro.
+
+Fica registrado como critério para a próxima reavaliação: **a pergunta é "toca patrimônio, estado ou identidade fora do dono desse assunto?", não "importa o arquivo errado?"**.
+
+---
+
 ## Sobre as 6 tabelas órfãs
 
 `store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions` — definidas no schema e **referenciadas por nenhum código**, nem ativo nem PARKED.
@@ -127,9 +215,12 @@ O que **não** se deve fazer é deixá-las sem explicação. Estão listadas em 
 
 | Ação | Arquivos | Linhas |
 |---|---|---|
-| **Apagados** | `economy-service`, `justice-service`, `faction-service`, `survival-service` | ~855 |
-| **Mantidos estacionados** | `economy-regional`, `crafting`, `housing`, `jobs`, `horse`, `trade`, `disguise` | ~1.205 |
+| **Apagados na 1ª rodada** | `economy-service`, `justice-service`, `faction-service`, `survival-service` | ~855 |
+| **Apagado na 2ª rodada (§7)** | `disguise-service` | ~149 |
+| **Mantidos estacionados** | `economy-regional`, `crafting`, `housing`, `jobs`, `horse`, `trade` | ~1.056 |
 
-Os sete que ficaram não duplicam nada ativo, são coerentes internamente e correspondem a fases futuras do backlog. Os três que mexiam em ouro foram migrados pro `transaction-service` — a dívida que os deixava perigosos saiu junto com o `economy-service`.
+Os seis que ficaram não duplicam nenhum serviço ativo e correspondem a fases futuras do backlog. Os três que mexiam em ouro (`economy-regional`, `housing`, `horse`) foram migrados pro `transaction-service` na 1ª rodada. Os dois que mexem em **item** fora do `transaction-service` (`crafting`, `jobs`) foram identificados na 2ª e migrados na Fase 3 — a dívida era a mesma, o substantivo é que era outro.
+
+Nenhum deles foi registrado no `module-registry.js`: migrar é segurança interna, reativar é decisão de escopo, e misturar as duas é o erro que a Fase 2 do `QA_REPORT` existe pra não repetir.
 
 O código apagado continua no histórico do git.

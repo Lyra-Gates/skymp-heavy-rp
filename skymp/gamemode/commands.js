@@ -54,6 +54,23 @@ function removeActiveCharacter(actorId) {
     // fecharia o ciclo.
     require('./admin-service').removeStaffRole(actorId);
 
+    // Mesma classe de problema, mesmo motivo de require preguicoso
+    // (death-service requer este modulo no topo): `_lastHealth` guarda a ultima
+    // leitura de vida por actorId, e o slot reaproveitado fazia o primeiro tick
+    // do jogador seguinte virar um `damage_spike` falso no contexto de morte —
+    // evidencia de RDM contra quem nao levou golpe nenhum. Ver a explicacao
+    // completa em death-service.cleanup().
+    require('./death-service').cleanup(actorId);
+
+    // A alma em cache e chaveada por characterId, entao nao sofre do
+    // reaproveitamento de slot — mas cache que so cresce e vazamento, e reler no
+    // proximo login custa uma query. Atras do isEnabled porque o soul-service
+    // lanca no boot quando falta SOUL_SECRET: com a flag desligada, nem o
+    // require acontece.
+    if (require('./core/module-registry').isEnabled('soul')) {
+      require('./soul-service').cleanup(char.characterId);
+    }
+
     activeCharacters.delete(actorId);
   }
 }

@@ -11,6 +11,45 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **`soul-service.js` — a Afinidade da Alma passa a falar com o mundo.** `core/soul.js` (domínio puro, 28 testes) estava fechado desde antes; o que faltava era a camada que persiste a alma, entrega sinais, grava marcas, avança a árvore e audita rolagem. O desenho de [`SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) foi **implementado, não rediscutido**.
+
+  Junto vieram as quatro tabelas que aquele documento especifica (migration v10): `character_soul`, `character_signs`, `character_marks`, `character_paths`. Registrado no `module-registry` atrás de `ENABLE_SOUL_SERVICE`, fase `lab`, **desligado por padrão**.
+
+  **A alma é congelada no primeiro spawn e nunca rederivada.** A staff pode editar a ficha pelo painel; rederivar trocaria a alma de quem já jogou meses com ela, em silêncio, e deixaria órfãs as marcas — que *são* a progressão (§II.3). Há teste de mutação para isso.
+
+  **A semente não entra em `audit_logs`** — só uma impressão digital de 8 caracteres. A §14.3 exige que a staff reproduza uma rolagem contestada e a §III.3 exige que o segredo nunca saia do servidor; as duas valem ao mesmo tempo. `GET /api/audit` devolve `details` inteiro para qualquer staff no navegador, e com a semente ali, mais este repositório que é público, qualquer pessoa reproduziria **todas** as rolagens futuras daquele personagem — não só a contestada. A reprodução continua possível por `character_soul`, que exige o banco.
+
+  **Sem `SOUL_SECRET` o módulo falha no boot, de propósito.** Alma derivada de segredo vazio é recalculável a partir da ficha, que é pública no painel, e o estrago seria permanente porque a alma é congelada. Mesma lição do `.env` que ninguém carregava: o modo de falha aponta para o lado seguro.
+
+  31 testes, cobrindo os três itens do §III.12 que o domínio não prova sozinho — consentimento em nó irreversível, a semente que não vaza, e o firewall de identidade nas marcas visíveis. Verificados por mutação: remover a checagem de consentimento reprova 2, vazar os valores no painel reprova 1, trocar `identity.getDisplayName` por leitura direta de nome reprova 2, rederivar a alma reprova 1.
+
+  Mais dois checks operacionais no `test:systems`. Um deles varre os quatro apps atrás de `soul_seed`/`SOUL_SECRET`/`character_soul`: a semente vive no gamemode e o painel é outro processo com acesso ao mesmo banco, então um endpoint que a exponha não reprovaria em nenhum teste unitário. Verificado plantando uma sonda que faz exatamente isso.
+
+  ⚠️ **Confirmado por teste automatizado, não confirmado em sessão real** — igual a `hit-events`/`espm`/`safe-zones`. A [Etapa 9.4 do roteiro](docs/technical/FASE_0_ROTEIRO.md) foi escrita e **não executada**. Ela também registra o que 9.4 *não* testa: marcas e árvore existem e têm teste, mas nenhum caminho de jogo chega até elas — a etapa 2 do desenho põe os quatro resultados em encantamento, e encantamento depende do `crafting-service`, que continua PARKED.
+
+- **Log de moderação no Discord** (`apps/bot-discord/moderationLog.js`). A [`ARCHITECTURE.md` 1.3](docs/ARCHITECTURE.md) registrava isto como a intenção original do bot e anotava que **nunca foi implementado**; até aqui ele só expunha o sync de cargo e os comandos de voz.
+
+  Cobre `kick` e `permakill` (do gamemode) e as três decisões de whitelist (do painel). **`ban` fica declarado e sem produtor**, de propósito: `ban` é uma permissão que os cargos `admin` e `owner` concedem e que **nenhum comando consome** — não existe `/ban` no gamemode nem no painel. O tipo declarado (com teste travando o formato) faz o dia em que o comando existir custar uma linha; inventar o produtor agora seria implementar uma ação que o servidor não tem.
+
+  **O canal não é o registro — é notificação.** O registro continua sendo `audit_logs`, escrito no mesmo fluxo da ação, antes de qualquer coisa sair para o Discord. Isso decide o comportamento em falha: com o Discord fora, a moderação acontece do mesmo jeito, nada é desfeito e nada fica lento. O endpoint responde 202 **antes** de falar com o Discord, e nenhum produtor faz `await` do envio — um `/permakill` não pode esperar por API de terceiro.
+
+  **Push, não polling de `audit_logs`.** O bot tem `mysql2` em `dependencies` sem usar, então ler a tabela era possível; descartado porque daria credencial de banco a um terceiro processo para ler o que ele não escreve, em troca de latência. O cliente do gamemode usa `http.request` do core e não `fetch`: a versão do Node embutida no SkyMP não é controlada por nós e `fetch` global só existe do 18 em diante.
+
+  21 testes com `discord.js` mockado. Cobrem o que a fronteira de confiança exige: `kind` desconhecido não vira embed vazio no canal da staff, `@everyone` num motivo não vira ping (quem escreve o motivo é staff digitando em jogo, e o texto atravessa três processos), e falha do Discord nunca lança — sem o `try/catch` a rejeição subiria como *unhandled* no `.then()` do endpoint e derrubaria o bot inteiro porque o Discord ficou lento num kick.
+
+  Um dos testes varre o próprio fonte atrás de caractere invisível. O separador de menção é um zero-width space e a classe de controle está numa regex; escritos crus, deixaram os dois arquivos binários para o `grep` e para o `file` — exatamente o defeito que o `core/soul.js` já custou a achar, onde quem lesse a linha entenderia o oposto do que ela faz.
+
+- **Assinatura do instalador do launcher, configurada e verificável** (QA 3.3). O item dizia que "as chaves já são lidas do ambiente pelo `electron-builder`" — verdade sobre o `electron-builder`, não sobre este repositório: não havia nada configurado. `win.signtoolOptions` entrou com o que **não** é segredo (dois servidores de carimbo de tempo e `sha256` apenas); `CSC_LINK` e `CSC_KEY_PASSWORD` continuam vindo do ambiente e não aparecem em lugar nenhum do repositório.
+
+  **O carimbo de tempo não é detalhe:** sem ele, todo instalador já distribuído vira "assinatura inválida" no dia em que o certificado vencer, inclusive os que os jogadores baixaram meses antes.
+
+  Workflow próprio (`release-launcher.yml`) em `windows-latest`, separado do CI que roda em Ubuntu a cada push. Ele avisa antes se o build vai sair assinado, constrói, e **verifica de verdade**: `Get-AuthenticodeSignature` precisa devolver `Valid` **e** um carimbo. Havendo certificado e a assinatura não colando, o job falha — instalador não assinado saindo de um build que deveria assinar é pior que build quebrado, porque parece que deu certo. Sem `CSC_LINK`, o build continua funcionando e gera o instalador não assinado, para que contribuidor e build local não dependam de um certificado que só quem opera o servidor tem.
+
+  Não foi usado o formato de comentário `"//chave"` no `electron-builder.json`: ao contrário do `package.json`, o schema dele declara `additionalProperties: false` e o build falharia na validação. Conferido contra o `scheme.json` da versão instalada (26.15.3), chave por chave; a explicação foi toda para [`LAUNCHER_DISTRIBUTION.md` §6](docs/technical/LAUNCHER_DISTRIBUTION.md).
+
+  ⚠️ **Continua aberto, e não é código:** comprar o certificado (a §6.3 compara OV, EV e Azure Trusted Signing com custo e comportamento do SmartScreen) e confirmar o SmartScreen à mão — reputação é construída pela Microsoft ao longo de downloads reais, e a única verificação possível é baixar pelo navegador numa máquina Windows limpa.
+
+
 - **Agressão relatada pelo cliente vira evidência de combate** (`core/hit-events.js`). Quarto e último item do aproveitamento do Red House: `mp.makeEventSource` injeta um trecho no cliente que escuta o evento `hit` do Skyrim Platform e reporta quem bateu em quem.
 
   Substitui o `checkDamageSpike` do `death-service`, que chamava de agressão qualquer queda de 25 pontos de vida num tick de 2 s — não distinguia combate de queda de penhasco, não sabia quem bateu, e só existia porque estava pendurado no polling.
@@ -68,7 +107,31 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
   **Em nenhum dos três há código copiado** — o que atravessou foi técnica, que não é protegida por direito autoral. A atribuição fica registrada assim mesmo: o critério da política é a procedência, não o volume, e no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform, o que torna a fronteira entre "reescrito" e "portado" fina demais para se apoiar nela.
 
+### Removido
+
+- **`disguise-service.js` — apagado.** Segunda rodada de avaliação dos PARKED ([`PARKED_SERVICES_DECISION.md` §7](docs/technical/PARKED_SERVICES_DECISION.md)). A primeira rodada classificou `crafting`, `jobs` e `disguise` como "independentes, coerentes"; aquela avaliação é anterior ao `identity-service` ter testes, ao `player-panel-service` existir com aba Social, e ao desenho da Afinidade da Alma fechar.
+
+  Não é só duplicação do `identity-service`: as duas implementações têm **forma diferente**, e a dele é a errada. O `identity-service` resolve nome por `(observador, alvo)`; ele resolvia só por alvo. Sob o `identity-service`, quem não te conheceu já te vê como `Desconhecido` — anonimato é o padrão —, então o único caso que o disfarce precisa resolver é **parecer outra pessoa para quem já te conhece**, e isso é necessariamente por observador. Não havia o que migrar: a estrutura de dados estava errada para o requisito.
+
+  O lugar certo já existe e já estava preparado: `character_known_identities.source` aceita `'disguise'` desde o `schema.sql`, o painel já rotula esse valor como "disfarce", e o [`NAMETAG_IDENTITY_SYSTEM.md`](docs/technical/NAMETAG_IDENTITY_SYSTEM.md) já registrava o requisito como um degrau da escada de exibição, não como serviço paralelo.
+
+  A rolagem de detecção também contradizia desenho fechado: `Math.random()` contra DC, quando o `SOUL_AFFINITY.md` §4.2/§14.3 exige rolagem oculta **determinística e reproduzível** em `audit_logs`, e a §II.2 fechou que o dado nunca diz não — a falha dele devolvia exatamente o "silêncio" que aquele documento lista como assassino de diversão.
+
+  Que nunca foi exercitado dá para provar lendo: `/revealid` respondia *"X é na verdade \<nome de quem digitou o comando\>"*, porque `staffReveal` montava a mensagem com o `actorId` da própria staff; e as duas notificações de `detectDisguise` saíam com `self = null`, que é global — o disfarçado nunca era avisado e todo mundo era. Nada dependia dele. A tabela `disguises` fica, pelo critério das seis órfãs.
+
 ### Corrigido
+
+- **A última leitura de vida sobrevivia à desconexão.** `_lastHealth` do `death-service` é chaveado por `actorId`, e o SkyMP reaproveita `actorId` entre sessões — mesma classe do `staffCache` do `admin-service`, que fazia quem entrasse depois herdar o cargo de um admin que já tinha saído.
+
+  Aqui o estrago é pior porque é silencioso e cai justamente na evidência que a staff usa para arbitrar RDM. Alguém sai com 500 de vida, o slot é reaproveitado por outro jogador que entra com 100: o primeiro tick de `checkDamageSpike` lê `previous = 500`, calcula uma queda de 400 e grava um `damage_spike` no contexto de morte. O novo jogador aparece como tendo apanhado sem ter levado um golpe. O caso inverso — sair ferido, entrar cheio — esconde uma agressão real, porque a diferença fica negativa e não passa do threshold.
+
+  Quatro testes, verificados por mutação. Um deles passa pelo `removeActiveCharacter` de verdade em vez de chamar `cleanup` direto: um `cleanup` exportado e nunca chamado seria o mesmo defeito do `.env` que ninguém carregava — existe, tem teste, e não roda em jogo.
+
+  Achado na auditoria estática por classe de bug conhecida, que varreu o repositório inteiro atrás dos outros membros de cinco classes: ouro fora do ledger, `require()` nu, config lida por ninguém, `.gitignore` por app, e cache por `actorId` sem limpeza. As outras quatro passaram limpas.
+
+- **O cabeçalho do `core/proximity-ranges.js` mandava editar o lugar errado.** Ele afirmava que `server-options.*.json` **não** é lido por nenhum código do gamemode e concluía "mexa aqui". Era verdade quando o QA registrou o achado, e deixou de ser quando o `core/server-options.js` nasceu — o próprio arquivo requer o loader vinte linhas abaixo e lê `chat.localRange` e `chat.whisperRange` dele.
+
+  Comentário obsoleto sobre configuração é a mesma classe de defeito que a configuração que ninguém lê: nos dois casos alguém edita um lugar e o jogo não muda. Só que este mandava editar o lugar errado, o que é pior — quem seguisse a instrução trocaria o valor no código e o JSON continuaria vencendo no boot.
 
 - **`characters.gold` não existia em banco migrado** (migration v9). A coluna está declarada no `schema.sql` e em nenhuma migration: banco novo funciona, e quem criou o banco antes dela e aplicou `v2`→`v8` em ordem, como o CONTRIBUTING manda, nunca a recebe. A v2 chega a criar a `gold_transactions` — o ledger da economia — sem garantir a coluna de saldo que esse ledger acompanha. Não quebra o boot: quebra na primeira operação de ouro, que é todo o `transaction-service`. Achado pelo `npm run check:schema` ao preparar a Fase 0, que é exatamente a classe de problema para a qual ele foi escrito.
 
@@ -79,6 +142,26 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
   O segundo: **nenhuma opção de gameplay era lida**. O `.env.example` definia `NODE_ENV=development`, o loader monta `server-options.<NODE_ENV>.json`, e o projeto só tem `local` e `production`.
 
 - **`database.js` não tinha `close()`**, e o `verify-governance-market-stalls.js` já chamava `db.close()` atrás de um guard que nunca disparava. `RUN_DB_CHECK=1 npm run test:systems` imprimia "10/10 passaram" e ficava pendurado para sempre (exit 124 por timeout; agora exit 0). Num CI com banco, o job só terminaria no timeout e o relatório diria "cancelado".
+
+### Alterado
+
+- **`crafting` e `jobs` passam a mexer em item pelo `core/transaction-service`.** `housing`, `horse` e `trade` já tinham sido migrados quando o `economy-service` foi apagado; o que faltava era o teste que trava a migração, e os dois casos que a primeira rodada não viu porque procurava por **ouro**.
+
+  O `craftItem` anunciava `// transação segura: tudo ou nada` e era um laço de `removeItem()` independentes seguido de `giveItem()`, cada um abrindo a própria transação. Receita de três ingredientes eram quatro transações: falhando a segunda, a primeira já commitou, o jogador perdeu o ingrediente e não recebeu nada. É `economy-service.transfer` com outro substantivo. Virou uma transação só, pelas primitivas `tx.*`, no mesmo formato da compra em barraca.
+
+  O `hasItem` que checava estoque antes saiu junto: ele lia **fora** da transação, então entre a checagem e o consumo o item podia ter saído por outro caminho. `applyInventoryDelta` lê com `FOR UPDATE` e lança se faltar — estritamente melhor.
+
+  O `jobs-service` era pior: entregava recurso por `AddItem` do Papyrus direto, **sem banco e sem ledger** — lenha, minério e peixe não existiam para o servidor, só para o cliente, até a próxima sincronização ler o banco que nunca soube deles. Inverte a regra que o resto do projeto segue: inventário só existe se o MariaDB confirmar.
+
+  Junto vieram duas coisas que a migração tornou obrigatórias: a coleta precisa resolver `characterId` (o banco não fala em `actorId`), e por isso o `activeGatherers` deixou de ser chaveado por `actorId`; e o fecho confere que o slot ainda é da mesma pessoa antes de creditar — passam 10 a 20 segundos ali, e sem a checagem o recurso ia para o personagem errado **com** o ledger registrando corretamente o dono errado, que é pior que não entregar.
+
+  **Nenhum dos cinco foi registrado no `module-registry`.** Migrar é segurança interna; reativar é decisão de escopo, e misturar as duas foi o erro que a Fase 2 do QA existe para não repetir.
+
+  14 testes novos, verificados por mutação: `housing` voltando ao `UPDATE characters SET gold` reprova 2, `crafting` voltando às funções públicas reprova 3, `jobs` voltando ao `AddItem` direto reprova 2. A asserção central não conta linhas de ledger — soma o que o ledger diz e compara com o que o saldo fez de fato, para pegar qualquer caminho novo de ouro e não só os que existem hoje.
+
+  O critério que a primeira rodada deixou escapar ficou registrado na §7.5 daquele documento: a pergunta é *"toca patrimônio, estado ou identidade fora do dono desse assunto?"*, não *"importa o arquivo errado?"*.
+
+- **`SKYMP_RP_DEVELOPMENT_PLAN.md` §14 reescrita.** Apontava para **Housing** ou "refinar combate/física" e era anterior a `hit-events`, `espm`, `safe-zones`, `core/soul.js` e ao primeiro boot real. Passa a dizer o que é verdade: o próximo passo não é uma feature, é conectar um cliente — hoje são **quatro** sistemas com o aviso *"confirmado por teste automatizado, não confirmado em sessão real"*, e a Fase 0 é o que desbloqueia todos.
 
 ### Otimizado
 
@@ -158,7 +241,7 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
 - **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
 
-Total de testes: **426** (313 gamemode + 40 web + 30 game-api + 24 launcher + 19 bot) + 11 checks de sistema. Contagem conferida rodando as cinco suítes em 06/08/2026 — a linha anterior dizia 301 e nenhuma das parcelas ainda batia. O roteiro da Fase 0 pedia "253 passando" no passo 0.1, que é o primeiro passo do teste: um testador pararia ali achando que quebrou alguma coisa.
+Total de testes: **496** (362 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 07/08/2026 — a linha anterior dizia 301 e nenhuma das parcelas ainda batia. O roteiro da Fase 0 pedia "253 passando" no passo 0.1, que é o primeiro passo do teste: um testador pararia ali achando que quebrou alguma coisa.
 
 - **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
 

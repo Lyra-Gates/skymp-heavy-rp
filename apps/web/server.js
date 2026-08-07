@@ -328,6 +328,24 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
   } catch (err) { console.error('[/api/whitelist GET]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
 });
 
+/**
+ * Manda um evento pro canal de log de moderacao do Discord (via bot).
+ *
+ * Manda e esquece: nao retorna promessa pra quem chama e engole todo erro. O
+ * registro de verdade e `audit_logs`; o canal e notificacao. Ver
+ * `apps/bot-discord/moderationLog.js` e ARCHITECTURE.md 1.3.
+ */
+function notifyModerationLog(evento) {
+    fetch(`${BOT_INTERNAL_URL}/api/moderation-log`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Secret': INTERNAL_API_SECRET
+        },
+        body: JSON.stringify({ ...evento, source: 'painel', at: new Date().toISOString() })
+    }).catch(e => console.error('[web] Falha ao enviar log de moderacao:', e.message));
+}
+
 app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
   const { status, reviewer_notes, extra_review_notes } = req.body;
   const validStatuses = ['approved', 'rejected', 'pending'];
@@ -398,6 +416,24 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
             console.error('[web] Falha ao notificar o Bot do Discord:', e.message);
         }
     }
+
+    // Log de moderacao no canal do Discord (ARCHITECTURE.md 1.3).
+    //
+    // Separado do sync de cargo de proposito, e nao um campo a mais naquela
+    // chamada: sao coisas com consequencias diferentes. O sync ALTERA o estado
+    // do usuario no Discord e a falha dele importa; este e notificacao pra staff
+    // e a falha dele nao pode desfazer nem atrasar a decisao de whitelist, que
+    // ja esta gravada no banco e no audit_logs acima.
+    //
+    // Nao e `await`ado pelo mesmo motivo.
+    notifyModerationLog({
+        kind: status === 'approved' ? 'whitelist_approve'
+            : status === 'rejected' ? 'whitelist_reject'
+            : 'whitelist_reset',
+        target: idRows.length > 0 ? `<@${idRows[0].discord_id}>` : `aplicacao #${req.params.id}`,
+        moderator: req.user.username || `conta #${req.user.accountId}`,
+        reason: reviewer_notes || null
+    });
 
     res.json({ ok: true });
   } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }

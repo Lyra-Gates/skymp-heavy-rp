@@ -517,6 +517,27 @@ function checkDamageSpike(actorId, health) {
   );
 }
 
+/**
+ * Esquece a última leitura de vida de um actorId (chamar na desconexão).
+ *
+ * `_lastHealth` é chaveado por actorId, e o SkyMP reaproveita actorId entre
+ * sessões — mesma classe de bug do `staffCache` do admin-service, que fazia
+ * quem entrasse depois herdar o cargo de um admin que já tinha saído.
+ *
+ * Aqui o efeito era pior porque é silencioso: se alguém sai com 500 de vida e
+ * o slot é reaproveitado por outro jogador que entra com 100, o primeiro tick
+ * de `checkDamageSpike` lê `previous = 500`, calcula uma queda de 400 e grava
+ * um `damage_spike` no contexto de morte. O novo jogador aparece como tendo
+ * apanhado de alguém sem ter levado um golpe — e essa linha é justamente o que
+ * a staff usa pra arbitrar denúncia de RDM. O caso inverso (sair ferido, entrar
+ * cheio) esconde uma agressão real, porque a diferença fica negativa.
+ *
+ * @param {number} actorId
+ */
+function cleanup(actorId) {
+  _lastHealth.delete(actorId);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Comandos
 // ─────────────────────────────────────────────────────────────────────────────
@@ -569,6 +590,7 @@ module.exports = {
   logDeathContext,
   logCombatInitiation,
   checkDamageSpike,
+  cleanup,
   retireOnPermadeath,
   logKiller,
   logCombatEpisode,
