@@ -11,7 +11,7 @@
  */
 
 const assert = require('assert');
-const { describe, it, before, after, beforeEach } = require('node:test');
+const { describe, it, before, after, beforeEach, afterEach } = require('node:test');
 const WebSocket = require('ws');
 
 const Module = require('module');
@@ -186,16 +186,38 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     delete global.mp;
   });
 
+  // Todo socket aberto por um teste é fechado ao fim dele.
+  //
+  // Não é higiene opcional. Um socket vazado mantém o processo do `node --test`
+  // vivo depois do último caso (todos passam e o arquivo reprova por timeout),
+  // e pior: `voipClients` é indexado por actorId, então um socket órfão do teste
+  // anterior que fecha durante o próximo apaga a entrada do socket *novo* com o
+  // mesmo actorId — o teste seguinte falha por um motivo que não é o dele.
+  const openSockets = [];
+
   beforeEach(() => {
     positions.clear();
     voip._pendingTickets.clear();
     voip._audienceByActor.clear();
   });
 
+  afterEach(async () => {
+    await Promise.all(openSockets.splice(0).map((ws) => new Promise((resolve) => {
+      if (ws.readyState === WebSocket.CLOSED) return resolve();
+      ws.once('close', resolve);
+      ws.close();
+    })));
+  });
+
+  function track(ws) {
+    openSockets.push(ws);
+    return ws;
+  }
+
   /** Conecta, autentica com ticket válido e devolve um socket que acumula mensagens. */
   async function connectAuthed(actorId) {
     const ticket = voip.issueTicket(actorId);
-    const ws = new WebSocket(`ws://127.0.0.1:${relayPort}`);
+    const ws = track(new WebSocket(`ws://127.0.0.1:${relayPort}`));
     ws.received = [];
     ws.on('message', (raw) => ws.received.push(JSON.parse(raw.toString())));
     await new Promise((resolve) => ws.once('open', resolve));
@@ -245,8 +267,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     assert.strictEqual(got.seq, 7);
     assert.strictEqual(got.data, FRAME, 'o servidor não deve tocar nos bytes de áudio');
 
-    speaker.close();
-    near.close();
   });
 
   it('o volume retransmitido é o mesmo que calcVolume daria para aquele par', async () => {
@@ -272,8 +292,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     assert.ok(peer, 'o locutor deveria aparecer no proximity_update do ouvinte');
     assert.strictEqual(peer.volume, got.volume);
 
-    speaker.close();
-    near.close();
   });
 
   it('NÃO retransmite para quem está fora do alcance', async () => {
@@ -292,8 +310,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
       'quem está fora do alcance não deveria receber nada'
     );
 
-    speaker.close();
-    far.close();
   });
 
   it('entrega ao que está perto e não ao que está longe, no mesmo frame', async () => {
@@ -312,9 +328,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
 
     assert.strictEqual(far.received.filter((m) => m.type === 'audio_frame').length, 0);
 
-    speaker.close();
-    near.close();
-    far.close();
   });
 
   it('o locutor não recebe o próprio frame de volta', async () => {
@@ -334,8 +347,30 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
       'ouvir a si mesmo com atraso de rede é eco, não voz'
     );
 
-    speaker.close();
-    near.close();
+  });
+
+  it('relaya sob a identidade autenticada, não sob o fromActorId que veio no frame', async () => {
+    // O ataque: FAR está longe do NEAR e não deveria ser ouvido por ele, mas
+    // manda um frame carimbado como se fosse do SPEAKER, que está pertinho.
+    // Se o servidor lesse `fromActorId` da mensagem em vez de usar a identidade
+    // que ele mesmo autenticou, a voz de qualquer um sairia da boca de outro —
+    // é o mesmo furo do spoofing de actorId no `auth`, uma camada acima.
+    positions.set(SPEAKER, [0, 0, 0]);
+    positions.set(NEAR, [RANGE * 0.5, 0, 0]);
+    positions.set(FAR, [RANGE * 5, 0, 0]);
+
+    const near = await connectAuthed(NEAR);
+    const far = await connectAuthed(FAR);
+    await connectAuthed(SPEAKER);
+    voip.tickProximity();
+
+    far.send(JSON.stringify({ type: 'audio_frame', fromActorId: SPEAKER, data: FRAME }));
+    await settle();
+
+    assert.strictEqual(
+      near.received.filter((m) => m.type === 'audio_frame').length, 0,
+      'o frame do FAR não deveria chegar no NEAR carimbado como SPEAKER'
+    );
   });
 
   it('descarta frame de conexão não autenticada', async () => {
@@ -347,7 +382,7 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     voip.tickProximity();
 
     // Terceira conexão, sem auth: manda frame se passando pelo locutor.
-    const anon = new WebSocket(`ws://127.0.0.1:${relayPort}`);
+    const anon = track(new WebSocket(`ws://127.0.0.1:${relayPort}`));
     await new Promise((resolve) => anon.once('open', resolve));
     anon.send(JSON.stringify({ type: 'audio_frame', fromActorId: SPEAKER, data: FRAME }));
     await settle();
@@ -357,9 +392,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
       'sem ticket não se injeta áudio na cena de ninguém'
     );
 
-    anon.close();
-    speaker.close();
-    near.close();
   });
 
   it('descarta frame acima do teto de tamanho', async () => {
@@ -385,8 +417,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     speaker.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
     await waitFor(near, 'audio_frame');
 
-    speaker.close();
-    near.close();
   });
 
   it('locutor mutado não é retransmitido', async () => {
@@ -404,8 +434,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
 
     assert.strictEqual(near.received.filter((m) => m.type === 'audio_frame').length, 0);
 
-    speaker.close();
-    near.close();
   });
 
   it('sem tick não há audiência — frame que chega antes do primeiro tick não vaza', async () => {
@@ -421,8 +449,37 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
 
     assert.strictEqual(near.received.filter((m) => m.type === 'audio_frame').length, 0);
 
-    speaker.close();
-    near.close();
+  });
+
+  it('tick que não consegue ler posição zera a audiência em vez de manter a velha', async () => {
+    positions.set(SPEAKER, [0, 0, 0]);
+    positions.set(NEAR, [RANGE * 0.5, 0, 0]);
+
+    const speaker = await connectAuthed(SPEAKER);
+    const near = await connectAuthed(NEAR);
+    voip.tickProximity();
+
+    // Confere que a audiência existe antes de tirar o chão dela.
+    speaker.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    await waitFor(near, 'audio_frame');
+    near.received.length = 0;
+
+    // Agora o tick roda sem `mp` — nenhuma posição é legível.
+    const savedMp = global.mp;
+    delete global.mp;
+    try {
+      voip.tickProximity();
+      speaker.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+      await settle();
+    } finally {
+      global.mp = savedMp;
+    }
+
+    assert.strictEqual(
+      near.received.filter((m) => m.type === 'audio_frame').length, 0,
+      'sem posição não há proximidade; entregar pela audiência velha seria ' +
+      'retransmitir com base em onde as pessoas estavam, não onde estão'
+    );
   });
 
   it('sinalização WebRTC continua sendo repassada — a Fase 1 adiciona, não substitui', async () => {
@@ -438,8 +495,6 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     assert.strictEqual(offer.fromActorId, SPEAKER);
     assert.strictEqual(offer.sdp, 'v=0 fake');
 
-    speaker.close();
-    near.close();
   });
 });
 
