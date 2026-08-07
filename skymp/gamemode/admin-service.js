@@ -12,10 +12,19 @@ const moderationLog = require('./core/moderation-log');
 const { actorRef } = require('./core/papyrus');
 
 // Roles e permissões por nível
+//
+// `manage_recipes` existe separada de `add_item` de propósito. `add_item` é um
+// ato pontual e auditado — "dê este item a este jogador", raio de alcance de uma
+// pessoa. Uma receita é uma regra permanente que **todo** jogador usa, quantas
+// vezes quiser: é uma casa da moeda, não um presente. Reaproveitar `add_item`
+// para receita faria quem auditasse "quem pode add_item?" receber a resposta
+// errada sobre quem pode reformar a economia de crafting — que é a mesma classe
+// do nível numérico que esta tabela já pagou caro para eliminar: uma permissão
+// que significa outra coisa que não o que o nome diz.
 const ROLE_PERMISSIONS = {
   moderator: ['kick', 'teleport', 'view_audit', 'manage_whitelist'],
-  admin:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'retire_character'],
-  owner:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'manage_staff', 'retire_character']
+  admin:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'retire_character', 'manage_recipes'],
+  owner:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'manage_staff', 'retire_character', 'manage_recipes']
 };
 
 // Cache em memória: actorId → { role, permissions: Set<string> }
