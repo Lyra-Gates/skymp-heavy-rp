@@ -8,6 +8,7 @@
  */
 const db = require('./database');
 const commands = require('./commands');
+const moderationLog = require('./core/moderation-log');
 const { actorRef } = require('./core/papyrus');
 
 // Roles e permissões por nível
@@ -244,6 +245,16 @@ async function kickPlayer(actorId, targetActorId, reason) {
     }, 3000);
   }
   console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) kicked ${targetActorId.toString(16)}: ${reason}`);
+
+  // Notificacao, nao registro: `audit_logs` acima ja e o registro. Nao e
+  // `await`ado de proposito — o kick nao pode ficar lento nem falhar porque o
+  // Discord esta fora. Ver core/moderation-log.js.
+  moderationLog.notify({
+    kind: 'kick',
+    target: nomeParaLog(targetData, targetActorId),
+    moderator: nomeParaLog(charData, actorId),
+    reason
+  });
 }
 
 /**
@@ -366,11 +377,32 @@ async function retireCharacter(actorId, targetActorId, reason) {
   commands.sendNotification(targetActorId, `Seu personagem foi permanentemente encerrado pela staff. Motivo: ${reason}`);
   console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) retired character ${targetChar.characterId}: ${reason}`);
 
+  moderationLog.notify({
+    kind: 'permakill',
+    target: nomeParaLog(targetChar, targetActorId),
+    moderator: nomeParaLog(charData, actorId),
+    reason
+  });
+
   if (typeof mp !== 'undefined') {
     setTimeout(() => {
       if (typeof mp !== 'undefined') mp.kick(targetActorId);
     }, 3000);
   }
+}
+
+/**
+ * Nome legivel para o log de moderacao.
+ *
+ * O `actorId` em hexadecimal vai junto de proposito: e o que a staff digita nos
+ * comandos, entao uma linha no Discord que traz so o nome obriga a procurar o
+ * id de novo pra agir em cima dela.
+ */
+function nomeParaLog(charData, actorId) {
+  const id = `0x${actorId.toString(16)}`;
+  if (!charData) return id;
+  const nome = `${charData.firstName || ''} ${charData.lastName || ''}`.trim();
+  return nome ? `${nome} (${id})` : id;
 }
 
 function sendDenied(actorId) {

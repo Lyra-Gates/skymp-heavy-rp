@@ -37,7 +37,24 @@ Sessões ficam em `game_sessions`, guardadas como hash SHA-256, com `expires_at`
 Desenvolvido em **discord.js**.
 - Realiza a ponte entre a conta do Discord do usuário e o seu `profileId` no jogo (`POST /api/sync-role`, chamado pelo painel web na aprovação/rejeição de whitelist).
 - **Canais de voz temporários** (`voiceChannels.js`, comandos `/voz-criar <nome>` e `/voz-fechar`, staff-only): alternativa prática de voz enquanto o VOIP nativo in-game (`/voz`, ver 1.4.4) depende de um patch de client ainda não aplicado (`docs/technical/VOICE_CLIENT_PATCH.md`). Canal é apagado automaticamente ~30s depois de ficar vazio. Os comandos são registrados no boot do bot (`deploy-commands.js` roda no evento `ready`); uma falha ali não derruba o bot, mas grita no log. `npm run deploy-commands` continua existindo pra rodar à mão.
-- Envio de logs pra canais de moderação **não está implementado** — apesar de ter sido a intenção original documentada aqui, hoje o bot só expõe o endpoint interno de sync de cargo e os comandos de voz acima.
+- **Log de moderação** (`moderationLog.js`, endpoint interno `POST /api/moderation-log`): posta um embed num canal configurável (`MODERATION_LOG_CHANNEL_ID`) a cada ação de moderação. Era a intenção original registrada aqui e ficou anos sem implementação; entrou em 07/08/2026.
+
+  **O canal não é o registro — é notificação.** O registro continua sendo `audit_logs`, escrito pelo gamemode e pelo painel no mesmo fluxo da ação, antes de qualquer coisa sair para o Discord. A distinção decide o comportamento em falha: se o Discord estiver fora, a ação de moderação acontece do mesmo jeito, nada é desfeito e nada fica lento. O endpoint responde **202 antes** de falar com o Discord, e nenhum produtor faz `await` do envio.
+
+  | Evento | Produtor | Origem |
+  |---|---|---|
+  | `kick` | `admin-service.kickPlayer` (`/kick`) | `gamemode` |
+  | `permakill` | `admin-service.retireCharacter` (`/permakill`) | `gamemode` |
+  | `whitelist_approve` / `whitelist_reject` / `whitelist_reset` | `apps/web` `PATCH /api/whitelist/:id` | `painel` |
+  | `ban` | **nenhum** — ver abaixo | — |
+
+  **`ban` está declarado e não tem produtor.** `ban` é uma permissão que os cargos `admin` e `owner` concedem em `admin-service.js` e que **nenhum comando consome**: não existe `/ban` no gamemode nem no painel. O tipo de evento fica declarado (com teste travando o formato) para que o dia em que o comando existir custe uma linha, mas o log não inventa uma ação que o servidor não tem.
+
+  **Por que push e não polling de `audit_logs`.** O bot tem `mysql2` em `dependencies` sem usar, então ler a tabela era possível. Descartado: daria credencial de banco a um terceiro processo para ler o que ele não escreve, em troca de latência de polling. O push sai de onde a ação acontece, e o único segredo que atravessa é o `INTERNAL_API_SECRET` que o painel já compartilha com o bot. O gamemode usa `http.request` do core em vez de `fetch` — a versão do Node embutida no SkyMP não é controlada por nós, e `fetch` global só existe do Node 18 em diante.
+
+  **Canal vazio desliga o envio.** Sem `MODERATION_LOG_CHANNEL_ID` o endpoint continua respondendo 202 e não posta nada; sem `BOT_INTERNAL_URL`/`INTERNAL_API_SECRET` no `.env` do gamemode, o gamemode nem tenta. Servidor que não quer o canal não paga nada e não vê erro. O canal deve ser privado da staff: os embeds carregam motivo de kick e notas de revisão de whitelist.
+
+  Testado com `discord.js` mockado (21 testes), no mesmo padrão dos 19 que já existiam. O que não é coberto: postar no canal de verdade, que precisa de bot e guild reais.
 
 ### 1.3.1 API do Jogo (`apps/game-api`)
 Express, porta `GAME_API_PORT` (7758) — a porta que o launcher sempre chamou e para a qual não havia servidor. Detalhes em `docs/technical/LAUNCHER_DISTRIBUTION.md`.

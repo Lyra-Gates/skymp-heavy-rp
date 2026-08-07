@@ -4,6 +4,7 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 const app = express();
 const voiceChannels = require('./voiceChannels');
+const moderationLog = require('./moderationLog');
 const { deployCommands } = require('./deploy-commands');
 
 app.use(express.json());
@@ -17,6 +18,10 @@ const WHITELIST_ROLE_ID = process.env.WHITELIST_ROLE_ID;
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
 const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID;
 const VOICE_CATEGORY_ID = process.env.VOICE_CATEGORY_ID;
+// Canal de log de moderação. Sem ele o endpoint continua respondendo 202 e não
+// envia nada: quem configura o servidor decide se quer o canal, e um servidor
+// sem canal não pode ver `/permakill` falhar por causa disso.
+const MODERATION_LOG_CHANNEL_ID = process.env.MODERATION_LOG_CHANNEL_ID;
 
 function requireEnv(name) {
     const value = process.env[name];
@@ -125,6 +130,47 @@ app.post('/api/sync-role', async (req, res) => {
         console.error(`[discord-bot] Erro ao sincronizar:`, err);
         res.status(500).json({ error: 'Erro interno do servidor' });
     }
+});
+
+/**
+ * Log de moderação — ver `moderationLog.js` e `docs/ARCHITECTURE.md` 1.3.
+ *
+ * Responde **202 e não espera o Discord**. A ação de moderação já aconteceu
+ * quando esta requisição chega: o gamemode já expulsou, o painel já gravou a
+ * decisão de whitelist. Segurar a resposta até o Discord confirmar faria um
+ * `/permakill` esperar por uma API de terceiro, e faria a lentidão do Discord
+ * virar lentidão do comando de staff.
+ *
+ * Corpo inválido responde 400 — quem manda tem um bug e precisa saber.
+ */
+app.post('/api/moderation-log', (req, res) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+    if (isRateLimited(`moderation-log:${ip}`, 60, 60 * 1000)) {
+        return res.status(429).json({ error: 'Too many requests' });
+    }
+
+    if (!isValidInternalSecret(req.get('X-Internal-Secret'))) {
+        console.warn(`[discord-bot] Tentativa nao autorizada em /api/moderation-log de ${ip}`);
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const parsed = moderationLog.parseEvent(req.body);
+    if (!parsed.ok) {
+        console.warn(`[discord-bot] Evento de moderacao recusado: ${parsed.erro}`);
+        return res.status(400).json({ error: parsed.erro });
+    }
+
+    res.status(202).json({ ok: true });
+
+    // Depois da resposta, de propósito. Uma falha aqui vira linha de log e nada
+    // mais — o registro de verdade é `audit_logs`, que já foi escrito.
+    moderationLog.sendModerationLog(client, parsed.evento, MODERATION_LOG_CHANNEL_ID)
+        .then(r => {
+            if (!r.sent && r.erro !== 'canal nao configurado') {
+                console.error(`[discord-bot] Evento '${parsed.evento.kind}' nao chegou no canal: ${r.erro}`);
+            }
+        });
 });
 
 const PORT = process.env.PORT || 3002;
