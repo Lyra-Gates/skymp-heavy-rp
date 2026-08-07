@@ -1,6 +1,10 @@
 # Voz por Proximidade — Helper Nativo (Fase 1: prova de conceito)
 
-> **Status:** pipeline provado em bancada, **helper C++ nunca compilado** (§8).
+> **Status:** pipeline provado em bancada. O servidor já aguenta um jogador
+> falando e ouvindo ao mesmo tempo (§10) e existe um caminho para um testador
+> pegar o ticket (§11) — mas o **helper C++ continua nunca compilado** (§8.1) e
+> **ninguém nunca ouviu o áudio com o ouvido** (§8.2). Os dois bloqueios
+> restantes precisam de uma pessoa numa máquina com toolchain, não de mais código.
 > Substitui o caminho de [`VOICE_CLIENT_PATCH.md`](VOICE_CLIENT_PATCH.md), que
 > fica no repositório como registro de por que foi descartado.
 
@@ -239,6 +243,29 @@ de degradação suave. Um buffer adaptativo (que cresce sob jitter em vez de
 resetar) é item da Fase 2 — ver §9.11. Nada disso foi exercitado fora de
 `127.0.0.1`.
 
+### ✅ Conexão dupla, verificada em 07/08/2026 (rodada "pronto para teste")
+
+Depois da §10, o fluxo dos dois papéis foi exercitado contra o `voip-service`
+**real** subido pelo `e2e-harness`, por sockets reais e pela rota HTTP de ticket
+— não em teste unitário. Alice com helper (`sender`) **e** UI (`listener`) ao
+mesmo tempo, Bob a meio alcance:
+
+| Verificado | Resultado |
+|---|---|
+| Helper e UI da Alice autenticam juntos | ✅ (era impossível antes) |
+| Bob recebe o áudio do helper da Alice | 1 quadro, `fromActorId` correto |
+| Volume a meio alcance (600 de 1200) | **0.5** exato |
+| Bytes do payload | idênticos |
+| Alice ouve a própria voz | **não** — 0 quadros no `listener` dela |
+| Helper recebe áudio ou `proximity_update` | **não** — 0 dos dois |
+| UI da Alice recebe `proximity_update` | sim |
+| Bob no `proximity_update` | aparece **1 vez**, não 2 |
+| Fechar o helper | UI segue aberta, **nenhum** `peer_left` |
+| Ticket de `listener` usado como `sender` | `auth_failed` |
+
+Isso valida o servidor e o protocolo. **Não valida a captura** — quem gerou os
+quadros foi a sonda, não um microfone.
+
 ### ❌ O que NÃO foi verificado
 
 1. **Captura WASAPI. O helper C++ nunca foi compilado nem executado.** Ver §8.
@@ -283,6 +310,53 @@ deve tratá-los como não verificados até o primeiro build passar, e registrar
 aqui o erro exato se alguma port não resolver — sem trocar de biblioteca sem
 anotar o motivo.
 
+### 8.1 Reverificação em 07/08/2026 (rodada "pronto para teste")
+
+Esta rodada começou com a informação de que a máquina agora teria Visual Studio
+e vcpkg. **Não tem.** A varredura foi refeita, mais ampla que a da Fase 1, e o
+resultado é o mesmo:
+
+| Verificação | Resultado |
+|---|---|
+| `vswhere.exe` no caminho canônico | não existe |
+| `C:\Program Files\Microsoft Visual Studio\` | diretório não existe |
+| `C:\Program Files (x86)\Microsoft Visual Studio\` | só `Shared\` |
+| `cl.exe` recursivo em ambos os `Program Files` (profundidade 6) | nenhum |
+| `cmake.exe` recursivo em ambos os `Program Files` (profundidade 5) | nenhum |
+| `gcc` / `g++` / `clang` / `clang++` / `cl` / `msbuild` no PATH | todos ausentes |
+| `C:\vcpkg`, `$VCPKG_ROOT`, qualquer diretório `*vcpkg*` em `C:\` | nenhum |
+| `dotnet` | presente (`C:\Program Files\dotnet\dotnet.exe`) — .NET, não MSVC |
+| `winget` | presente |
+| `node` / `npm` | v25.5.0 / 11.8.0 |
+
+**Nenhum erro de compilação foi registrado porque nenhuma compilação chegou a
+começar.** A falha antecipada no `README.md` — símbolo duplicado do `miniaudio`
+se a port vier pré-compilada — continua sendo uma hipótese não testada, e não
+deve ser lida como resolvida.
+
+O que existe é `winget`, ou seja o build é **alcançável**: instalar os
+*VS Build Tools 2022* (workload de C++), CMake e vcpkg é da ordem de 5–8 GB, pede
+elevação e altera a máquina de forma persistente. Isso não foi feito nesta rodada
+por ser uma mudança de ambiente que quem opera a máquina decide, não uma escolha
+de implementação. **É o único item desta rodada que continua bloqueado**, e é o
+que separa "helper escrito e revisado" de "helper que existe como binário".
+
+### 8.2 Nem esta rodada nem a Fase 1 ouviram o áudio
+
+A Fase 1 registrou "ninguém ouviu com o ouvido" como limitação de ambiente. Ela
+continua valendo, e por um motivo mais básico do que a falta de compilador:
+**quem executou esta rodada é um agente, sem ouvido e sem saída de áudio.** A
+máquina tem cinco dispositivos de áudio (`Dispositivo de áudio USB`, três
+controladoras AMD, Realtek), então o hardware está lá — o que falta é a pessoa.
+
+Isso não é contornável com mais medição. Medir amplitude, frequência e RMS já foi
+feito na Fase 1 e é forte (§7); **inteligibilidade não é uma medida, é um
+julgamento**, e um sinal pode bater todos os números e ainda sair irreconhecível
+(inversão de fase, endianness trocada num canal, reamostragem sutil). Por isso o
+passo 6 da etapa 8.2 do `FASE_0_ROTEIRO.md` pede "voz **inteligível**, não só
+'tem sinal'": é a única verificação do roteiro de voz que exige uma pessoa e não
+pode ser delegada.
+
 Escolha do `miniaudio` sobre WASAPI/COM cru: header-only, licença permissiva
 (MIT/domínio público), e evita ~400 linhas de `IMMDeviceEnumerator`/`IAudioClient`
 que seriam código nosso para manter sem ganho nenhum sobre o que a biblioteca já
@@ -295,16 +369,14 @@ Nada abaixo foi feito neste PR.
 
 **Bloqueadores de uso real**
 
-1. **Um socket por `actorId` impede helper e UI de coexistirem.** `voipClients` é
-   indexado por `actorId`: se o helper autentica como o jogador X, ele *substitui*
-   a conexão da UI de X, e vice-versa. O teste de bancada contornou isso usando
-   dois atores diferentes (helper = A, navegador = B). Um jogador de verdade
-   precisa dos dois ao mesmo tempo. Exige conexões com papel (`sender`/`listener`)
-   ou múltiplas conexões por ator — e mexe em `broadcast`, `tickProximity`,
-   fechamento de socket e no relay.
+1. ~~**Um socket por `actorId` impede helper e UI de coexistirem.**~~
+   **Resolvido em 07/08/2026 — ver §10.**
 2. **Handoff automático do ticket.** Hoje é copiar e colar na linha de comando.
-   Pior: `issueTicket` sobrescreve o ticket pendente daquele ator, então um `/voz`
-   não serve para os dois lados.
+   ~~Pior: `issueTicket` sobrescreve o ticket pendente daquele ator, então um
+   `/voz` não serve para os dois lados.~~ A sobrescrita foi resolvida junto com
+   a §10 (o ticket agora é por papel, e um `/voz` emite os dois); o handoff
+   automático continua aberto e é Fase 3. O andaime temporário que destrava o
+   teste manual está na §11.
 3. **Empacotamento e assinatura do executável**, e integração com o launcher —
    mesma exigência de carimbo de tempo já registrada em
    [`LAUNCHER_DISTRIBUTION.md` §6](LAUNCHER_DISTRIBUTION.md).
@@ -331,3 +403,145 @@ Nada abaixo foi feito neste PR.
 11. **Jitter buffer adaptativo.** A política atual pula para `now + 60ms` quando
     esgota, inserindo ~48ms de silêncio a cada atraso da fonte (medido no §7).
     Um buffer que cresce sob jitter degrada suave em vez de picotar.
+
+## 10. Decisão: papel na conexão (`listener` / `sender`)
+
+**O problema.** `voipClients` era `Map<actorId, conexão>` — uma conexão por ator.
+Enquanto a captura morava no navegador isso estava certo: falar e ouvir saíam
+pelo mesmo socket. A captura saiu (§2), e o índice ficou errado. Helper e UI do
+**mesmo jogador** autenticam com o mesmo `actorId` e brigavam pelo mesmo slot:
+quem chegasse por último derrubava o outro. A bancada da Fase 1 contornou usando
+dois atores distintos (helper = A, navegador = B), que é exatamente o arranjo que
+**não** é o de um jogador real.
+
+**Escolhido:** `auth` ganha `role`, e `voipClients` passa a
+`Map<actorId, { listener, sender, voiceMode, muted }>`.
+
+```jsonc
+// UI (index.html) — não manda o campo
+{ "type": "auth", "actorId": 4278192658, "ticket": "…" }
+
+// helper nativo — manda explicitamente
+{ "type": "auth", "actorId": 4278192658, "ticket": "…", "role": "sender" }
+```
+
+**`listener` é o padrão, e isso não é só compatibilidade.** O `index.html` atual
+não manda `role` e não precisa passar a mandar — mas o motivo de o padrão ser
+esse é que *quem só escuta é um listener*. A compatibilidade cai fora como
+consequência, em vez de custar um ramo de código só para ela.
+
+### O que é por conexão e o que é por ator
+
+Esta é a parte que decide o comportamento, e por isso está escrita aqui e não só
+no código:
+
+| Estado | Vive em | Por quê |
+|---|---|---|
+| socket, log de frame grande | conexão | é o socket que se comporta mal |
+| `voiceMode` | ator | define o alcance com que a pessoa é ouvida; quem fala (helper) não é quem tem o seletor (UI) |
+| `muted` | **ator** | ver abaixo |
+
+**Mutar é do ator, não da conexão.** Se `muted` vivesse na conexão, o mute
+clicado na UI valeria só para o socket da UI — e o helper continuaria
+transmitindo. A pessoa se veria mutada na tela e seguiria sendo ouvida na cena.
+Num controle de microfone esse é o pior defeito possível: não é perder uma
+função, é a interface mentir sobre privacidade. Há teste travando isso.
+
+### Auditoria dos call sites
+
+Todos os pontos que assumiam uma conexão por ator:
+
+- **`tickProximity`** — a posição é lida **uma vez por ator**, não por conexão.
+  Iterar conexões faria um jogador com os dois papéis abertos entrar duas vezes
+  na lista: apareceria duplicado no `proximity_update` dos outros e cada quadro
+  seria entregue **em dobro** no `listener` dele — voz sobreposta a si mesma, que
+  soa como flanger, não como defeito de rede. O `proximity_update` sai só para o
+  `listener`: o `sender` não tem ganho para ajustar.
+- **`relayAudioFrame`** — a audiência é sempre a conexão `listener` dos outros
+  atores, nunca um `sender` deles (que descartaria). A audiência já exclui o
+  próprio locutor, então o `listener` de quem fala não recebe a própria voz.
+- **`close`** — limpa **só o slot daquele papel**, e só se ele ainda for daquele
+  socket. Sem essa checagem de identidade, uma reconexão no mesmo papel se
+  autodestrói: o `close` atrasado da conexão velha chega depois de a nova já
+  estar registrada e apaga a nova. `peer_left` sai **só quando cai o
+  `listener`** — fechar o helper significa parar de falar, não sair da cena;
+  quem fecha a UI é que de fato saiu. A entrada do ator só é removida quando os
+  dois papéis se foram.
+- **`broadcast`** — entrega só a `listener`s. O que passa por ali hoje é
+  `peer_left`, que existe para a UI desmontar o áudio de quem saiu; o helper não
+  tem o que desmontar.
+- **`offer`/`answer`/`ice`** — roteados para o `listener` do alvo. É o navegador
+  que tem `RTCPeerConnection`.
+- **`audio_frame`** — aceito de **qualquer** papel autenticado, de propósito. Os
+  dois sockets provaram a mesma identidade pelo mesmo handshake, então exigir
+  `sender` aqui não fecharia furo nenhum; só quebraria a sonda em Node e quem
+  ainda autentica sem `role`. O relay continua usando a identidade autenticada,
+  nunca o `fromActorId` que veio na mensagem.
+
+### O ticket também virou por papel
+
+`issueTicket` sobrescrevia o pendente daquele ator e o ticket é de uso único.
+Consequência: o `/voz` que serve a UI **queima** o ticket que o helper usaria, e
+os dois papéis nunca conseguem estar autenticados ao mesmo tempo. A chave passou
+a ser `${actorId}:${role}` e um `/voz` emite os dois.
+
+Sem isso a mudança em `voipClients` seria correta e **inútil** — o slot duplo
+existiria e ninguém conseguiria ocupar os dois. Um ticket de um papel não vale no
+outro, e há teste travando isso: os dois lados autenticam no mesmo endpoint com o
+mesmo formato, e um token intercambiável faria o handshake parar de distinguir
+exatamente o que esta seção acabou de separar.
+
+### Testado por mutação
+
+12 mutações, 12 reprovações — cada uma é um jeito plausível de errar a separação
+de papéis: `peer_left` também ao sair o `sender`; `close` apagando a entrada
+inteira; `close` sem conferir a identidade do socket; relay caindo no `sender`
+quando não há `listener`; `mute` por conexão; tick iterando conexões; chave de
+ticket ignorando o papel; `auth` aceitando qualquer papel; `proximity_update`
+para qualquer socket aberto; `/voz` voltando a emitir um ticket só; exposição de
+debug ligada por padrão; e o debug gravando o ticket errado.
+
+Quatro delas **sobreviveram na primeira passada** e apontaram buracos reais nos
+testes — faltava o caso do ator com **só** `sender` (que não pode receber nada) e
+a asserção de duplicidade estava no ator errado (o que tinha um papel só, onde a
+duplicação não aparece). Um quinto teste passava pelo motivo errado: emitia
+ticket de `listener` e mandava `role: 'admin'`, então a recusa vinha da falta de
+ticket, não da validação de papel — passaria igual com a validação removida.
+
+## 11. Andaime temporário: exposição do ticket para teste manual
+
+> ⚠️ **Isto é temporário e deve ser removido.** A Fase 3 (handoff automático,
+> jogo → helper, sem intervenção manual — §9.2) substitui isto por completo. Ao
+> implementá-la, apague a flag, a função `_exposeDebugTicket`, a entrada no
+> `.gitignore` e esta seção.
+
+**O problema.** O ticket emitido por `/voz` ia só para a property `voipTicket`,
+lida pelo navegador do jogo. Não havia como um humano lê-lo — e sem lê-lo não há
+como passar `--ticket` para o `voice-helper.exe`. Um testador não conseguia
+sequer iniciar o teste.
+
+**Escolhido:** `VOIP_DEBUG_EXPOSE_TICKET`, **padrão `false`**. Ligada, o `/voz`
+também grava o ticket de `sender` em `skymp/gamemode/.voip-debug-ticket.json`
+(ignorado no git) e loga em `warn` a linha de comando já montada.
+
+**Por que atrás de flag e desligada por padrão.** Isso grava em disco, em texto
+puro, uma credencial que autentica como aquele jogador na cena de voz. Os 30
+segundos de TTL limitam o estrago, e ainda assim quem ler o arquivo dentro da
+janela fala pela boca da pessoa. É aceitável numa bancada com um engenheiro
+olhando, e em nenhum outro lugar. **Não entra em nenhum `.env.example`**: quem
+precisa liga à mão e desliga depois.
+
+Três decisões pequenas que valem registro:
+
+1. **A flag é lida a cada chamada, não uma vez no load.** Uma flag que só pode
+   ser desligada reiniciando o servidor é uma flag que alguém vai deixar ligada
+   para não ter que reiniciar de novo. Custa um `process.env` por `/voz`, que é
+   um comando humano.
+2. **Só a string `'true'` liga.** `'1'`, `'yes'` e `'TRUE'` não ligam — o padrão
+   seguro tem que ser o caso fácil.
+3. **O ticket de `sender` é emitido sempre, esteja ou não exposto.** Emitir é
+   barato (expira em 30s sem uso), e assim a **exposição** — que é a parte
+   arriscada — fica sendo a única coisa atrás da flag.
+
+O roteiro de uso está em [`FASE_0_ROTEIRO.md` §8.2](FASE_0_ROTEIRO.md), incluindo
+o passo de desligar a flag no fim.

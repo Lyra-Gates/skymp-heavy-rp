@@ -12,18 +12,23 @@ depois. A arquitetura e o porquê estão em
 
 > ⚠️ **Fase 1 — prova de conceito.** O código deste diretório **nunca foi
 > compilado**: a máquina onde foi escrito não tem Visual Studio, CMake nem vcpkg
-> (evidência em VOICE_NATIVE_HELPER.md §8). O pipeline servidor→navegador foi
-> validado com a sonda em Node (`tools/frame-probe.js`); a captura WASAPI não.
+> (evidência em VOICE_NATIVE_HELPER.md §8, reverificada em §8.1 — continua sem).
+> O pipeline servidor→navegador foi validado com a sonda em Node
+> (`tools/frame-probe.js`); a captura WASAPI não.
 > Trate `CMakeLists.txt`, `vcpkg.json` e `src/main.cpp` como **não verificados**
 > até o primeiro build passar.
 
 ## Limitações desta fase (deliberadas)
 
 - **O ticket é passado à mão**, por linha de comando. Não há handoff automático
-  entre o jogo e o helper — é trabalho da Fase 2.
-- **O helper e a UI do mesmo jogador não coexistem.** O `voip-service` indexa
-  clientes por `actorId`: quem autenticar por último derruba o anterior. Para
-  testar, use atores diferentes (helper = jogador A, navegador = jogador B).
+  entre o jogo e o helper — é trabalho da Fase 3. Para conseguir ler o ticket
+  durante um teste manual existe um andaime temporário
+  (`VOIP_DEBUG_EXPOSE_TICKET`), descrito em VOICE_NATIVE_HELPER.md §11.
+- ~~**O helper e a UI do mesmo jogador não coexistem.**~~ **Resolvido em
+  07/08/2026.** O `auth` passou a levar `role` (`listener` para a UI, `sender`
+  para o helper) e o `voip-service` guarda as duas conexões por ator. O helper
+  manda `role: "sender"` sozinho — não há nada a fazer na linha de comando. Ver
+  VOICE_NATIVE_HELPER.md §10.
 - **Sem UI, sem bandeja, sem serviço.** É um processo de terminal; sai com Ctrl+C.
 - **Sem cancelamento de eco.** Use fone, ou sua voz volta pra cena.
 - **PCM cru** (~1 Mbit/s de subida). Opus fica pra Fase 2.
@@ -104,18 +109,28 @@ node voice-helper/tools/e2e-harness.js --voip-port 7778 --http-port 8099
 > autenticação** — é exatamente o furo que o handshake por ticket fecha. Só em
 > `127.0.0.1`, em máquina de desenvolvimento.
 
-Rotas: `/` (a UI), `/ticket?actorId=`, `/move?actorId=&x=&y=&z=`, `/state`.
+Rotas: `/` (a UI), `/ticket?actorId=&role=`, `/move?actorId=&x=&y=&z=`, `/state`.
+
+O `role` do `/ticket` é `listener` (padrão, o que a página busca) ou `sender` (o
+que a sonda e o helper usam). São tickets diferentes de propósito — um não serve
+no lugar do outro, e é isso que deixa os dois papéis do mesmo jogador conectados
+ao mesmo tempo. Ver VOICE_NATIVE_HELPER.md §10.
 
 **Sonda** — fala o mesmo protocolo do helper, com um tom de 440Hz no lugar do
 microfone. É o que isola falha de captura de falha de transporte:
 
 ```bash
-node voice-helper/tools/frame-probe.js --actor-id 0xFF000A12 --ticket <token> --seconds 10
+node voice-helper/tools/frame-probe.js --actor-id 0xFF000A12 --ticket <token de sender> --seconds 10
 ```
 
 ```bash
-node voice-helper/tools/frame-probe.js --listen --actor-id 0xFF000A13 --ticket <token>
+node voice-helper/tools/frame-probe.js --listen --actor-id 0xFF000A13 --ticket <token de listener>
 ```
+
+O papel segue o modo: gerando tom ela autentica como `sender` (o que o helper
+faz), com `--listen` como `listener` (o que a UI faz). `--role` força o contrário,
+pra testar o lado errado de propósito. Peça ao harness o ticket do papel certo —
+`/ticket?actorId=0xFF000A12&role=sender` — ou a auth é recusada.
 
 Roteiro completo do teste e os números medidos: VOICE_NATIVE_HELPER.md §7.
 
