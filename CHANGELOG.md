@@ -11,6 +11,14 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Validação de item contra os plugins carregados** (). O terceiro item do aproveitamento do Red House:  deixa o servidor ler os records dos ESMs, então dá pra conferir se um  existe e é mesmo um item — em vez de gravar qualquer número no inventário.
+
+  Ligado nos dois pontos onde um  novo **entra** no sistema:  e o anúncio em barraca. Nos dois o valor vem digitado à mão em hexadecimal, e antes disto um dígito errado gravava  do mesmo jeito — o item nunca aparecia in-game, mas ocupava linha no banco e no ledger, e ninguém descobria até alguém conferir inventário à mão. No caso da barraca é pior: alguém paga por uma linha de banco que nunca vira item na tela.
+
+  **O formato da API foi confirmado num servidor real, não inferido.** O projeto sabia que a função existia e nunca tinha visto o retorno dela; uma sonda temporária foi apontada como gamemode e o log respondeu. O detalhe que uma implementação adivinhada erraria: FormID inválido devolve  — objeto vazio e *truthy* —, então  faria o Player passar como item. A assinatura entrou em  marcada como , com a procedência.
+
+  A validação **deixa passar quando não dá pra saber**: existe para pegar erro de digitação, não para ser autoridade. Só nega quando a API respondeu e respondeu que aquele FormID não é item — senão viraria uma quebra de  em qualquer servidor onde ela não exista.
+
 - **Zonas seguras — a `action-policy` passa a bloquear por lugar, não só por estado.** Vem do Red House, que checa `isInSafeLocation` antes de aplicar dano ([REFERENCE_STUDY §4.1](docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md)). `core/safe-zones.js` responde onde alguém está e o que aquele lugar proíbe; a `canPerform` ganhou a dimensão usando o `context` que já estava declarado como "para validações futuras".
 
   A **regra dos dois lados** veio junto e tem teste próprio: uma ação entre duas pessoas é barrada se qualquer uma estiver protegida, porque proteger só o alvo deixaria alguém atirar de dentro da zona para fora dela. Estado continua sendo checado antes de lugar — para quem está algemado dentro de uma zona segura, "você está algemado" é a explicação útil.

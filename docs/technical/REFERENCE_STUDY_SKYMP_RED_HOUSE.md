@@ -336,6 +336,23 @@ Este é o modelo do que o Red House nos dá de mais útil: não código, mas **a
 ### Outras coisas que aprendemos
 
 - **`mp.lookupEspmRecordById(formId)`** — o servidor consegue ler registros dos plugins (dano base de arma, armadura, perks, raça). Não sabíamos que existia. Abre validação server-side de item usando o dado real do ESM em vez de tabela nossa.
+
+  ✅ **Implementado em 06/08/2026, com o formato confirmado num servidor real.** O projeto sabia que a função existia e nunca tinha visto o retorno dela — escrever validação em cima de formato adivinhado seria repetir o erro que já custou caro duas vezes aqui (o `self` do Papyrus, o require nu de dotenv). Uma sonda temporária foi apontada como gamemode, o servidor subiu, e o log respondeu:
+
+  ```
+  mp.lookupEspmRecordById(0x0000000f)
+  // { record: { id: 15, editorId: 'Gold001', type: 'MISC', flags: 0, fields: [...] },
+  //   fileIndex, toGlobalRecordId }
+
+  mp.lookupEspmRecordById(0x00000014)   // Player, que é referência
+  // {}                                  ← sem `record`
+  ```
+
+  **O detalhe que uma implementação adivinhada erraria: FormID inválido devolve `{}`, e `{}` é truthy.** Checar `if (r)` faria o Player passar como item. A checagem correta é `r && r.record`, e há teste de mutação para isso.
+
+  Virou `core/espm.js` (com cache — o retorno traz todos os fields em bytes, e a load order não muda em runtime) e está ligado nos dois pontos onde um `base_id` novo **entra** no sistema: `/additem` e o anúncio em barraca. Nos dois o valor vem digitado à mão em hexadecimal, e antes disto um dígito errado gravava `character_inventory` do mesmo jeito — o item nunca aparecia in-game, mas ocupava linha no banco e no ledger.
+
+  A validação **deixa passar quando não dá pra saber**: ela existe para pegar erro de digitação, não para ser autoridade. Só nega quando a API respondeu e respondeu que aquele FormID não é item. A assinatura foi documentada em `types/mp.d.ts` como `[USO]`, com a procedência.
 - **Módulos com hook `onHit`** — o sistema de módulos deles recebe eventos, não só `initialize`. O nosso `core/module-registry.js` só tem ciclo de vida; um dia pode valer distribuir eventos de jogo pra módulos ativos.
 - **`onCellChange`** por `makeEventSource` — saber quando alguém troca de célula é a base de zonas seguras, territórios e presença.
 - **`server-options.json` era deles.** As opções do nosso `SERVER_OPTIONS_SCHEMA.md` (`isVanillaSpawn`, `SpawnTimeToRespawn`, `spawnTimeToRespawnNPC`) são as do Red House. Isso explica por que o schema descrevia coisas que o nosso código nunca implementou: foi copiado como intenção e nunca ligado. Ver `QA_REPORT_2026-08.md` 2.10 — hoje o `core/server-options.js` diz claramente o que está ligado e o que não está.

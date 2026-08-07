@@ -528,6 +528,17 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     return;
   }
 
+  // Mesmo motivo do /additem: o baseId vem digitado em hexadecimal pelo
+  // jogador. Aqui o custo de aceitar errado e maior — o item sai do inventario
+  // dele, entra no estoque da barraca, e alguem paga por uma linha de banco que
+  // nunca vira item na tela. Sem esta checagem o erro so apareceria como
+  // reclamacao de compra, muito depois, sem nada no log ligando as duas coisas.
+  const vereditoDoItem = require('./core/espm').pareceItem(baseId);
+  if (!vereditoDoItem.ok) {
+    notify(actorId, `Item invalido: ${vereditoDoItem.motivo}.`);
+    return;
+  }
+
   // Remover item do inventario ANTES da transacao de barraca
   // (inventory-service ja usa transaction-service internamente)
   const removed = await inventory.removeItem(actorId, character.characterId, baseId, count, 'stall_list_item', MODULE);
