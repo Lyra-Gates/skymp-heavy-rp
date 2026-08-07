@@ -54,6 +54,14 @@ function removeActiveCharacter(actorId) {
     // fecharia o ciclo.
     require('./admin-service').removeStaffRole(actorId);
 
+    // Mesma classe de problema, mesmo motivo de require preguicoso
+    // (death-service requer este modulo no topo): `_lastHealth` guarda a ultima
+    // leitura de vida por actorId, e o slot reaproveitado fazia o primeiro tick
+    // do jogador seguinte virar um `damage_spike` falso no contexto de morte —
+    // evidencia de RDM contra quem nao levou golpe nenhum. Ver a explicacao
+    // completa em death-service.cleanup().
+    require('./death-service').cleanup(actorId);
+
     activeCharacters.delete(actorId);
   }
 }
