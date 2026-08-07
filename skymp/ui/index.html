@@ -857,7 +857,8 @@
     // Só reprograma o ganho quando o volume muda de verdade. Chamar
     // setTargetAtTime 50x por segundo empilharia eventos na timeline do
     // AudioParam sem mudar nada — o servidor só recalcula volume a cada 2s.
-    if (volume !== chain.volume) {
+    const volumeMudou = volume !== chain.volume;
+    if (volumeMudou) {
       chain.volume = volume;
       chain.gainNode.gain.setTargetAtTime(volume, ctx.currentTime, 0.1);
     }
@@ -875,7 +876,10 @@
     source.start(chain.nextPlayTime);
     chain.nextPlayTime += buffer.duration;
 
-    updatePeerHUD(fromActorId, volume, false);
+    // Pelo mesmo motivo do ganho: o HUD só muda quando o volume muda. Sem a
+    // guarda seriam 50 escritas de DOM por segundo por locutor, num overlay
+    // desenhado por cima do jogo, pra pintar sempre a mesma largura de barra.
+    if (volumeMudou) updatePeerHUD(fromActorId, volume, false);
 
     // Corrige o chip na primeira vez que áudio realmente chega. Sem isto, quem
     // está no client oficial lê "VOZ INDISPONÍVEL" enquanto ouve outra pessoa

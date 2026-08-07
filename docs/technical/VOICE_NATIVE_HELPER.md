@@ -215,7 +215,29 @@ CEF, o que deu ao teste a condição exata do client oficial.
 | Erros de decodificação | **nenhum** em ~1300 quadros |
 
 O sinal foi medido no `AnalyserNode` ligado à saída da cadeia de ganho que
-alimenta o `destination` — depois do volume da proximidade, não antes.
+alimenta o `destination` — depois do volume da proximidade, não antes. Cada
+medição confirma, no mesmo instante, que havia tráfego: sem essa checagem uma
+leitura de silêncio é ambígua (várias medições intermediárias leram zero
+simplesmente porque a sonda tinha encerrado, e por um momento isso foi lido como
+defeito). O controle é injetar um buffer conhecido no mesmo nó de ganho: ele
+mede 0.225, provando que o caminho de medição funciona quando há o que medir.
+
+### ⚠️ Achado: re-bufferização audível quando a fonte é mais lenta que o tempo real
+
+Instrumentando o agendamento, a folga entre `nextPlayTime` e o relógio do
+`AudioContext` **encolhe ~10ms por quadro** e reinicia em 60ms ao esgotar —
+**4 re-bufferizações a cada 25 quadros**. A causa medida é a sonda: ela entrega
+um quadro a cada **30,8ms** em vez de 20ms, porque `setInterval` do Node não
+tem essa precisão. Ou seja, é limitação da *sonda*, não do transporte — o helper
+nativo é dirigido pelo relógio do dispositivo WASAPI, que entrega em tempo real
+por construção.
+
+Mas o achado sobre o **nosso** código é real: a política atual de underrun
+(`nextPlayTime < now` → pula para `now + 60ms`) insere um silêncio de ~48ms toda
+vez que a fonte atrasa. Numa rede real com jitter, isso vira picotamento em vez
+de degradação suave. Um buffer adaptativo (que cresce sob jitter em vez de
+resetar) é item da Fase 2 — ver §9.11. Nada disso foi exercitado fora de
+`127.0.0.1`.
 
 ### ❌ O que NÃO foi verificado
 
@@ -306,3 +328,6 @@ Nada abaixo foi feito neste PR.
    o tem.
 9. **`--list-devices` no helper**, para quem tem mais de um microfone.
 10. **Teste com rede real**, não `127.0.0.1`.
+11. **Jitter buffer adaptativo.** A política atual pula para `now + 60ms` quando
+    esgota, inserindo ~48ms de silêncio a cada atraso da fonte (medido no §7).
+    Um buffer que cresce sob jitter degrada suave em vez de picotar.
