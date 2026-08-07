@@ -63,6 +63,13 @@ Se alguma port não resolver, **anote o erro exato em VOICE_NATIVE_HELPER.md §8
 antes de trocar de biblioteca** — a decisão de usar `miniaudio` está registrada
 com motivo, e trocá-la em silêncio apagaria o motivo junto.
 
+**Falha mais provável no primeiro build**, já que nada disto foi verificado:
+`src/main.cpp` faz `#define MINIAUDIO_IMPLEMENTATION` antes do include, o que
+assume que a port entrega o `miniaudio.h` como header-only. Se a port do vcpkg
+entregar uma biblioteca já compilada, isso vira erro de **símbolo duplicado** no
+link. Nesse caso remova o `#define` e deixe o `target_link_libraries` resolver —
+e registre a correção aqui.
+
 ## Rodar
 
 ```bash
