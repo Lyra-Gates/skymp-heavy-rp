@@ -759,7 +759,9 @@ Rodar o projeto de forma sustentavel.
 - Nivel de rigidez Heavy RP.
 - Se historias de personagem exigem aprovacao antes do primeiro login.
 - Meta de jogadores para primeira beta publica.
-- Se voice chat e obrigatorio.
+- **Voice chat não é obrigatório — fechado em 07/08/2026.** A voz nativa por proximidade (`/voz`, `voip-service.js`) é **opcional, fase `lab`, Pós-Alfa**: não é pré-requisito de lançamento e nada no caminho crítico depende dela. A voz da Alfa e da Beta fechada são os **canais de voz temporários do Discord** (`apps/bot-discord/voiceChannels.js`, `/voz-criar` e `/voz-fechar`) — que já funcionam.
+  - **Por quê:** o patch de client que libera o microfone no CEF nunca foi compilado nem validado, e foi submetido três vezes ao upstream do SkyMP sem nunca ser mergeado — as três PRs foram auto-fechadas pelo próprio autor, sem review de mantenedor, o que é rejeição por abandono e não decisão técnica. Reconstruí-lo exigiria fork e manutenção contínua de um client C++, custo que não se paga antes da Fase 0 nem da Alfa. Ver [`VOICE_CLIENT_PATCH.md`](docs/technical/VOICE_CLIENT_PATCH.md) e o "Não fazer" do [`QA_REPORT_2026-08.md`](docs/technical/QA_REPORT_2026-08.md).
+  - **Isto pode ser revisitado.** Se o upstream mergear um patch equivalente, ou se alguém validar a compilação num ambiente Windows/Visual Studio/vcpkg, o lado servidor já está pronto: `voip-service.js` tem sinalização WebRTC, ticket de uso único e volume por distância, tudo coberto por teste. Voltar atrás é destravar uma peça que já existe, não reescrever.
 - Se morte permanente existe no lancamento.
 - Se launcher e obrigatorio antes da beta publica.
 - Quais mods sao permitidos e legalmente redistribuiveis.

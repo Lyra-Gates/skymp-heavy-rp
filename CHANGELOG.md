@@ -121,6 +121,14 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **O aviso de voz indisponível existia e era apagado meio segundo depois.** `initMicrophone()` já tratava `NotAllowedError` com a mensagem certa — `VOZ INDISPONÍVEL NESTE CLIENT — use o Discord` — e em seguida fechava o WebSocket de sinalização, porque sem microfone não faz sentido manter a conexão pela metade. Só que `ws.onclose` chamava `setStatus('error', 'VOZ DESCONECTADA')` sem condição alguma, e o evento `close` chega no tick seguinte: o chip acabava sempre no texto genérico. O jogador lia "desconectada", que é a consequência, e concluía instabilidade de servidor — o diagnóstico exatamente oposto ao real, que é uma limitação conhecida do client (`docs/technical/VOICE_CLIENT_PATCH.md`).
+
+  Mesmo defeito no `auth_failed`, que também fecha o socket depois de escrever o motivo. Um `state.voiceFatal` marca que já existe um motivo terminal na tela e o `onclose`/`onerror` param de sobrescrevê-lo; `connectVoip` limpa a marca, porque um `/voz` novo é uma tentativa nova.
+
+  **O chip sozinho não resolvia, mesmo consertado.** São 12px no topo da tela: cabe estado, não cabe motivo, e o resto ia para o console do CEF em `localhost:9000`, que ninguém em jogo abre. As três falhas de microfone passam a escrever também no `chat-log` — que já é `pointer-events: none` e some sozinho, então avisa sem travar nada nem exigir clique. O texto do caso `NotAllowedError` diz as três coisas que evitam o ticket errado: não é o microfone do jogador, não é o servidor, e tentar de novo dá no mesmo — use `/voz-criar` no Discord.
+
+  Sem teste automatizado: `skymp/ui/` não tem suíte, `package.json` nem dependência de teste, e criar infraestrutura de front-end do zero para esta mudança não é proporcional. **Fica como pendência de verificação visual** — e é uma pendência mais barata que as da Fase 0, porque não precisa de dois jogadores conectados, só de alguém abrir o client uma vez e rodar `/voz`.
+
 - **A última leitura de vida sobrevivia à desconexão.** `_lastHealth` do `death-service` é chaveado por `actorId`, e o SkyMP reaproveita `actorId` entre sessões — mesma classe do `staffCache` do `admin-service`, que fazia quem entrasse depois herdar o cargo de um admin que já tinha saído.
 
   Aqui o estrago é pior porque é silencioso e cai justamente na evidência que a staff usa para arbitrar RDM. Alguém sai com 500 de vida, o slot é reaproveitado por outro jogador que entra com 100: o primeiro tick de `checkDamageSpike` lê `previous = 500`, calcula uma queda de 400 e grava um `damage_spike` no contexto de morte. O novo jogador aparece como tendo apanhado sem ter levado um golpe. O caso inverso — sair ferido, entrar cheio — esconde uma agressão real, porque a diferença fica negativa e não passa do threshold.
@@ -144,6 +152,12 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **`database.js` não tinha `close()`**, e o `verify-governance-market-stalls.js` já chamava `db.close()` atrás de um guard que nunca disparava. `RUN_DB_CHECK=1 npm run test:systems` imprimia "10/10 passaram" e ficava pendurado para sempre (exit 124 por timeout; agora exit 0). Num CI com banco, o job só terminaria no timeout e o relatório diria "cancelado".
 
 ### Alterado
+
+- **"Se voice chat é obrigatório" deixou de ser decisão em aberto** (§13 do [`SKYMP_RP_DEVELOPMENT_PLAN.md`](SKYMP_RP_DEVELOPMENT_PLAN.md)). Na prática o projeto já tinha decidido — o "Não fazer" do [`QA_REPORT_2026-08.md`](docs/technical/QA_REPORT_2026-08.md) manda não perseguir o VOIP nativo antes do resto, e o [`VOICE_CLIENT_PATCH.md`](docs/technical/VOICE_CLIENT_PATCH.md) explica por quê. Faltava estar escrito no documento que lista as decisões pendentes, e enquanto não estivesse, quem consultasse aquela seção leria que o assunto ainda estava aberto.
+
+  Fica registrado: voz nativa por proximidade é **opcional, fase `lab`, Pós-Alfa**, não é pré-requisito de lançamento; os canais de voz do Discord são a solução da Alfa e da Beta fechada. O motivo é custo, não desinteresse — o patch de client nunca foi compilado, as três PRs upstream foram auto-fechadas pelo autor sem review, e refazê-lo exigiria fork e manutenção de um client C++. A entrada diz também como voltar atrás, porque `voip-service.js` está pronto e testado do lado servidor: é destravar peça existente, não reescrever.
+
+  A `ARCHITECTURE.md` 1.4.4 afirmava, no presente, que a decisão seguia em aberto — documentação que não reflete a decisão real engana igual a config que ninguém lê. Passa a apontar para a decisão fechada.
 
 - **`crafting` e `jobs` passam a mexer em item pelo `core/transaction-service`.** `housing`, `horse` e `trade` já tinham sido migrados quando o `economy-service` foi apagado; o que faltava era o teste que trava a migração, e os dois casos que a primeira rodada não viu porque procurava por **ouro**.
 

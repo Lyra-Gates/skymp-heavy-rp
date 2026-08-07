@@ -142,7 +142,19 @@ A parte mais nova e menos verificada do gamemode.
 
 ## Etapa 8 — VOIP (opcional)
 
-Só se o patch de client de `VOICE_CLIENT_PATCH.md` tiver sido aplicado. Sem ele, `/voz` não conecta e **isso é esperado, não é bug**.
+A voz nativa é **opcional e Pós-Alfa** por decisão fechada em 07/08/2026 (§13 do `SKYMP_RP_DEVELOPMENT_PLAN.md`). Conectar de verdade só é possível se o patch de client de `VOICE_CLIENT_PATCH.md` tiver sido aplicado; sem ele `/voz` não conecta, e **isso é esperado, não é bug**.
+
+### 8.1 O aviso de fallback aparece na tela? (1 pessoa, 1 client, 2 min)
+
+Esta é a única verificação do roteiro que **não precisa de dois jogadores conectados** — pode ser feita por quem abrir o client primeiro, e não deveria esperar o resto da Fase 0. Ela existe porque, sem o patch, a mensagem de erro *é* a experiência de voz de todo mundo na Alfa.
+
+Com `ENABLE_VOIP_SERVICE=true`, entre em jogo e rode `/voz`. O esperado:
+
+- o chip no topo termina em **`VOZ INDISPONÍVEL NESTE CLIENT — use o Discord`** e **fica nele** — se ele virar `VOZ DESCONECTADA`, o `state.voiceFatal` de `skymp/ui/index.html` não está segurando o `onclose` e o jogador está lendo o diagnóstico errado;
+- uma linha aparece no log de chat (canto inferior esquerdo) dizendo que é limitação do client, não do microfone nem do servidor, e apontando `/voz-criar` no Discord;
+- nada trava: dá para andar, abrir o `/painel` e continuar jogando com a mensagem na tela.
+
+Anote o que apareceu. **Isto nunca foi visto num CEF real** — `skymp/ui/` não tem suíte de teste, então o comportamento é conhecido por leitura de código apenas.
 
 ---
 

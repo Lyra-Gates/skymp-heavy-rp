@@ -452,6 +452,8 @@
     voiceMode: 'normal',       // normal | whisper | shout
     peers: new Map(),          // actorId -> { pc, gainNode, audioEl }
     ws: null,
+    voiceFatal: false,         // motivo terminal já exibido — ver setStatus/onclose
+
     audioCtx: null,
     localStream: null,
     interaction: {
@@ -669,6 +671,7 @@
   // só funcionaria com o jogador na mesma máquina do servidor.
   function connectVoip(actorId, ticket, host, port) {
     state.actorId = actorId;
+    state.voiceFatal = false; // nova tentativa de /voz — o motivo anterior não vale mais
     const wsUrl = `ws://${host || '127.0.0.1'}:${port || 7778}`;
     state.ws = new WebSocket(wsUrl);
 
@@ -681,8 +684,14 @@
       await handleSignal(msg);
     };
 
-    state.ws.onerror = () => setStatus('error', 'VOZ INDISPONÍVEL');
-    state.ws.onclose = () => setStatus('error', 'VOZ DESCONECTADA');
+    state.ws.onerror = () => { if (!state.voiceFatal) setStatus('error', 'VOZ INDISPONÍVEL'); };
+
+    // 'VOZ DESCONECTADA' descreve a consequência, não a causa. Quando a
+    // sinalização é fechada *por nós* depois de um motivo terminal já exibido
+    // (mic bloqueado pelo CEF, ticket recusado), o close chega no tick seguinte
+    // e apagava a mensagem específica — o jogador acabava lendo "desconectada",
+    // que parece instabilidade de servidor, exatamente o diagnóstico errado.
+    state.ws.onclose = () => { if (!state.voiceFatal) setStatus('error', 'VOZ DESCONECTADA'); };
   }
 
   async function handleSignal(msg) {
@@ -693,6 +702,7 @@
         break;
 
       case 'auth_failed':
+        state.voiceFatal = true;
         setStatus('error', 'FALHA NA VOZ — tente /voz de novo');
         if (state.ws) state.ws.close();
         break;
@@ -748,6 +758,12 @@
     } catch (err) {
       console.error('[voip] Mic error:', err);
 
+      // O console do CEF fica em localhost:9000 — ninguém em jogo o vê. Toda
+      // falha de microfone precisa chegar na tela, e o chip sozinho não cabe a
+      // explicação: são 12px no topo, bons pra estado, ruins pra motivo. Por
+      // isso o chip carrega o estado e o chat-log carrega o porquê.
+      state.voiceFatal = true;
+
       if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
         // Limitação conhecida do client SkyMP oficial: o CEF embutido (Chromium
         // ~70) recusa getUserMedia por padrão — falta um patch em
@@ -755,10 +771,23 @@
         // docs/technical/VOICE_CLIENT_PATCH.md). Não adianta reconectar, o
         // resultado vai ser o mesmo até esse client ser trocado.
         setStatus('error', 'VOZ INDISPONÍVEL NESTE CLIENT — use o Discord');
+        showInteractionToast(
+          'Voz no jogo indisponível: este client do SkyMP não libera o microfone. ' +
+          'É uma limitação conhecida do client — não é problema do seu microfone nem do servidor, ' +
+          'e tentar /voz de novo dá no mesmo. Use um canal de voz do Discord: peça /voz-criar à staff.'
+        );
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         setStatus('error', 'NENHUM MICROFONE ENCONTRADO');
+        showInteractionToast(
+          'Nenhum microfone encontrado pelo client. Confira o dispositivo no Windows e rode /voz de novo. ' +
+          'Se preferir não depender disso, o canal de voz do Discord funciona agora (/voz-criar com a staff).'
+        );
       } else {
         setStatus('error', 'SEM MICROFONE');
+        showInteractionToast(
+          `Não foi possível abrir o microfone (${err.name || 'erro desconhecido'}). ` +
+          'A voz no jogo fica desligada nesta sessão — o canal de voz do Discord segue disponível (/voz-criar com a staff).'
+        );
       }
 
       // Sem microfone não há como publicar nem faz sentido manter a sinalização
