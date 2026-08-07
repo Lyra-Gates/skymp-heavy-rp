@@ -24,6 +24,7 @@ const { STATES } = characterState;
 const transactionService = require('./core/transaction-service');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 const rangeUtils = require('./core/range-utils');
+const hitEvents = require('./core/hit-events');
 // Este arquivo ja usava a forma de objeto antes do achado 2.13 (era um dos
 // dois que estavam certos). Passou a usar o helper pra que exista um lugar
 // so onde a forma do `self` e decidida — enquanto a construcao estava
@@ -55,9 +56,60 @@ const _lastHealth = new Map();
 // queda. Precisa sobreviver até o bleed-out, que acontece minutos depois.
 const _killers = new Map();
 
+/**
+ * Grava um episódio de agressão relatado pelo cliente.
+ *
+ * É evidência, não atribuição definitiva: o evento vem de `makeEventSource`,
+ * que roda na máquina do jogador (`CONTRIBUTING.md` §3.6). Vale como rastro
+ * pra staff arbitrar denúncia de RDM — e é estritamente melhor que o
+ * `checkDamageSpike`, que chama de agressão qualquer queda de 25 de vida e não
+ * sabe dizer quem bateu.
+ *
+ * Uma linha por episódio, não por golpe: ver a explicação em core/hit-events.js.
+ */
+async function logCombatEpisode(episodio) {
+  const agressor = commands.getActiveCharacterData(episodio.agressor);
+  const alvo = commands.getActiveCharacterData(episodio.alvo);
+
+  try {
+    await db.query(
+      'INSERT INTO audit_logs (action, actor_account_id, target_account_id, details) VALUES (?, ?, ?, ?)',
+      [
+        'combat:episode',
+        agressor?.accountId || null,
+        alvo?.accountId || null,
+        JSON.stringify({
+          agressorCharacterId: agressor?.characterId || null,
+          alvoCharacterId: alvo?.characterId || null,
+          golpes: episodio.golpes,
+          powerAttacks: episodio.powerAttacks,
+          sneakAttacks: episodio.sneakAttacks,
+          bashAttacks: episodio.bashAttacks,
+          bloqueados: episodio.bloqueados,
+          duracaoMs: episodio.duracaoMs,
+          // Deixa explicito na propria evidencia de onde ela veio, pra que
+          // ninguem a trate como prova numa arbitragem.
+          origem: 'cliente (makeEventSource) — evidencia, nao prova'
+        })
+      ]
+    );
+  } catch (err) {
+    console.error('[death-service] Falha ao registrar episodio de combate:', err.message);
+  }
+}
+
 function initDeathService() {
   if (typeof mp === 'undefined') return;
   console.log('[death-service] Initializing Death and Respawn hooks...');
+
+  // Agressão relatada pelo cliente. Substitui, quando confirmado in-game, a
+  // heurística de `checkDamageSpike` — que só existe porque estava pendurada
+  // no polling. Ver core/hit-events.js.
+  hitEvents.start((episodio) => {
+    logCombatEpisode(episodio).catch(err =>
+      console.error('[death-service] Falha no episodio de combate:', err.message)
+    );
+  });
 
   // ── Caminho primário: o hook nativo ────────────────────────────────────────
   //
@@ -519,6 +571,7 @@ module.exports = {
   checkDamageSpike,
   retireOnPermadeath,
   logKiller,
+  logCombatEpisode,
   isDowned: (characterId) => _downedPlayers.has(characterId),
   // Exposto só pra testes: evita depender de setTimeout real pra exercitar o fluxo.
   _handlePlayerDowned: handlePlayerDowned,

@@ -25,7 +25,7 @@ cd apps/launcher    && npm ci && cd ../..
 
 Copy each `.env.example` to `.env` and fill it in — the comments explain where each value comes from.
 
-Database: apply `skymp/packages/database/schema.sql`, then migrations `v2` through `v8`, **in order**.
+Database: apply `skymp/packages/database/schema.sql`, then migrations `v2` through `v9`, **in order**.
 
 ```powershell
 .\scripts\phase0\Start-AllServices.ps1

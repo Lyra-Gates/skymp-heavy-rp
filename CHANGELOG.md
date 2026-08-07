@@ -9,7 +9,51 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Agressão relatada pelo cliente vira evidência de combate** (`core/hit-events.js`). Quarto e último item do aproveitamento do Red House: `mp.makeEventSource` injeta um trecho no cliente que escuta o evento `hit` do Skyrim Platform e reporta quem bateu em quem.
+
+  Substitui o `checkDamageSpike` do `death-service`, que chamava de agressão qualquer queda de 25 pontos de vida num tick de 2 s — não distinguia combate de queda de penhasco, não sabia quem bateu, e só existia porque estava pendurado no polling.
+
+  **É evidência, não enforcement, e a diferença é deliberada.** O Red House recalcula o dano a partir deste evento e aplica; nós não. Quem manda o evento é a máquina do jogador, e o [CONTRIBUTING](CONTRIBUTING.md) §3.6 é explícito: evento de cliente é *"uma dica, não uma prova"*. Usar isso para decidir dano entregaria o combate a quem controla o cliente. A linha gravada diz de onde veio, para que ninguém a trate como prova numa arbitragem.
+
+  **Agrega em episódio.** Uma briga gera dezenas de eventos; gravar linha por golpe inutilizaria o `audit_logs` justamente quando a staff mais precisa dele. Uma linha dizendo "A bateu em B sete vezes, duas com power attack, ao longo de doze segundos" responde melhor do que sete linhas iguais.
+
+  `mp.makeEventSource` foi confirmada num servidor real e o boot registra o evento. **O snippet de cliente ainda não rodou** — ele só executa quando alguém conecta, o que é a Fase 0.
+
+- **Validação de item contra os plugins carregados** (`core/espm.js`). Terceiro item do aproveitamento do Red House: `mp.lookupEspmRecordById` deixa o servidor ler os records dos ESMs, então dá pra conferir se um `base_id` existe e é mesmo um item — em vez de gravar qualquer número no inventário.
+
+  Ligado nos dois pontos onde um `base_id` **novo entra** no sistema: `/additem` e o anúncio em barraca. Nos dois o valor vem digitado à mão em hexadecimal, e antes disto um dígito errado gravava `character_inventory` do mesmo jeito — o item nunca aparecia in-game, mas ocupava linha no banco e no ledger, e ninguém descobria até alguém conferir inventário à mão. Na barraca é pior: alguém paga por uma linha que nunca vira item na tela.
+
+  **O formato da API foi confirmado num servidor real, não inferido.** O projeto sabia que a função existia e nunca tinha visto o retorno dela; uma sonda temporária foi apontada como gamemode e o log respondeu. O detalhe que uma implementação adivinhada erraria: FormID inválido devolve `{}` — objeto vazio e **truthy** —, então `if (r)` faria o Player passar como item. A checagem certa é `r && r.record`, e há teste de mutação para isso. A assinatura entrou em `types/mp.d.ts` marcada como `[USO]`, com a procedência.
+
+  A validação **deixa passar quando não dá pra saber**: existe para pegar erro de digitação, não para ser autoridade. Só nega quando a API respondeu e respondeu que aquele FormID não é item — senão viraria uma quebra de `/additem` em qualquer servidor onde ela não exista.
+
+- **Zonas seguras — a `action-policy` passa a bloquear por lugar, não só por estado.** Vem do Red House, que checa `isInSafeLocation` antes de aplicar dano ([REFERENCE_STUDY §4.1](docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md)). `core/safe-zones.js` responde onde alguém está e o que aquele lugar proíbe; a `canPerform` ganhou a dimensão usando o `context` que já estava declarado como "para validações futuras".
+
+  A **regra dos dois lados** veio junto e tem teste próprio: uma ação entre duas pessoas é barrada se qualquer uma estiver protegida, porque proteger só o alvo deixaria alguém atirar de dentro da zona para fora dela. Estado continua sendo checado antes de lugar — para quem está algemado dentro de uma zona segura, "você está algemado" é a explicação útil.
+
+  **A lista de zonas nasce vazia.** Zona segura é mecânica de mundo, e a Constituição §15 pede as 15 perguntas antes; as quatro que mais mudam o desenho estão em `skymp/config/safe-zones.example.json`. O mecanismo está entregue, a política não — mesmo padrão do `npc-cleaner`. Nenhum chamador atual mudou de comportamento, e isso tem teste.
+
+- **`--only-load-order` no gerador de manifesto**, para rodar a Fase 0 antes do modpack existir. Sem ele, gerar o `mods.json` de uma `Data/` de trabalho produz um manifesto que exige a máquina de quem gerou — o `compareMods` do launcher reprova todo arquivo que o cliente não tenha, então um testador com instalação limpa é barrado por um mod que não faz parte de nada. O gerador não tinha teste nenhum, sendo o que decide o contrato de FormID; ganhou 6.
+
 ### Corrigido
+
+- **`characters.gold` não existia em banco migrado** (migration v9). A coluna está declarada no `schema.sql` e em nenhuma migration: banco novo funciona, e quem criou o banco antes dela e aplicou `v2`→`v8` em ordem, como o CONTRIBUTING manda, nunca a recebe. A v2 chega a criar a `gold_transactions` — o ledger da economia — sem garantir a coluna de saldo que esse ledger acompanha. Não quebra o boot: quebra na primeira operação de ouro, que é todo o `transaction-service`. Achado pelo `npm run check:schema` ao preparar a Fase 0, que é exatamente a classe de problema para a qual ele foi escrito.
+
+- **Dois defeitos que só o primeiro boot real revelou.** O servidor SkyMP foi instalado e subiu com o gamemode pela primeira vez no projeto — quatro módulos ativos, 33 comandos, banco conectado.
+
+  O primeiro: **`Cannot find module 'dotenv'`, e o gamemode não carregava**. O SkyMP copia o arquivo de entrada para `%TEMP%` e executa de lá — está escrito no topo do próprio arquivo, e é por isso que todos os requires dele usam caminho absoluto. O do dotenv, adicionado neste ciclo, era o único nu. Passou nos testes e no CI porque os dois rodam a partir de `skymp/gamemode/`. É o exemplo mais limpo do que o cabeçalho do `ci.yml` já avisava: *"CI verde significa que não quebrou o que já era verificado, não que funciona em jogo"*.
+
+  O segundo: **nenhuma opção de gameplay era lida**. O `.env.example` definia `NODE_ENV=development`, o loader monta `server-options.<NODE_ENV>.json`, e o projeto só tem `local` e `production`.
+
+- **`database.js` não tinha `close()`**, e o `verify-governance-market-stalls.js` já chamava `db.close()` atrás de um guard que nunca disparava. `RUN_DB_CHECK=1 npm run test:systems` imprimia "10/10 passaram" e ficava pendurado para sempre (exit 124 por timeout; agora exit 0). Num CI com banco, o job só terminaria no timeout e o relatório diria "cancelado".
+
+### Otimizado
+
+- **O painel só lê vitais de quem está olhando a aba Status.** O laço lia vida/magicka/stamina — três chamadas Papyrus — para todo painel aberto a cada 2 s, inclusive o de quem estava na aba Social. A 13–35 ms por ida ao Papyrus (medição do Red House), são ~450 ms de cada janela com 10 painéis, gastos atualizando um número que ninguém está vendo. O diffing que já existia não ajudava: ele evita reenviar, não evita ler.
+
+  A informação para evitar isso já chegava e era descartada — a UI manda `panel:refresh:<aba>` a cada troca. Nenhuma mudança na UI. Os testes contam as chamadas Papyrus de um tick, que é a única forma de provar a economia: o comportamento visível não muda, então nenhum teste de resultado pegaria a regressão.
 
 - **`core/soul.js` guardava dois caracteres invisíveis com significado.** O arquivo contava como binário para o `grep` e para o `file`, e a causa não era a que parecia: além da classe de marcas combinantes crua no `normalize()` (`U+0300`–`U+036F`), havia um **byte NUL** no separador do material assinado — `].join('<NUL>')`, que se lê na tela como `].join('')`.
 

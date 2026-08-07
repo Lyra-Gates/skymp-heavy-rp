@@ -1,0 +1,29 @@
+# Load order de referencia da Fase 0 — SkyMP Heavy RP
+#
+# Exatamente os cinco masters do jogo base. Nada mais.
+#
+# Nao e escolha estetica: e o que o SERVIDOR carrega. Os dois scripts da
+# Fase 0 fixam esta mesma lista —
+#   scripts/phase0/Install-SkyMPServerArtifact.ps1 (settings.loadOrder)
+#   scripts/phase0/Prepare-SkyMPDataDir.ps1        ($masters)
+# — entao o servidor so conhece os records destes cinco.
+#
+# Um cliente com plugin a mais ocupa um indice de load order que o servidor nao
+# tem, e o primeiro byte de todo FormID e esse indice
+# (docs/technical/MODS_AND_GAMEMODE_CONTRACT.md secao 3). O `base_id` gravado no
+# banco passaria a apontar pra outro record na tela daquele jogador — sem erro,
+# sem log: um bau com outra coisa dentro.
+#
+# TODOS os testadores precisam desta lista, exatamente nesta ordem, e nada
+# ativado alem dela. Isso inclui Creation Club, _ResourcePack.esl e USSEP:
+# uteis num servidor de verdade, irrelevantes pra validar o gamemode, e cada um
+# desloca a ordem.
+#
+# Quando o modpack oficial for montado, esta lista morre e o manifesto passa a
+# ser gerado do modpack, sem `--only-load-order`.
+
+*Skyrim.esm
+*Update.esm
+*Dawnguard.esm
+*HearthFires.esm
+*Dragonborn.esm

@@ -22,6 +22,7 @@ skymp/config/server-options.local.json
 skymp/config/server-options.staging.json
 skymp/config/server-options.production.json
 skymp/config/npc-policy.json
+skymp/config/safe-zones.json
 skymp/config/database.local.json
 skymp/config/database.staging.json
 skymp/config/database.production.json

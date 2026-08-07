@@ -66,7 +66,7 @@ cd apps/game-api    && npm ci && cd ../..
 cd apps/bot-discord && npm ci && cd ../..
 ```
 
-Copy every `.env.example` to `.env` and fill it in — the comments explain where each value comes from. Apply `schema.sql` then migrations `v2` through `v8`, in order.
+Copy every `.env.example` to `.env` and fill it in — the comments explain where each value comes from. Apply `schema.sql` then migrations `v2` through `v9`, in order.
 
 ```powershell
 .\scripts\phase0\Start-AllServices.ps1

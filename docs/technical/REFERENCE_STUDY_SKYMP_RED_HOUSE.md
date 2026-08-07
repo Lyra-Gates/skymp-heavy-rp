@@ -251,11 +251,25 @@ A build publicada (v1.1-pub, 11/07/2021, 23 endorsements, 358 downloads únicos)
 
 Os autores convidam explicitamente ao reuso — *"You can take it as a basis for your development!"* — mas na mesma frase declaram: *"The server sources are distributed under the GPLv3 license."* O convite não dispensa a licença.
 
-### ⚖️ Licença: GPL-3.0 — não dá pra copiar código
+### ⚖️ Licença: GPL-3.0 — dá pra aproveitar código, com atribuição
 
-O repositório é **GPL-3.0**, confirmado tanto pelo arquivo `LICENSE` quanto pela própria página do Nexus. Copiar trechos para o nosso gamemode obrigaria a licenciar o nosso projeto sob GPL também.
+O repositório é **GPL-3.0**, confirmado tanto pelo arquivo `LICENSE` quanto pela própria página do Nexus.
 
-Isso não impede aprender: técnica e arquitetura não são protegidas por direito autoral, código específico é. Tudo abaixo é descrição do que eles fazem e por quê — qualquer implementação nossa precisa ser escrita do zero, e no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform de qualquer jeito.
+> **Correção de 06/08/2026.** Este parágrafo dizia "não dá pra copiar código" e que copiar "obrigaria a licenciar o nosso projeto sob GPL também". **As duas afirmações estavam erradas**, e a política do próprio projeto já dizia o contrário — ver [`LICENSE_AND_AFFILIATION_POLICY.md`](LICENSE_AND_AFFILIATION_POLICY.md) §4.
+>
+> Nosso projeto já é `AGPL-3.0-or-later`. A GPLv3 §13 permite explicitamente combinar obra coberta por ela com obra sob AGPLv3, e a AGPLv3 §13 é recíproca. Não há para onde "regredir": já estamos numa licença compatível e mais forte.
+>
+> O erro tinha custo real — ele empurrava para reescrever do zero coisas que dava para portar, o que é justamente o tempo que este estudo existe para economizar.
+
+O que a licença **exige** ao trazer código de lá, conforme a §4 da política:
+
+- **Registrar a origem** no cabeçalho do arquivo e no changelog: projeto, autor, licença, commit.
+- **Manter os avisos de copyright** originais.
+- O arquivo resultante fica sob GPL-3.0; o conjunto continua distribuído sob AGPL.
+
+O que continua valendo: técnica e arquitetura não são protegidas por direito autoral, então **descrever** o que eles fazem — como faz o resto desta seção — não depende de licença nenhuma. E no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform de qualquer jeito, então escrever do zero costuma ser mais rápido que atribuir.
+
+A decisão passa a ser caso a caso, de engenharia e não de licença: portar com atribuição quando o código é substancial e testado; escrever do zero quando a API já dita a forma.
 
 ### O evento de hit existe, e eles o implementaram
 
@@ -275,6 +289,18 @@ Dois detalhes que economizariam horas de depuração:
 - **`0x14` é o jogador local.** O cliente reporta `0x14` como FormID de si mesmo; o servidor precisa trocar por `pcFormId` antes de usar. Sem isso, todo hit do próprio jogador aponta pro form errado.
 - **`ctx.getFormIdInServerFormat()` é obrigatório** no snippet. FormID do cliente e do servidor são espaços diferentes — mandar o número cru daria o objeto errado.
 
+> ✅ **Implementado em 06/08/2026 — como evidência, não como enforcement.**
+>
+> `core/hit-events.js` registra o event source e agrega os golpes; o `death-service` grava o episódio em `audit_logs` (`action='combat:episode'`). Substitui o `checkDamageSpike`, que chamava de agressão qualquer queda de 25 de vida, não distinguia combate de queda de penhasco e não sabia quem bateu.
+>
+> **É aqui que nos separamos deles, e a diferença é deliberada.** O Red House recalcula o dano a partir deste evento e aplica no ActorValue. Nós não: quem manda o evento é a máquina do jogador, e o `CONTRIBUTING.md` §3.6 é explícito — evento de cliente é *"uma dica, não uma prova"*. Usar isso para decidir dano entregaria o combate a quem controla o cliente. A própria linha gravada diz de onde veio, para que ninguém a trate como prova numa arbitragem.
+>
+> **Agrega em episódio, não grava golpe a golpe.** Uma briga de trinta segundos gera dezenas de eventos; eles podiam tratar cada um isoladamente porque o uso era efêmero, o nosso é persistente. Uma linha dizendo "A bateu em B sete vezes, duas com power attack, ao longo de doze segundos" responde melhor à pergunta da staff do que sete linhas iguais — e não inutiliza a tabela.
+>
+> Os dois detalhes que eles deixaram registrados economizaram a depuração óbvia: `0x14` é o jogador local (o servidor troca pelo `pcFormId`, e há teste de mutação) e `ctx.getFormIdInServerFormat()` é obrigatório.
+>
+> **O que ainda não foi validado:** `mp.makeEventSource` foi confirmada num servidor real — existe, aceita o registro, e o boot loga `[hit-events] Evento de agressao registrado`. Mas **o snippet de cliente nunca rodou**: ele só executa quando alguém conecta. Isso é a Fase 0.
+
 ### Eles calculam dano no servidor
 
 `hitSync` não só registra o hit: recalcula o dano e aplica. Lê a arma equipada (`baseDamage`, tipo), a armadura do alvo (`baseArmor`), aplica multiplicador de power/bash attack vindo do `server-options`, reduz 50% se o golpe foi bloqueado, e escreve o resultado no ActorValue de vida.
@@ -283,11 +309,19 @@ Dois detalhes que economizariam horas de depuração:
 
 Para Heavy RP isso abre coisas que hoje não temos: dano diferenciado por tipo de arma, armadura importando de verdade, e sobretudo o item seguinte.
 
-### `isInSafeLocation` — zonas seguras
+### `isInSafeLocation` — zonas seguras ✅ *mecanismo implementado em 06/08/2026*
 
 Antes de aplicar dano, eles checam uma property `isInSafeLocation` no alvo **e** no agressor. Se qualquer um dos dois estiver numa zona segura, o dano não é aplicado — o evento ainda é registrado, mas não machuca.
 
 É exatamente o que falta pra proteger área de spawn, taverna de RP passivo ou cidade sob trégua. Combina com a nossa `action-policy.js`: hoje bloqueamos ações por **estado do personagem**, isso bloquearia por **lugar**.
+
+**O que foi feito:** `core/safe-zones.js` responde onde alguém está e o que aquele lugar proíbe; a `action-policy.canPerform` ganhou a segunda dimensão, usando o `context` que já estava lá declarado como "para validações futuras". Estado continua sendo checado antes de lugar — para quem está algemado dentro de uma zona segura, "você está algemado" é a explicação útil.
+
+A regra dos dois lados veio junto e tem teste próprio: proteger só o alvo deixaria alguém atirar de dentro da zona para fora dela.
+
+**O que deliberadamente não foi feito:** decidir quais zonas existem. `skymp/config/safe-zones.json` nasce vazio, e sem ele o módulo responde "não há zona nenhuma" — mesmo padrão do `npc-cleaner.js`, pelo mesmo motivo. Zona segura é mecânica de mundo, e a Constituição §15 pede as 15 perguntas antes. As quatro que mais mudam o desenho estão listadas no `safe-zones.example.json`; a mais importante é se cidade sob trégua deve ser zona segura ou acordo IC que a guarda faz cumprir — a segunda gera história, a primeira gera regra.
+
+**Nenhum chamador atual passou a ser afetado.** A checagem de lugar só acontece quando quem chama informa `context.actorId`, e nenhum dos quatro chamadores existentes informa. Isso é coberto por teste: uma regressão aí ligaria zona segura no servidor inteiro sem ninguém pedir.
 
 ### ⚠️ O aviso de performance que veio de graça
 
@@ -303,11 +337,34 @@ São medições deles, em hardware e versão deles — mas a ordem de grandeza �
 
 Isso importa direto pra nós. O `death-service.js` varre até 50 profileIds a cada 2 segundos chamando `getActorValue('Health')` por ator. Se uma chamada custa ~15 ms, 40 jogadores conectados consomem ~600 ms de cada janela de 2 s — e o laço é síncrono. O polling não escala.
 
-É mais um argumento pra migração que já começamos (`mp.onDeath` como gatilho primário, `SKYMP_UPSTREAM_REFERENCE.md` §2.5) e pra tirar o polling de vez assim que o hook for confirmado in-game. Vale também rever o `player-panel-service`, que faz o mesmo tipo de leitura enquanto o painel está aberto.
+É mais um argumento pra migração que já começamos (`mp.onDeath` como gatilho primário, `SKYMP_UPSTREAM_REFERENCE.md` §2.5) e pra tirar o polling de vez assim que o hook for confirmado in-game.
+
+**O `player-panel-service` foi o primeiro a ser corrigido** (06/08/2026), por não depender da Fase 0. Ele lia vida/magicka/stamina — **três** chamadas — para todo painel aberto a cada 2 s, inclusive o de quem estava na aba Social. Com 10 painéis abertos eram 30 chamadas por janela, ~450 ms gastos para atualizar um número que ninguém estava vendo. O diffing que já existia não ajudava: ele evita reenviar, não evita ler.
+
+A informação para evitar isso já chegava e era descartada — a UI manda `panel:refresh:<aba>` a cada troca (`switchTab` em `skymp/ui/player-panel.js`). Hoje o laço só lê de quem está com a aba Status visível. Com metade dos painéis em outras abas, o custo cai pela metade; na prática cai mais, porque Status é a aba que se abre e as outras são onde se fica.
+
+Este é o modelo do que o Red House nos dá de mais útil: não código, mas **a medição que justifica mexer** em algo que parecia funcionar bem.
 
 ### Outras coisas que aprendemos
 
 - **`mp.lookupEspmRecordById(formId)`** — o servidor consegue ler registros dos plugins (dano base de arma, armadura, perks, raça). Não sabíamos que existia. Abre validação server-side de item usando o dado real do ESM em vez de tabela nossa.
+
+  ✅ **Implementado em 06/08/2026, com o formato confirmado num servidor real.** O projeto sabia que a função existia e nunca tinha visto o retorno dela — escrever validação em cima de formato adivinhado seria repetir o erro que já custou caro duas vezes aqui (o `self` do Papyrus, o require nu de dotenv). Uma sonda temporária foi apontada como gamemode, o servidor subiu, e o log respondeu:
+
+  ```
+  mp.lookupEspmRecordById(0x0000000f)
+  // { record: { id: 15, editorId: 'Gold001', type: 'MISC', flags: 0, fields: [...] },
+  //   fileIndex, toGlobalRecordId }
+
+  mp.lookupEspmRecordById(0x00000014)   // Player, que é referência
+  // {}                                  ← sem `record`
+  ```
+
+  **O detalhe que uma implementação adivinhada erraria: FormID inválido devolve `{}`, e `{}` é truthy.** Checar `if (r)` faria o Player passar como item. A checagem correta é `r && r.record`, e há teste de mutação para isso.
+
+  Virou `core/espm.js` (com cache — o retorno traz todos os fields em bytes, e a load order não muda em runtime) e está ligado nos dois pontos onde um `base_id` novo **entra** no sistema: `/additem` e o anúncio em barraca. Nos dois o valor vem digitado à mão em hexadecimal, e antes disto um dígito errado gravava `character_inventory` do mesmo jeito — o item nunca aparecia in-game, mas ocupava linha no banco e no ledger.
+
+  A validação **deixa passar quando não dá pra saber**: ela existe para pegar erro de digitação, não para ser autoridade. Só nega quando a API respondeu e respondeu que aquele FormID não é item. A assinatura foi documentada em `types/mp.d.ts` como `[USO]`, com a procedência.
 - **Módulos com hook `onHit`** — o sistema de módulos deles recebe eventos, não só `initialize`. O nosso `core/module-registry.js` só tem ciclo de vida; um dia pode valer distribuir eventos de jogo pra módulos ativos.
 - **`onCellChange`** por `makeEventSource` — saber quando alguém troca de célula é a base de zonas seguras, territórios e presença.
 - **`server-options.json` era deles.** As opções do nosso `SERVER_OPTIONS_SCHEMA.md` (`isVanillaSpawn`, `SpawnTimeToRespawn`, `spawnTimeToRespawnNPC`) são as do Red House. Isso explica por que o schema descrevia coisas que o nosso código nunca implementou: foi copiado como intenção e nunca ligado. Ver `QA_REPORT_2026-08.md` 2.10 — hoje o `core/server-options.js` diz claramente o que está ligado e o que não está.

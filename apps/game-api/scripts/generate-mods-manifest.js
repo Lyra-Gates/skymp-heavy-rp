@@ -34,11 +34,12 @@ const PLUGIN_EXTENSIONS = ['.esm', '.esp', '.esl'];
 const HASHED_EXTENSIONS = [...PLUGIN_EXTENSIONS, '.bsa', '.bsl'];
 
 function parseArgs(argv) {
-  const args = { dataDir: null, out: null, pluginsTxt: null };
+  const args = { dataDir: null, out: null, pluginsTxt: null, onlyLoadOrder: false };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--out') { args.out = argv[++i]; continue; }
     if (argv[i] === '--plugins-txt') { args.pluginsTxt = argv[++i]; continue; }
+    if (argv[i] === '--only-load-order') { args.onlyLoadOrder = true; continue; }
     rest.push(argv[i]);
   }
   args.dataDir = rest[0] || null;
@@ -82,7 +83,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.dataDir) {
-    console.error('Uso: node scripts/generate-mods-manifest.js <caminho-do-Data> [--out mods.json] [--plugins-txt plugins.txt]');
+    console.error('Uso: node scripts/generate-mods-manifest.js <caminho-do-Data> [--out mods.json] [--plugins-txt plugins.txt] [--only-load-order]');
     process.exit(1);
   }
 
@@ -94,16 +95,47 @@ async function main() {
 
   const outPath = path.resolve(args.out || path.join(__dirname, '..', 'mods.json'));
 
-  const entries = fs.readdirSync(dataDir)
+  // Listagem completa da Data. Continua sendo a fonte da validacao da load
+  // order mesmo quando o que vai ser hasheado e um subconjunto.
+  const todosArquivos = fs.readdirSync(dataDir)
     .filter((name) => HASHED_EXTENSIONS.includes(path.extname(name).toLowerCase()))
     .filter((name) => {
       try { return fs.statSync(path.join(dataDir, name)).isFile(); } catch { return false; }
     })
     .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
-  if (entries.length === 0) {
+  if (todosArquivos.length === 0) {
     console.error(`[manifest] Nenhum plugin ou BSA encontrado em ${dataDir}. Caminho errado?`);
     process.exit(1);
+  }
+
+  // `--only-load-order`: hasheia SO os plugins da load order, ignorando o resto
+  // da Data.
+  //
+  // Existe porque `compareMods` (apps/launcher/electron/parity.mjs) exige que
+  // TODO arquivo do manifesto exista no cliente com o mesmo hash. Gerar a
+  // partir de uma Data de trabalho, com dezenas de mods instalados, produz um
+  // manifesto que diz "tenha exatamente a minha maquina" — e reprova qualquer
+  // testador com instalacao limpa, com um "Mod faltando" sobre um mod que nao
+  // faz parte de nada.
+  //
+  // Enquanto o modpack oficial nao existe, o que precisa ser identico entre
+  // clientes e a LOAD ORDER, porque e dela que sai o indice embutido em todo
+  // FormID (MODS_AND_GAMEMODE_CONTRACT.md secao 3). Textura e mesh divergentes
+  // nao deslocam FormID — pelo mesmo motivo que este script ja nao hasheia a
+  // Data inteira, so plugins e BSAs.
+  //
+  // Nao use em producao com modpack fechado: la o manifesto deve cobrir o
+  // conteudo tambem, e ai o padrao (sem a flag) e o certo.
+  let entries = todosArquivos;
+  if (args.onlyLoadOrder) {
+    if (!args.pluginsTxt) {
+      console.error('[manifest] --only-load-order exige --plugins-txt: sem ele nao ha load order pra restringir.');
+      process.exit(1);
+    }
+    const daOrdem = new Set(readPluginsTxt(path.resolve(args.pluginsTxt)).map((p) => p.toLowerCase()));
+    entries = todosArquivos.filter((name) => daOrdem.has(name.toLowerCase()));
+    console.log(`[manifest] --only-load-order: ${entries.length} de ${todosArquivos.length} arquivos entram no manifesto.`);
   }
 
   console.log(`[manifest] Hasheando ${entries.length} arquivos em ${dataDir}...`);
@@ -124,7 +156,11 @@ async function main() {
     loadOrder = readPluginsTxt(pluginsTxtPath);
     console.log(`[manifest] Load order lida de ${pluginsTxtPath}: ${loadOrder.length} plugins.`);
 
-    const known = new Set(entries.map((e) => e.toLowerCase()));
+    // Valida contra a Data inteira, nao contra `entries`: com
+    // `--only-load-order` o `entries` foi derivado da propria load order, e
+    // comparar os dois faria a checagem concordar consigo mesma e nunca acusar
+    // um plugin ausente.
+    const known = new Set(todosArquivos.map((e) => e.toLowerCase()));
     const missing = loadOrder.filter((p) => !known.has(p.toLowerCase()));
     if (missing.length > 0) {
       console.error(`[manifest] ERRO: plugins na load order que nao existem em Data/: ${missing.join(', ')}`);

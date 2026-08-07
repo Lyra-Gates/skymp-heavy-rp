@@ -249,12 +249,21 @@ addCheck('flags de ambiente', () => {
 // ainda no require. Carregar o .env depois de qualquer um desses requires
 // significa ler o ambiente errado sem nenhum erro aparecer.
 addCheck('phase0 carrega o .env antes de tudo', () => {
-  const source = readText(path.join(gamemodeDir, 'phase0-basic.js'));
+  // Comentarios saem antes da busca. O comentario que explica POR QUE a forma
+  // nua nao funciona contem, literalmente, `require('dotenv')` — e sem remove-lo
+  // este check casava com a prosa em vez do codigo, achava o indice errado e
+  // reprovava um arquivo correto.
+  const source = readText(path.join(gamemodeDir, 'phase0-basic.js'))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
 
-  const dotenvAt = source.indexOf("require('dotenv')");
+  // Casa a forma nua e a forma com caminho: o que este check garante e que o
+  // .env E carregado e QUANDO. Se a forma for a nua, quem reprova e o check
+  // seguinte, com a mensagem certa sobre o %TEMP%.
+  const dotenvAt = source.search(/require\((?:'dotenv'|path\.join\([^)]*'dotenv'\))\)/);
   assert(dotenvAt !== -1, "phase0-basic.js nao carrega dotenv — as flags ENABLE_* nunca chegam no process.env");
   assert(
-    source.slice(dotenvAt, dotenvAt + 200).includes('.env'),
+    source.slice(dotenvAt, dotenvAt + 260).includes('.env'),
     'phase0-basic.js chama dotenv sem apontar para o arquivo .env do gamemode'
   );
 
@@ -269,6 +278,40 @@ addCheck('phase0 carrega o .env antes de tudo', () => {
   assert(
     optionsAt === -1 || dotenvAt < optionsAt,
     'dotenv precisa ser carregado ANTES do server-options, que resolve o arquivo por NODE_ENV'
+  );
+});
+
+// Este check nasceu de um boot real, nao de leitura de codigo.
+//
+// O SkyMP copia o arquivo de entrada pra `%TEMP%\skymp5-server<random>\` e
+// executa de la (esta escrito no topo do phase0-basic.js). Um `require` com
+// especificador nu e resolvido a partir do diretorio do arquivo EM EXECUCAO —
+// o temp, sem node_modules — e derruba o gamemode inteiro no boot com
+// "Cannot find module".
+//
+// A primeira versao do carregamento do .env usava `require('dotenv')`. Passou
+// nos 366 testes e no CI, porque os dois rodam a partir de skymp/gamemode/,
+// onde a resolucao funciona. So apareceu ao subir o servidor. Um teste nao
+// pegaria isso: so um boot de verdade, ou este check.
+addCheck('phase0 nao usa require de pacote com caminho relativo', () => {
+  const source = readText(path.join(gamemodeDir, 'phase0-basic.js'))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  // Builtins do Node resolvem em qualquer lugar; o resto precisa de caminho.
+  const builtins = new Set(['path', 'fs', 'os', 'crypto', 'events', 'util', 'http', 'https', 'net', 'url', 'assert']);
+  const nus = [];
+
+  for (const [, especificador] of source.matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+    if (builtins.has(especificador)) continue;
+    nus.push(especificador);
+  }
+
+  assert(
+    nus.length === 0,
+    `phase0-basic.js tem require(s) que o SkyMP nao consegue resolver: ${nus.join(', ')}. ` +
+    `O arquivo roda a partir de %TEMP%, entao todo pacote precisa de caminho absoluto — ` +
+    `use require(path.join(gamemodeDir, 'node_modules', '<pacote>')).`
   );
 });
 

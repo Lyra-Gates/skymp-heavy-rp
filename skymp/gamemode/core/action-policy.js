@@ -13,6 +13,9 @@
  */
 
 const characterState = require('./character-state');
+// Toca `mp` (com guard) e le config de disco; por isso fica em modulo proprio
+// em vez de dentro deste, que precisa continuar testavel sem servidor.
+const safeZones = require('./safe-zones');
 const { STATES } = characterState;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,9 +116,21 @@ registerAction('sleep',       ['use_item'],            'Dormir');
 /**
  * Verifica se um personagem pode executar uma ação.
  *
+ * Duas dimensões, nesta ordem:
+ *
+ *   1. **Estado** do personagem — algemado, abatido, preso. Sempre checado.
+ *   2. **Lugar** onde ele está — zona segura. Só checado quando quem chama
+ *      informa `context.actorId`, porque localização é do ator e esta função
+ *      recebe `characterId`.
+ *
+ * O estado vem primeiro de propósito: "você está algemado" é uma explicação
+ * melhor que "aqui é zona segura" para quem está algemado dentro de uma.
+ *
  * @param {number} characterId
  * @param {string} actionId - ID da ação registrada
- * @param {object} [context] - Contexto adicional (localização, alvo, etc.) para validações futuras
+ * @param {object} [context]
+ * @param {number} [context.actorId] - habilita a checagem de lugar
+ * @param {number} [context.targetActorId] - checa os dois lados (ver safe-zones.blocksBetween)
  * @returns {{ allowed: boolean, reason: string }}
  */
 function canPerform(characterId, actionId, context = {}) {
@@ -133,6 +148,29 @@ function canPerform(characterId, actionId, context = {}) {
     const isBlocked = action.categories.some(cat => restrictions.blocked.includes(cat));
     if (isBlocked) {
       return { allowed: false, reason: restrictions.message };
+    }
+  }
+
+  // Lugar. Só entra quando o chamador passa o actorId — todos os chamadores
+  // antigos continuam funcionando exatamente como antes, sem checagem de lugar.
+  if (context.actorId !== undefined && context.actorId !== null) {
+    for (const categoria of action.categories) {
+      const veredito = context.targetActorId !== undefined && context.targetActorId !== null
+        ? safeZones.blocksBetween(context.actorId, context.targetActorId, categoria)
+        : safeZones.blocksCategory(context.actorId, categoria);
+
+      if (veredito.blocked) {
+        // A mensagem diz de quem é a proteção quando ela não é de quem agiu —
+        // sem isso, atacar alguém protegido devolveria "você está em zona
+        // segura", que é confuso e parece bug.
+        const onde = veredito.zone.label;
+        return {
+          allowed: false,
+          reason: veredito.side === 'target'
+            ? `Seu alvo está sob proteção de ${onde}.`
+            : `Você está em ${onde} e não pode fazer isso aqui.`
+        };
+      }
     }
   }
 

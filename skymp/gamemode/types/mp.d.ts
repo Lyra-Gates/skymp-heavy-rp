@@ -195,6 +195,41 @@ interface Mp {
   /** [USO] Cria uma instância de um baseId no mundo. Devolve `{ desc }`. */
   place(baseId: FormId): { desc: FormDesc };
 
+  /**
+   * [USO] Lê o record de um FormID nos plugins carregados (a load order do
+   * `server-settings.json`).
+   *
+   * **Formato confirmado num servidor real em 06/08/2026**, não inferido — uma
+   * sonda temporária foi apontada como gamemode e o retorno foi lido do log.
+   * A distinção importa: as duas vezes em que este projeto assumiu formato de
+   * API sem ver (o `self` do Papyrus, o require nu de dotenv) custaram caro.
+   *
+   *     mp.lookupEspmRecordById(0x0000000f)
+   *     // { record: { id: 15, editorId: 'Gold001', type: 'MISC', flags: 0,
+   *     //             fields: [{ type: 'EDID', data: {...} }, ...] },
+   *     //   fileIndex, toGlobalRecordId }
+   *
+   * **Devolve `{}` — objeto vazio, sem `record` — quando o FormID não é um
+   * record de plugin.** Não lança e não devolve `null`. Confirmado com `0x14`
+   * (o Player, que é referência e não record) e com um FormID inexistente.
+   * Por isso a checagem correta é `r && r.record`: `{}` é truthy.
+   *
+   * `type` é a tag de 4 letras do record (`WEAP`, `ARMO`, `MISC`, `ALCH`...).
+   * Ver `core/espm.js`, que embrulha isto com cache — o retorno traz todos os
+   * fields em bytes e é imutável enquanto o servidor roda.
+   */
+  lookupEspmRecordById(formId: FormId): {
+    record?: {
+      id: number;
+      editorId: string;
+      type: string;
+      flags: number;
+      fields: { type: string; data: Record<string, number> }[];
+    };
+    fileIndex?: unknown;
+    toGlobalRecordId?: unknown;
+  };
+
   // ───────────────────────────────────────────────────────────────────────
   // Conexões — [USO]
   // ───────────────────────────────────────────────────────────────────────

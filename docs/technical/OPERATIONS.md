@@ -33,7 +33,7 @@ cd skymp/gamemode
 npm run check:schema
 ```
 
-As migrations `v2`–`v8` são aplicadas **à mão**, em ordem. Nada garantia que foram todas aplicadas até este check existir.
+As migrations `v2`–`v9` são aplicadas **à mão**, em ordem. Nada garantia que foram todas aplicadas até este check existir.
 
 **Por que isso é pior do que parece:** um banco meio-migrado não quebra o boot. O servidor sobe, o login passa, e só a query que toca a coluna faltante falha — às vezes semanas depois, numa cena, com ouro no meio. O sintoma clássico: alguém aplicou até a `v6`, o `game-api` tenta gravar em `game_sessions` (v8), e a admissão na fila falha com erro de SQL cru — que o jogador vê como "servidor offline".
 

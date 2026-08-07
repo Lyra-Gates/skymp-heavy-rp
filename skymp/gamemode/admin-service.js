@@ -164,6 +164,25 @@ async function giveItemAdmin(actorId, targetActorId, baseId, count) {
     return;
   }
 
+  // Confere o FormID contra os plugins carregados antes de gravar.
+  //
+  // `/additem <actorId> <baseId> <count>` recebe o baseId digitado à mão, em
+  // hexadecimal, no meio de uma linha de chat. Um dígito errado cai em
+  // qualquer record do jogo — uma célula, uma quest, um som — e antes disto o
+  // servidor gravava `character_inventory` do mesmo jeito: o item nunca
+  // aparecia in-game, mas ocupava linha no banco e no ledger, e ninguém
+  // descobria até alguém conferir inventário à mão.
+  //
+  // A checagem só nega quando tem certeza (ver core/espm.js): se a API não
+  // estiver disponível, deixa passar.
+  const espm = require('./core/espm');
+  const veredito = espm.pareceItem(baseId);
+  if (!veredito.ok) {
+    commands.sendNotification(actorId, `[Staff] Item invalido: ${veredito.motivo}.`);
+    console.warn(`[admin] ${actorId.toString(16)} tentou dar 0x${baseId.toString(16)}: ${veredito.motivo}`);
+    return;
+  }
+
   const success = await transactionService.giveItem({
     actorId: targetActorId,
     characterId: targetChar.characterId,
