@@ -149,11 +149,25 @@ Todavía vale confirmarlo en el juego, pero ahora como comprobación, no como in
 
 Elección deliberada de no lanzar excepción: eso tumbaría el comando del jugador por un error de programación. Denegar es el resultado seguro; el log es lo que hace que alguien lo corrija. También pilla el caso opuesto — quien escribe `hasPermission(id, 'manage_factions')` cree que creó una regla y creó una puerta que nunca abre. 4 pruebas nuevas.
 
+**Cerrado en la raíz y en las hojas el 07/08/2026.** Las doce llamadas se acabaron: `disguise-service`, `faction-service` y `justice-service` fueron borrados, y las tres que quedaban (`/addrecipe`, `/addingredient`, `/settax`) pasaron a permiso nombrado — `manage_recipes` (nuevo) y `set_gold`. El razonamiento de qué permiso exige cada comando está en la [§7.4 del `PARKED_SERVICES_DECISION.md`](PARKED_SERVICES_DECISION.md); un barrido estático en `parked-staff-permissions.test.js` reprueba si cualquier archivo de producción del gamemode vuelve a pasar un número.
+
 ---
 
 ## 2-bis. Segunda pasada (06-07/08/2026)
 
 La primera pasada leyó código. Esta **instaló el servidor y lo encendió**, y la diferencia se nota en qué defectos encuentra cada una: nueve de los diez de abajo son de configuración o de ciclo de vida — la clase que ninguna prueba unitaria toca, porque no hay nada que probar en un archivo que nadie lee.
+
+### 2.15 🔴 Un cliente con un plugin extra pasaba la verificación de paridad — *corregido*
+
+Encontrado al extraer la lógica del launcher para poder probarla. Las dos verificaciones de paridad recorrían **la lista del servidor** preguntando "¿el jugador tiene esto?". Ninguna recorría la del jugador preguntando "¿el servidor conoce esto?".
+
+Consecuencia: un cliente con **todos** los mods correctos, con el hash correcto, **más un `.esp` de más**, pasaba en las dos. Y un plugin de más en la load order ocupa un índice y desplaza todos los siguientes — el `HeavyRP.esm` que en el servidor es `02` en él pasa a ser `03`, y **todo `base_id` guardado en la base pasa a apuntar a otro record en la pantalla de ese jugador**.
+
+Es exactamente el fallo que el contrato de FormID existe para impedir (`MODS_AND_GAMEMODE_CONTRACT.md` §3), y no produce ningún error: produce un cofre con otra cosa dentro.
+
+Vino junto con un segundo caso: cuando el servidor no informaba load order, el código caía a la orden **local** — comparando al jugador consigo mismo y respondiendo `ok` siempre. La peor respuesta posible, porque parece aprobación.
+
+**Corregido:** lógica extraída a `apps/launcher/electron/parity.mjs` (sin `fs`, sin `http`, sin `electron`), con 24 pruebas. La verificación pasó a correr en las dos direcciones, usa el `plugins.txt` para saber qué está de hecho activo (un plugin presente y desactivado no desplaza nada), y una load order ausente ahora **reprueba**.
 
 ### 2.16 🔴 El gamemode nunca cargó su propio `.env` — *corregido*
 

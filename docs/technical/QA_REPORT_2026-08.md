@@ -149,6 +149,8 @@ Ainda vale conferir in-game, mas agora como confirmação, não como investigaç
 
 Escolha deliberada de não lançar exceção: isso derrubaria o comando do jogador por um erro de programação. Negar é o resultado seguro; o log é o que faz alguém corrigir. Pega também o caso oposto — quem escreve `hasPermission(id, 'manage_factions')` acha que criou uma regra e criou uma porta que nunca abre. 4 testes novos.
 
+**Fechado na raiz e nas folhas em 07/08/2026.** As doze chamadas acabaram: `disguise-service`, `faction-service` e `justice-service` foram apagados, e as três que sobravam (`/addrecipe`, `/addingredient`, `/settax`) passaram a permissão nomeada — `manage_recipes` (nova) e `set_gold`. O raciocínio de qual permissão cada comando exige está na [§7.4 do `PARKED_SERVICES_DECISION.md`](PARKED_SERVICES_DECISION.md); uma varredura estática em `parked-staff-permissions.test.js` reprova se qualquer arquivo de produção do gamemode voltar a passar número.
+
 ### 2.15 🔴 Cliente com plugin extra passava na verificação de paridade — *corrigido*
 
 Achado ao extrair a lógica do launcher para teste. As duas verificações de paridade percorriam **a lista do servidor** perguntando "o jogador tem isto?". Nenhuma percorria a do jogador perguntando "o servidor conhece isto?".
