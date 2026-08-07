@@ -366,7 +366,15 @@ Este é o modelo do que o Red House nos dá de mais útil: não código, mas **a
 
   A validação **deixa passar quando não dá pra saber**: ela existe para pegar erro de digitação, não para ser autoridade. Só nega quando a API respondeu e respondeu que aquele FormID não é item. A assinatura foi documentada em `types/mp.d.ts` como `[USO]`, com a procedência.
 - **Módulos com hook `onHit`** — o sistema de módulos deles recebe eventos, não só `initialize`. O nosso `core/module-registry.js` só tem ciclo de vida; um dia pode valer distribuir eventos de jogo pra módulos ativos.
+
+  ⏸️ **Avaliado em 06/08/2026 — adiado, com o gatilho de reabertura escrito.** O censo dos seis módulos registrados dá **um consumidor e um tipo de evento**: só o `death` escutaria `hit`, e nenhum dos outros cinco (`governance`, `market-stalls`, `player-panel`, `voip`, `npc-cleaner`) escutaria coisa alguma. Hoje `core/hit-events.js` entrega o episódio direto ao assinante que o `death-service` passa em `start(cb)`; um despacho genérico trocaria essa linha por um barramento que serve a um só.
+
+  O precedente do projeto aponta na mesma direção: quando um segundo consumidor apareceu de verdade — governança precisando avisar o painel —, a resposta foi `core/panel-refresh-bus.js`, pequeno e nomeado, não um canal genérico no registry.
+
+  **O gatilho para reabrir:** um segundo módulo que precise de um evento de jogo já capturado por outro. O desenho fica registrado em `core/module-registry.js` para não ser redescoberto do zero — `descriptor.on = { hit, cellChange }` opcional no `register()`, despachado de onde o evento já é capturado.
 - **`onCellChange`** por `makeEventSource` — saber quando alguém troca de célula é a base de zonas seguras, territórios e presença.
+
+  ❌ **Não implementado, e não é o que falta.** Zona segura saiu sem ele: `core/safe-zones.js` consulta `mp.get(actorId, 'locationalData')` sob demanda, que é leitura de property servida do cache do servidor e não paga os 13–35 ms de ida ao Papyrus. Território e presença estão em "Pós-Alfa" no `HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md` — construir o evento por causa deles seria infraestrutura antes das 15 perguntas da Constituição §15.
 - **`server-options.json` era deles.** As opções do nosso `SERVER_OPTIONS_SCHEMA.md` (`isVanillaSpawn`, `SpawnTimeToRespawn`, `spawnTimeToRespawnNPC`) são as do Red House. Isso explica por que o schema descrevia coisas que o nosso código nunca implementou: foi copiado como intenção e nunca ligado. Ver `QA_REPORT_2026-08.md` 2.10 — hoje o `core/server-options.js` diz claramente o que está ligado e o que não está.
 
 ### O front-end deles não vale a pena
@@ -376,6 +384,25 @@ Este é o modelo do que o Red House nos dá de mais útil: não código, mas **a
 Comparando com o que já temos: chat de proximidade ✅, menu de interação ✅, e além disso um painel de 4 abas que eles não têm. O que eles têm e nós não é a **janela de troca** e a **lista de animações** — e o nosso `trade-service` está PARKED de qualquer forma.
 
 Ou seja: adotar o front deles seria trocar o que temos por algo equivalente ou menor, em outra stack, noutro idioma, sob GPL. O valor do Red House está no servidor, não na interface.
+
+#### Os dois itens avulsos, avaliados separadamente (06/08/2026)
+
+Descartar o front inteiro não decide sozinho o destino das duas coisas que só eles têm. Avaliadas uma a uma:
+
+**Janela de troca — adiada junto com o serviço, com ponteiro deixado.** O `trade-service.js` deste projeto está PARKED, e ler `front/src/features/systems/trade` só vale a pena no dia em que ele for reativado — antes disso é estudo de UI para um sistema que não existe. A nota ficou registrada em [`PARKED_SERVICES_DECISION.md`](PARKED_SERVICES_DECISION.md), na entrada do `trade-service`, para que quem reativar não comece do zero. **Nada foi portado.**
+
+**Lista de animações — NÃO é coberta pelo Perfil 1, e a distinção importa.** A pergunta era se `front/src/features/client/animList` já está resolvido pelo modpack. Não está, e confundir os dois é fácil:
+
+| | O que é | Onde está |
+|---|---|---|
+| **Perfil 1 (OAR, Nemesis)** | **Entrega e paridade do asset.** Garante que todo cliente tenha o mesmo behavior graph e os mesmos arquivos de animação — é a condição para que uma animação sequer possa ser tocada de forma idêntica em duas máquinas | `MODDING_GUIDELINES.md` §1 e Fase 1 |
+| **`animList` deles** | **Seleção pelo jogador.** Uma tela que lista animações e deixa escolher qual tocar — emote | `front/src/features/client/animList`, mais o comando `/anim` |
+
+São camadas diferentes: o Perfil 1 é o encanamento, o `animList` é a torneira. Ter Nemesis pré-gerado no modpack não dá ao jogador nenhuma forma de tocar um emote, e o roadmap já sabe disso — a **Fase 1 chama-se "Identidade e Emotes"** justamente porque emote é feature própria, não subproduto de instalar OAR.
+
+E não é troca de animação de combate: o que o Red House faz ali é escolher uma animação para tocar em cena, não substituir a animação de ataque. Substituição de combate seria coisa de modpack (e cairia na blacklist de "Física e Animação Pesada"); emote é comando + UI.
+
+**Veredicto: potencialmente valioso, mas não é "só UI" — e por isso não entra agora.** A regra da autoridade do servidor (`MODDING_GUIDELINES.md`) é explícita: o servidor decide *"qual animação de gameplay foi autorizada"*. Um emote precisa então de um caminho servidor→cliente (comando, validação de estado pela `action-policy` — quem está `DOWNED` ou algemado não dança —, e a chamada Papyrus que toca), além da lista curada de quais animações existem. Isso é uma feature da Fase 1 com as 15 perguntas da Constituição §15 pela frente, não um item de aproveitamento do Red House. O que o `animList` deles vale, quando essa hora chegar, é como referência da tela — o mesmo estatuto da janela de troca.
 
 ### O que NÃO copiar
 

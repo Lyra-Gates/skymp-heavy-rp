@@ -97,6 +97,20 @@ Depende do `economy-service` (item 2). Reativar exige migrar pra `core/transacti
 
 Os três que mexem em ouro (`housing`, `horse`, `trade`) carregam a mesma dívida do item 2 — precisam migrar pro `transaction-service` antes de qualquer reativação.
 
+### Nota para quem reativar o `trade-service`
+
+**Existe uma referência de UI já estudada.** O Red House (`alekcey0211/red-house-public`, GPL-3.0) tem uma janela de troca em `front/src/features/systems/trade` — é uma das duas únicas coisas que o front-end deles tem e este projeto não (a outra é a lista de animações). Ver [`REFERENCE_STUDY_SKYMP_RED_HOUSE.md`](REFERENCE_STUDY_SKYMP_RED_HOUSE.md), "O front-end deles não vale a pena".
+
+Isto é um ponteiro, **não uma recomendação de portar**. O que ele resolve é o custo de partir do zero no desenho da tela: troca player-to-player é uma superfície de exploit conhecida (quem confirma primeiro, o que acontece se um desconecta no meio), e ver uma implementação que rodou num servidor real vale mais como lista de casos a cobrir do que como código.
+
+Três coisas que precisam estar decididas **antes** de abrir aquele repositório, senão a UI dita o desenho do servidor em vez do contrário:
+
+- O backlog pede **commit duplo** ("Comercio player-to-player com commit duplo", Pós-Alfa). A janela deles é de 2021 e não necessariamente faz isso — conferir, não presumir.
+- Ouro passa pelo `core/transaction-service` (item 2 acima). Sem exceção, e a compra em barraca já mostrou como se faz troca atômica de várias pernas usando as primitivas `tx.*`.
+- Se algo for portado de fato, entra a atribuição da [`LICENSE_AND_AFFILIATION_POLICY.md`](LICENSE_AND_AFFILIATION_POLICY.md) §4 — projeto, autor, licença e commit no cabeçalho e no changelog. O formato já usado nos três arquivos do gamemode que vieram de lá (`core/hit-events.js`, `core/espm.js`, `core/safe-zones.js`) serve de modelo.
+
+Nada foi portado nesta rodada, e **ler o `trade` deles antes da reativação é tempo gasto em código que talvez nunca seja usado** — o `trade-service` continua estacionado por decisão de escopo, não por falta de referência.
+
 ---
 
 ## Sobre as 6 tabelas órfãs
