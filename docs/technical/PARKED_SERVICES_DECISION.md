@@ -216,6 +216,20 @@ O que escapou é que **duplicar um serviço não é a única forma de carregar a
 
 Fica registrado como critério para a próxima reavaliação: **a pergunta é "toca patrimônio, estado ou identidade fora do dono desse assunto?", não "importa o arquivo errado?"**.
 
+### 7.6 Candidatos da 3ª varredura (07/08/2026), registrados e não decididos
+
+A auditoria estática por classe de bug conhecida rodou de novo, agora sobre o código que nasceu depois de `26ed196` (a varredura de 06/08). As cinco classes passaram limpas — ver o `CHANGELOG.md`. Estes dois achados apareceram de raspão e **não são membros de nenhuma das cinco**, então seguem a mesma regra da 7.4: registrados aqui em vez de corrigidos por conta própria.
+
+**1. `economy-regional.characterHold` cresce e nunca encolhe.** `Map` de `characterId → holdId` (linha 23), preenchido em `setCharacterHold` e nunca esvaziado. Não é a classe do `_lastHealth`: a chave é `characterId`, então não sofre reaproveitamento de slot e o valor continua correto no reconnect — ninguém recebe o Hold de outra pessoa. É vazamento puro, limitado ao número de personagens distintos que já usaram o comando na vida do processo.
+
+O precedente existe e é o `_soulCache`, que ganhou `cleanup()` no `removeActiveCharacter` com o argumento *"cache que só cresce é vazamento, e reler no próximo login custa uma query"*. A diferença é que o `soul` está no `module-registry` e a limpeza fica atrás de `isEnabled('soul')`; `economy-regional` não está registrado em lugar nenhum, então não há flag para consultar. Ligar a limpeza exigiria decidir como o `removeActiveCharacter` conversa com um módulo que o registry não conhece — decisão de arquitetura, não de varredura.
+
+**2. `withdrawHoldTreasury` move ouro entre dois cofres em duas transações.** Linhas 225–226: `UPDATE holds SET treasury = treasury - ?` seguido de `UPDATE factions SET treasury = treasury + ?`, cada um no próprio `db.query`, sem `BEGIN`. Se o segundo falhar, o ouro sai da cidade e não chega na facção.
+
+É **exatamente** a forma do defeito que o `craftItem` tinha antes da Fase 3 — "cada função abre a própria transação, falhando a segunda a primeira já commitou". A varredura da classe 1 não o pega porque a busca é por `characters.gold`, e isto é tesouro de Hold e de facção: outras tabelas, mesmo defeito.
+
+Não foi corrigido porque o `core/transaction-service` é o dono de **patrimônio de personagem** — ouro e inventário — e não tem primitiva para tesouro institucional. Fazer isto direito é decidir se `holds.treasury` e `factions.treasury` entram no mesmo ledger, com o mesmo rastro em `gold_transactions`, ou se são outra coisa. Essa é a pergunta da 7.5 aplicada a um patrimônio que não é de ninguém em particular — e é decisão de economia, igual à da 7.4.
+
 ---
 
 ## Sobre as 6 tabelas órfãs
