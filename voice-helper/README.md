@@ -38,6 +38,22 @@ depois. A arquitetura e o porquê estão em
 Requisitos: Windows, Visual Studio 2022 (workload "Desenvolvimento para desktop
 com C++"), CMake ≥ 3.21 e vcpkg.
 
+**0. Se a máquina não tiver o toolchain** (é o caso da máquina de
+desenvolvimento até 07/08/2026 — ver VOICE_NATIVE_HELPER.md §8.1). Cada comando
+pede elevação; o primeiro baixa ~5–8 GB e demora:
+
+```bash
+winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+```bash
+winget install --id Kitware.CMake
+```
+
+Depois abra um terminal novo (o PATH só vale a partir dele) e confirme com
+`where cmake` e `where cl` antes de seguir. Se `cl` não aparecer, use o
+"Developer Command Prompt for VS 2022" em vez do terminal comum.
+
 **1. vcpkg, se ainda não houver**
 
 ```bash
