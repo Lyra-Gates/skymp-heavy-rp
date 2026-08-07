@@ -1,6 +1,32 @@
 /**
  * core/hit-events.js — agressão relatada pelo cliente, agregada em episódios
  *
+ * ─── Atribuição de origem (LICENSE_AND_AFFILIATION_POLICY.md §4) ────────────
+ *
+ *   Projeto : alekcey0211/red-house-public — build pública do Red House (SkyMP)
+ *   Autor   : alekcey0211 e colaboradores
+ *   Licença : GPL-3.0. Compatível com a AGPL-3.0-or-later deste projeto pela
+ *             GPLv3 §13; o conjunto continua distribuído sob AGPL.
+ *   Commit  : 65c66bb3e1b9f5765ed5fc036d69d75e3afbb53d (branch `master`,
+ *             01/11/2021 — repositório parado, último push em 16/11/2021)
+ *   Arquivo : functions-lib/src/events/_onHit.ts
+ *   Estudo  : docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md §4.1
+ *
+ *   **O que foi adaptado é técnica, não código.** Nenhuma linha foi copiada:
+ *   o que veio de lá é (a) saber que `mp.makeEventSource` é o caminho para o
+ *   evento de hit, já que o SkyMP recusou expor o pacote ao gamemode
+ *   (issue #1338); (b) o formato do payload que o snippet de cliente monta a
+ *   partir de `ctx.sp.on('hit', ...)`; e (c) os dois detalhes que economizam a
+ *   depuração óbvia — `0x14` é o jogador local, e
+ *   `ctx.getFormIdInServerFormat()` é obrigatório.
+ *
+ *   A forma do snippet é praticamente ditada pela API do Skyrim Platform, então
+ *   escrever do zero saiu mais rápido que portar. **A agregação em episódio, o
+ *   descarte de dano em si mesmo e a recusa a calcular dano são deste projeto**
+ *   e não têm equivalente lá — ver as duas seções abaixo.
+ *
+ *   Registrado também no CHANGELOG.md, seção `[Não lançado]`.
+ *
  * ─── O que isto é, e o que NÃO é ────────────────────────────────────────────
  *
  * É **evidência**, não enforcement. O evento vem de `mp.makeEventSource`, que
