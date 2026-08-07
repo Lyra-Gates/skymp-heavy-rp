@@ -85,8 +85,15 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === '/ticket') {
     if (!Number.isFinite(actorId)) return json(res, 400, { error: 'actorId invalido' });
-    const ticket = voip.issueTicket(actorId);
-    return json(res, 200, { actorId, ticket, host: '127.0.0.1', port: VOIP_PORT });
+    // Ticket por papel: o mesmo jogador precisa de um pro helper (`sender`) e um
+    // pra UI (`listener`), e um não serve no lugar do outro. Sem `role` a rota
+    // devolve o de listener — que é o que a própria página busca ao carregar.
+    const role = url.searchParams.get('role') || 'listener';
+    if (!voip.VOIP_ROLES.includes(role)) {
+      return json(res, 400, { error: `role invalido: ${role}` });
+    }
+    const ticket = voip.issueTicket(actorId, role);
+    return json(res, 200, { actorId, ticket, role, host: '127.0.0.1', port: VOIP_PORT });
   }
 
   if (url.pathname === '/move') {

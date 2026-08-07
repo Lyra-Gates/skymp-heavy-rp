@@ -132,14 +132,66 @@ describe('voip-service — handshake por ticket', () => {
     ws2.close();
   });
 
+  // Os dois casos abaixo montam o ticket na mão, então precisam da mesma chave
+  // que o serviço usa — hoje `${actorId}:${role}`, porque um ticket por ator não
+  // dava conta dos dois papéis (ver VOICE_NATIVE_HELPER.md §10). Usar a chave
+  // errada aqui faria o caso de expirado passar por ausência de ticket em vez de
+  // por expiração: a resposta certa pelo motivo errado.
   it('_consumeTicket rejeita ticket expirado', () => {
-    voip._pendingTickets.set(ACTOR_ID, { token: 'abc', expiresAt: Date.now() - 1000 });
+    voip._pendingTickets.set(voip._ticketKey(ACTOR_ID, 'listener'), { token: 'abc', expiresAt: Date.now() - 1000 });
     assert.strictEqual(voip._consumeTicket(ACTOR_ID, 'abc'), false);
   });
 
   it('_consumeTicket aceita ticket válido dentro do TTL', () => {
-    voip._pendingTickets.set(ACTOR_ID, { token: 'abc', expiresAt: Date.now() + 10000 });
+    voip._pendingTickets.set(voip._ticketKey(ACTOR_ID, 'listener'), { token: 'abc', expiresAt: Date.now() + 10000 });
     assert.strictEqual(voip._consumeTicket(ACTOR_ID, 'abc'), true);
+  });
+
+  it('ticket de um papel não vale no outro', () => {
+    // Os dois papéis autenticam no mesmo endpoint com o mesmo formato. Se o
+    // ticket fosse intercambiável, o /voz de um jogador daria ao helper dele um
+    // token que também abre o slot de listener — e o handshake pararia de
+    // distinguir os dois lados que a §10 acabou de separar.
+    const listenerTicket = voip.issueTicket(ACTOR_ID, 'listener');
+    assert.strictEqual(voip._consumeTicket(ACTOR_ID, listenerTicket, 'sender'), false);
+
+    const senderTicket = voip.issueTicket(ACTOR_ID, 'sender');
+    assert.strictEqual(voip._consumeTicket(ACTOR_ID, senderTicket, 'listener'), false);
+    // E o do sender continua válido no papel dele — o teste acima não o queimou.
+    assert.strictEqual(voip._consumeTicket(ACTOR_ID, senderTicket, 'sender'), true);
+  });
+
+  it('issueTicket sem papel emite pro listener — é o padrão de compatibilidade', () => {
+    const ticket = voip.issueTicket(ACTOR_ID);
+    assert.ok(voip._pendingTickets.has(voip._ticketKey(ACTOR_ID, 'listener')));
+    assert.strictEqual(voip._consumeTicket(ACTOR_ID, ticket, 'listener'), true);
+  });
+
+  it('recusa auth com role desconhecido mesmo havendo ticket para aquela chave', async () => {
+    // O ticket é emitido PARA o papel inventado, então a chave existe e o
+    // handshake passaria por ela. Sem emitir, a recusa viria da falta de ticket
+    // e o teste não diria nada sobre a validação de papel — passaria igual com a
+    // validação removida. O papel precisa ser barrado por ser desconhecido.
+    //
+    // O que isso protege: `entry[role] = conexão` grava a propriedade que vier.
+    // Um papel arbitrário cria um slot que nenhum tick lê, nenhum relay entrega
+    // e nenhum `close` limpa — uma conexão viva e invisível pro serviço.
+    const ticket = voip.issueTicket(ACTOR_ID, 'admin');
+    const ws = connect();
+    await new Promise((resolve) => ws.once('open', resolve));
+    ws.send(JSON.stringify({ type: 'auth', actorId: ACTOR_ID, ticket, role: 'admin' }));
+
+    // O `finally` não é zelo: se a asserção falhar antes do close, o socket fica
+    // aberto e o processo do `node --test` não encerra — o arquivo inteiro trava
+    // em vez de reprovar, e um teste que trava não diz qual defeito ele pegou.
+    try {
+      const reply = await waitForMessage(ws);
+      assert.strictEqual(reply.type, 'auth_failed');
+      await waitForClose(ws);
+      assert.strictEqual(voip._voipClients.has(ACTOR_ID), false, 'nada deveria ter sido registrado');
+    } finally {
+      ws.close();
+    }
   });
 });
 
@@ -214,14 +266,22 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
     return ws;
   }
 
-  /** Conecta, autentica com ticket válido e devolve um socket que acumula mensagens. */
-  async function connectAuthed(actorId) {
-    const ticket = voip.issueTicket(actorId);
+  /**
+   * Conecta, autentica com ticket válido e devolve um socket que acumula mensagens.
+   *
+   * `role` undefined não manda o campo — é de propósito, e é o que o
+   * `index.html` faz hoje. Assim a maioria dos casos deste arquivo continua
+   * exercitando o caminho de compatibilidade sem pedir nada a ele.
+   */
+  async function connectAuthed(actorId, role) {
+    const ticket = voip.issueTicket(actorId, role || 'listener');
     const ws = track(new WebSocket(`ws://127.0.0.1:${relayPort}`));
     ws.received = [];
     ws.on('message', (raw) => ws.received.push(JSON.parse(raw.toString())));
     await new Promise((resolve) => ws.once('open', resolve));
-    ws.send(JSON.stringify({ type: 'auth', actorId, ticket }));
+    const auth = { type: 'auth', actorId, ticket };
+    if (role !== undefined) auth.role = role;
+    ws.send(JSON.stringify(auth));
     await waitFor(ws, 'auth_ok');
     return ws;
   }
@@ -498,6 +558,313 @@ describe('voip-service — relay de audio_frame por proximidade', () => {
   });
 });
 
+/**
+ * Conexão dupla: o helper (`sender`) e a UI (`listener`) do MESMO jogador.
+ *
+ * Este bloco existe porque, até esta rodada, um jogador não conseguia falar e
+ * ouvir ao mesmo tempo: `voipClients` era `Map<actorId, conexão>` e quem
+ * autenticasse por último derrubava o outro. O teste de bancada da Fase 1
+ * contornou usando dois atores distintos, o que é exatamente o cenário que NÃO
+ * é o de um jogador real. Ver VOICE_NATIVE_HELPER.md §10.
+ */
+describe('voip-service — helper e UI do mesmo ator convivendo', () => {
+  const ALICE = 0xff00d001;
+  const BOB = 0xff00d002;
+
+  const RANGE = VOICE_RANGES.normal;
+  const positions = new Map();
+  const FRAME = 'A'.repeat(2560);
+
+  let dualPort;
+  const openSockets = [];
+
+  before(async () => {
+    global.mp = {
+      get: (actorId, prop) => {
+        if (prop !== 'locationalData') return null;
+        const pos = positions.get(actorId);
+        return pos ? { pos } : null;
+      }
+    };
+    voip.startVoipServer(0, '127.0.0.1');
+    for (let i = 0; i < 50 && !voip.getListeningPort(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    dualPort = voip.getListeningPort();
+    assert.ok(dualPort > 0);
+  });
+
+  after(() => {
+    voip.stopVoipServer();
+    delete global.mp;
+  });
+
+  beforeEach(() => {
+    positions.clear();
+    voip._pendingTickets.clear();
+    voip._audienceByActor.clear();
+    voip._voipClients.clear();
+  });
+
+  afterEach(async () => {
+    await Promise.all(openSockets.splice(0).map((ws) => new Promise((resolve) => {
+      if (ws.readyState === WebSocket.CLOSED) return resolve();
+      ws.once('close', resolve);
+      ws.close();
+    })));
+  });
+
+  async function connectAs(actorId, role) {
+    const ticket = voip.issueTicket(actorId, role);
+    const ws = new WebSocket(`ws://127.0.0.1:${dualPort}`);
+    openSockets.push(ws);
+    ws.received = [];
+    ws.on('message', (raw) => ws.received.push(JSON.parse(raw.toString())));
+    await new Promise((resolve) => ws.once('open', resolve));
+    ws.send(JSON.stringify({ type: 'auth', actorId, ticket, role }));
+    await waitForType(ws, 'auth_ok');
+    return ws;
+  }
+
+  function waitForType(ws, type, timeoutMs = 1000) {
+    const already = ws.received.find((m) => m.type === type);
+    if (already) return Promise.resolve(already);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timeout esperando '${type}'`)), timeoutMs);
+      const onMessage = (raw) => {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type !== type) return;
+        clearTimeout(timer);
+        ws.off('message', onMessage);
+        resolve(msg);
+      };
+      ws.on('message', onMessage);
+    });
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
+  const countFrames = (ws) => ws.received.filter((m) => m.type === 'audio_frame').length;
+
+  it('os dois papéis do mesmo ator ficam conectados ao mesmo tempo', async () => {
+    const listener = await connectAs(ALICE, 'listener');
+    const sender = await connectAs(ALICE, 'sender');
+
+    // O antigo `voipClients.set(actorId, ...)` fazia o segundo auth sobrescrever
+    // o primeiro; nenhum dos dois sockets fechava, mas um virava órfão — vivo e
+    // invisível pro servidor.
+    assert.strictEqual(listener.readyState, WebSocket.OPEN);
+    assert.strictEqual(sender.readyState, WebSocket.OPEN);
+
+    const entry = voip._voipClients.get(ALICE);
+    assert.ok(entry, 'o ator deveria ter entrada');
+    assert.ok(entry.listener, 'slot de listener ocupado');
+    assert.ok(entry.sender, 'slot de sender ocupado');
+    assert.notStrictEqual(entry.listener.ws, entry.sender.ws, 'são dois sockets distintos');
+
+    assert.deepStrictEqual(voip.getConnectedVoipActors(), [ALICE], 'uma pessoa, um ator');
+  });
+
+  it('o áudio do sender de Alice chega no listener de Bob, e não no de Alice', async () => {
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceListener = await connectAs(ALICE, 'listener');
+    const aliceSender = await connectAs(ALICE, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+    voip.tickProximity();
+
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', seq: 3, data: FRAME }));
+    const got = await waitForType(bobListener, 'audio_frame');
+
+    assert.strictEqual(got.fromActorId, ALICE);
+    assert.strictEqual(got.data, FRAME);
+    await settle();
+
+    // O ponto todo da separação de papéis: a voz sai por um socket de Alice e
+    // não pode voltar pelo outro. Ouvir a própria voz com atraso de rede é eco.
+    assert.strictEqual(countFrames(aliceListener), 0, 'Alice não ouve a própria voz');
+    assert.strictEqual(countFrames(aliceSender), 0, 'o helper não recebe áudio nenhum');
+  });
+
+  it('o sender não recebe proximity_update; o listener recebe', async () => {
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceListener = await connectAs(ALICE, 'listener');
+    const aliceSender = await connectAs(ALICE, 'sender');
+    await connectAs(BOB, 'listener');
+    voip.tickProximity();
+    await settle();
+
+    const prox = aliceListener.received.filter((m) => m.type === 'proximity_update');
+    assert.ok(prox.length > 0, 'a UI precisa do mapa de volume pra ajustar o ganho');
+    assert.strictEqual(
+      aliceSender.received.filter((m) => m.type === 'proximity_update').length, 0,
+      'o helper não tem ganho pra ajustar — mandar isso pra ele é banda jogada fora'
+    );
+
+    // E Bob aparece uma vez só, não duas — a posição é lida por ator, não por
+    // conexão. Duplicado aqui viraria cada quadro entregue em dobro.
+    assert.strictEqual(prox[prox.length - 1].peers.filter((p) => p.actorId === BOB).length, 1);
+  });
+
+  it('fechar o sender não derruba o listener nem anuncia peer_left', async () => {
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceListener = await connectAs(ALICE, 'listener');
+    const aliceSender = await connectAs(ALICE, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+    voip.tickProximity();
+
+    await new Promise((resolve) => { aliceSender.once('close', resolve); aliceSender.close(); });
+    await settle();
+
+    assert.strictEqual(aliceListener.readyState, WebSocket.OPEN, 'a UI de Alice segue viva');
+    assert.ok(voip._voipClients.has(ALICE), 'Alice continua na cena de voz');
+    assert.strictEqual(voip._voipClients.get(ALICE).sender, null);
+
+    // Alice fechou o helper: ela parou de falar, mas continua ouvindo. Anunciar
+    // saída faria a UI de Bob desmontar o áudio de alguém que ainda está lá.
+    assert.strictEqual(
+      bobListener.received.filter((m) => m.type === 'peer_left').length, 0,
+      'sair o sender não é sair da cena'
+    );
+
+    // E Bob ainda alcança Alice: ela segue recebendo.
+    const bobSender = await connectAs(BOB, 'sender');
+    voip.tickProximity();
+    bobSender.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    await waitForType(aliceListener, 'audio_frame');
+  });
+
+  it('fechar o listener anuncia peer_left e não derruba o sender', async () => {
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceListener = await connectAs(ALICE, 'listener');
+    const aliceSender = await connectAs(ALICE, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+    voip.tickProximity();
+
+    await new Promise((resolve) => { aliceListener.once('close', resolve); aliceListener.close(); });
+    await settle();
+
+    assert.strictEqual(aliceSender.readyState, WebSocket.OPEN, 'o helper de Alice segue vivo');
+    const left = bobListener.received.filter((m) => m.type === 'peer_left');
+    assert.strictEqual(left.length, 1, 'sair o listener é sair da cena de voz');
+    assert.strictEqual(left[0].actorId, ALICE);
+
+    // Alice ficou só com o helper: ela não ouve mais nada, mas continua audível.
+    voip.tickProximity();
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    const got = await waitForType(bobListener, 'audio_frame');
+    assert.strictEqual(got.fromActorId, ALICE);
+  });
+
+  it('mute pela UI cala o helper — o estado é do ator, não da conexão', async () => {
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceListener = await connectAs(ALICE, 'listener');
+    const aliceSender = await connectAs(ALICE, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+
+    // O mute chega pelo socket da UI; quem transmite é o outro socket. Se o
+    // estado morasse na conexão, Alice se veria mutada e seguiria sendo ouvida.
+    aliceListener.send(JSON.stringify({ type: 'mute', muted: true }));
+    await settle();
+    voip.tickProximity();
+
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    await settle();
+    assert.strictEqual(countFrames(bobListener), 0, 'mutado na UI é mutado na cena');
+
+    // E desmutar pela UI devolve a voz do helper.
+    aliceListener.send(JSON.stringify({ type: 'mute', muted: false }));
+    await settle();
+    voip.tickProximity();
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    await waitForType(bobListener, 'audio_frame');
+  });
+
+  it('um ator só com sender não recebe nada — nem áudio, nem proximity_update', async () => {
+    // Alice fecha a UI e deixa só o helper (ou nunca abriu a UI). Ela continua
+    // audível, mas não há pra onde entregar. A tentação de "manda pro socket que
+    // estiver aberto" é o bug: o helper descartaria tudo, e o servidor pagaria
+    // banda de descida por quadro por ouvinte pra que ninguém ouvisse nada.
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceSender = await connectAs(ALICE, 'sender');
+    const bobSender = await connectAs(BOB, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+    voip.tickProximity();
+
+    bobSender.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    await settle();
+
+    assert.strictEqual(countFrames(aliceSender), 0, 'o helper não toca áudio — não deve receber');
+    assert.strictEqual(
+      aliceSender.received.filter((m) => m.type === 'proximity_update').length, 0,
+      'o helper não tem ganho pra ajustar'
+    );
+
+    // E Alice segue sendo ouvida por Bob: sem listener ela é muda pra si, não pros outros.
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', data: FRAME }));
+    const got = await waitForType(bobListener, 'audio_frame');
+    assert.strictEqual(got.fromActorId, ALICE);
+  });
+
+  it('ator com dois papéis conta uma vez só na audiência e no proximity_update', async () => {
+    // A posição é lida por ator. Se o tick iterasse conexões, Alice (dois papéis)
+    // entraria duas vezes na lista: apareceria duplicada no proximity_update de
+    // Bob e, pior, cada quadro de Bob seria entregue DUAS vezes no listener dela
+    // — voz dobrada sobre si mesma, que soa como flanger, não como defeito de rede.
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceListener = await connectAs(ALICE, 'listener');
+    await connectAs(ALICE, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+    const bobSender = await connectAs(BOB, 'sender');
+    voip.tickProximity();
+    await settle();
+
+    const prox = bobListener.received.filter((m) => m.type === 'proximity_update');
+    assert.ok(prox.length > 0);
+    assert.strictEqual(
+      prox[prox.length - 1].peers.filter((p) => p.actorId === ALICE).length, 1,
+      'Alice é uma pessoa num lugar só, mesmo com dois sockets'
+    );
+
+    bobSender.send(JSON.stringify({ type: 'audio_frame', seq: 9, data: FRAME }));
+    await waitForType(aliceListener, 'audio_frame');
+    await settle();
+    assert.strictEqual(countFrames(aliceListener), 1, 'um quadro enviado, um quadro entregue');
+  });
+
+  it('reconectar um papel substitui só aquele papel', async () => {
+    const aliceListener = await connectAs(ALICE, 'listener');
+    const firstSender = await connectAs(ALICE, 'sender');
+
+    // O helper caiu e voltou. O close atrasado do socket velho chega DEPOIS de o
+    // novo já estar registrado — se o handler não conferisse a identidade do
+    // socket, esse adeus limparia o slot do novo.
+    const secondSender = await connectAs(ALICE, 'sender');
+    await settle();
+
+    assert.strictEqual(firstSender.readyState, WebSocket.CLOSED, 'o helper antigo é fechado');
+    assert.strictEqual(secondSender.readyState, WebSocket.OPEN);
+    assert.strictEqual(aliceListener.readyState, WebSocket.OPEN, 'a UI não foi tocada');
+
+    const entry = voip._voipClients.get(ALICE);
+    assert.ok(entry.sender, 'o slot de sender não pode ficar vazio depois da troca');
+    assert.strictEqual(entry.sender.ws.readyState, WebSocket.OPEN);
+    assert.ok(entry.listener, 'e o listener continua lá');
+  });
+});
+
 describe('voip-service — comando /voz', () => {
   it('requestVoiceConnection não lança sem personagem ativo', () => {
     assert.doesNotThrow(() => voip.requestVoiceConnection(0xdeadbeef));
@@ -509,5 +876,92 @@ describe('voip-service — comando /voz', () => {
     assert.ok(def, '/voz deveria estar registrado');
     assert.ok(def.name.includes('/voice'));
     assert.strictEqual(typeof def.handler, 'function');
+  });
+});
+
+/**
+ * Exposição do ticket pra teste manual — ANDAIME TEMPORÁRIO (VOICE_NATIVE_HELPER.md §11).
+ *
+ * O que precisa estar travado aqui é o PADRÃO: desligado. Um andaime que expõe
+ * credencial em texto puro e vem ligado de fábrica é pior do que não ter andaime.
+ */
+describe('voip-service — exposição do ticket de debug', () => {
+  const DEBUG_ACTOR = 0xff00e001;
+  const fs = require('fs');
+  let savedFlag;
+
+  before(() => {
+    savedFlag = process.env.VOIP_DEBUG_EXPOSE_TICKET;
+    commands.registerActiveCharacter(DEBUG_ACTOR, { id: 777, first_name: 'Testa', last_name: 'Dora' }, 1, 1);
+    global.mp = { set: () => {}, get: () => null };
+  });
+
+  after(() => {
+    if (savedFlag === undefined) delete process.env.VOIP_DEBUG_EXPOSE_TICKET;
+    else process.env.VOIP_DEBUG_EXPOSE_TICKET = savedFlag;
+    commands.removeActiveCharacter(DEBUG_ACTOR);
+    delete global.mp;
+    try { fs.unlinkSync(voip.VOIP_DEBUG_TICKET_FILE); } catch { /* pode não existir */ }
+  });
+
+  beforeEach(() => {
+    voip._pendingTickets.clear();
+    try { fs.unlinkSync(voip.VOIP_DEBUG_TICKET_FILE); } catch { /* pode não existir */ }
+  });
+
+  it('desligada por padrão — a ausência da env não expõe nada', () => {
+    delete process.env.VOIP_DEBUG_EXPOSE_TICKET;
+    assert.strictEqual(voip._debugExposeTicketEnabled(), false);
+
+    voip.requestVoiceConnection(DEBUG_ACTOR);
+    assert.strictEqual(
+      fs.existsSync(voip.VOIP_DEBUG_TICKET_FILE), false,
+      'sem a flag, /voz não pode deixar credencial em disco'
+    );
+  });
+
+  it("só 'true' liga — qualquer outro valor continua desligado", () => {
+    for (const valor of ['false', '1', 'yes', 'TRUE', '']) {
+      process.env.VOIP_DEBUG_EXPOSE_TICKET = valor;
+      assert.strictEqual(
+        voip._debugExposeTicketEnabled(), false,
+        `'${valor}' não deveria ligar a exposição`
+      );
+    }
+  });
+
+  it('ligada, grava o ticket de sender com o que o helper precisa', () => {
+    process.env.VOIP_DEBUG_EXPOSE_TICKET = 'true';
+    voip.requestVoiceConnection(DEBUG_ACTOR);
+
+    assert.ok(fs.existsSync(voip.VOIP_DEBUG_TICKET_FILE), 'o arquivo deveria existir');
+    const dump = JSON.parse(fs.readFileSync(voip.VOIP_DEBUG_TICKET_FILE, 'utf8'));
+
+    assert.strictEqual(dump.actorId, DEBUG_ACTOR);
+    assert.strictEqual(dump.role, 'sender');
+    assert.ok(dump.ticket && dump.ticket.length > 0);
+    assert.ok(dump.host, 'sem host o testador não sabe onde conectar');
+    assert.ok(dump.port > 0);
+    assert.ok(dump.expiresAt, 'sem prazo o testador não sabe se já venceu');
+
+    // O ticket gravado tem que ser o do SENDER: é o que vai pro --ticket do
+    // helper. Gravar o do listener daria um token que o helper não consegue usar
+    // e que, pior, queimaria o da UI.
+    assert.strictEqual(
+      voip._pendingTickets.get(voip._ticketKey(DEBUG_ACTOR, 'sender')).token, dump.ticket
+    );
+    assert.notStrictEqual(
+      voip._pendingTickets.get(voip._ticketKey(DEBUG_ACTOR, 'listener')).token, dump.ticket
+    );
+  });
+
+  it('/voz emite os dois tickets — um por papel, sem um queimar o outro', () => {
+    delete process.env.VOIP_DEBUG_EXPOSE_TICKET;
+    voip.requestVoiceConnection(DEBUG_ACTOR);
+
+    // Antes desta rodada `issueTicket` sobrescrevia o pendente do ator: o
+    // segundo /voz apagava o primeiro e os dois papéis nunca coexistiam.
+    assert.ok(voip._pendingTickets.has(voip._ticketKey(DEBUG_ACTOR, 'listener')));
+    assert.ok(voip._pendingTickets.has(voip._ticketKey(DEBUG_ACTOR, 'sender')));
   });
 });
