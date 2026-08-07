@@ -20,6 +20,55 @@
  *   3. bootAll() verifica env var, resolve dependências e chama initialize()
  *   4. Comandos são registrados no commandRegistry automaticamente se o módulo estiver ativo
  *   5. Na desconexão/shutdown, shutdown() é chamado e comandos são removidos
+ *
+ * ─── Distribuição de eventos de jogo: ADIADA, e por quê ─────────────────────
+ *
+ * O sistema de módulos do Red House distribui eventos de jogo (`onHit`,
+ * `onCellChange`) para qualquer módulo que queira escutar — não só para quem o
+ * evento foi originalmente escrito. Este registry só tem ciclo de vida
+ * (`initialize`/`shutdown`/`healthCheck`), e o estudo registrou aquilo como
+ * "um dia pode valer"
+ * (`docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md` §4.1, "Outras coisas
+ * que aprendemos").
+ *
+ * **Avaliado em 06/08/2026 e deliberadamente não feito.** O censo dos seis
+ * módulos registrados hoje (`phase0-basic.js`):
+ *
+ *   | módulo        | evento de jogo que escutaria |
+ *   |---------------|------------------------------|
+ *   | death         | hit — e só ele                |
+ *   | governance    | nenhum                        |
+ *   | market-stalls | nenhum                        |
+ *   | player-panel  | nenhum (faz polling de Papyrus e assina o panel-refresh-bus, que é interno, não evento de jogo) |
+ *   | voip          | nenhum                        |
+ *   | npc-cleaner   | nenhum                        |
+ *
+ * **Um consumidor, um tipo de evento.** `core/hit-events.js` entrega o episódio
+ * direto ao assinante que o `death-service` passa em `hitEvents.start(cb)` —
+ * uma linha, sem indireção. Um despacho genérico aqui trocaria essa linha por
+ * um barramento que serve a um só, e o `descriptor.on = { hit, cellChange }`
+ * teria uma chave viva e uma morta desde o primeiro dia.
+ *
+ * `onCellChange` **não tem consumidor nenhum**, nem sequer um: `safe-zones.js`
+ * consulta `mp.get(actorId, 'locationalData')` sob demanda — é leitura de
+ * property, servida do cache do servidor, sem o custo de ida ao Papyrus —, e o
+ * sistema de território que motivaria o evento está em "Pós-Alfa" no
+ * `HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md`. Construir a distribuição por causa
+ * dele seria construir infraestrutura para uma feature que ainda não passou
+ * pelas 15 perguntas da Constituição §15.
+ *
+ * O precedente do próprio projeto diz o mesmo: quando um segundo consumidor
+ * apareceu de verdade — governança precisando avisar o painel —, a resposta foi
+ * `core/panel-refresh-bus.js`, um barramento pequeno e nomeado, não um canal
+ * genérico no registry. Serve de modelo se um terceiro caso aparecer.
+ *
+ * **O gatilho para reabrir isto**, para quem chegar aqui depois: um segundo
+ * módulo que precise de um evento de jogo já capturado por outro. Aí o desenho
+ * é `descriptor.on = { hit: fn, cellChange: fn }` opcional no `register()`,
+ * despachado a partir de onde o evento já é capturado hoje
+ * (`core/hit-events.js`), com teste no padrão do resto deste arquivo. Até lá,
+ * generalizar seria abstração prematura — a mesma que a §15 pede para evitar na
+ * camada de mecânica de mundo, pelo mesmo motivo.
  */
 
 const commandRegistry = require('./command-registry');
