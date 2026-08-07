@@ -316,6 +316,22 @@ function registerCoreCommands() {
     }
   }, { module: 'admin', phase: 'core', description: '[Staff] Define ouro de jogador', usage: '/setgold <actorId> <valor>' });
 
+  // Alias técnico em inglês pelo mesmo padrão de /apresentar → /introduce.
+  // `parseActorId` (e não `parseInt(args, 16)` como os outros de staff) porque
+  // este é o comando que a staff digita copiando um id de um log ou do painel,
+  // onde ele aparece com o prefixo `0x`.
+  commandRegistry.register(['/revelaridentidade', '/revealidentity'], (actorId, args) => {
+    const targetActorId = parseActorId(args);
+    if (!Number.isFinite(targetActorId)) {
+      sendNotification(actorId, 'Uso correto: /revelaridentidade <actorId>');
+      return;
+    }
+    require('./admin-service').revealIdentity(actorId, targetActorId).catch(err => {
+      console.error('[identity] Falha ao revelar identidade:', err.message);
+      sendNotification(actorId, '[Staff] Nao foi possivel revelar a identidade.');
+    });
+  }, { module: 'admin', phase: 'core', description: '[Staff] Revela o nome real de um personagem (auditado)', usage: '/revelaridentidade <actorId>' });
+
   // /status — diagnóstico de estado do personagem (staff)
   commandRegistry.register('/status', (actorId, args) => {
     const charData = getActiveCharacterData(actorId);
