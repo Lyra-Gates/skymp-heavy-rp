@@ -181,15 +181,32 @@ Dois problemas menores, registrados para quem migrar:
 
 **Entra na Fase 3** pelo mesmo motivo do `crafting`.
 
-### 7.4 Candidato registrado, não decidido: permissão numérica em três lugares
+### 7.4 Decidido em 07/08/2026: permissão numérica em três lugares
 
-Encontrado pelo `npm run typecheck` durante a migração da Fase 3, e **deixado como está de propósito**.
+> Esta seção era "candidato registrado, não decidido". A decisão foi tomada e está abaixo; o histórico do problema fica porque ele explica a escolha.
 
-`crafting-service.js` (linhas 162 e 183) e `economy-regional.js` (linha 238) chamam `adminService.hasPermission(actorId, 20)` — um **nível numérico**, herança de um modelo antigo. O `admin-service` hoje trabalha com permissões nomeadas e trata esse caso explicitamente: grita no log e **nega**. O `disguise-service` tinha a mesma coisa (`hasPermission(actorId, 10)`) e saiu junto com o arquivo.
+**O problema.** Encontrado pelo `npm run typecheck` durante a migração da Fase 3. `crafting-service.js` (linhas 162 e 183) e `economy-regional.js` (linha 238) chamavam `adminService.hasPermission(actorId, 20)` — um **nível numérico**, herança de um modelo antigo. O `admin-service` hoje trabalha com permissões nomeadas e trata esse caso explicitamente: grita no log e **nega**. O `disguise-service` tinha a mesma coisa (`hasPermission(actorId, 10)`) e saiu junto com o arquivo.
 
-Consequência: `/addrecipe`, `/addingredient` e o comando de staff do `economy-regional` **negam sempre**, para todo mundo, inclusive para admin. Como os três serviços estão PARKED, ninguém sente isso hoje.
+Consequência: `/addrecipe`, `/addingredient` e `/settax` **negavam sempre**, para todo mundo, inclusive para `owner`. Como os dois serviços estão PARKED, ninguém sentia — e é justamente esse o risco: o dia em que alguém reativasse um deles, os três comandos estariam quebrados em silêncio, sem nada no caminho de quem reativou que apontasse para cá.
 
-**Por que não foi corrigido nesta rodada:** o modo de falha aponta pro lado seguro (nega, não concede), então não é urgente; e escolher *qual* permissão nomeada cada comando exige é decisão de desenho, não de migração. `add_item`? Uma `manage_recipes` nova? A resposta muda quem no servidor pode criar receita, que é uma questão de economia e não de código. Quem reativar qualquer um dos dois decide — e o log já grita o suficiente para que não passe despercebido.
+**A decisão.**
+
+| Comando | Permissão | Cargos |
+|---|---|---|
+| `/addrecipe`, `/addingredient` (`crafting-service.js`) | `manage_recipes` — **nova** | `admin`, `owner` |
+| `/settax` (`economy-regional.js`) | `set_gold` — reaproveitada | `admin`, `owner` |
+
+**Por que `manage_recipes` nova e não `add_item`.** `add_item` era o candidato óbvio e é o errado. Ele significa "dê este item a este jogador": ato pontual, auditado, raio de alcance de uma pessoa. Uma receita é uma regra permanente que **todo** jogador usa, quantas vezes quiser — é uma casa da moeda, não um presente. Reaproveitar `add_item` faria quem auditasse *"quem pode `add_item`?"* receber a resposta errada sobre quem pode reformar a economia de crafting. Isso é a mesma classe do nível numérico que estamos consertando: uma permissão que significa outra coisa que não o que o nome diz.
+
+**Por que `set_gold` reaproveitada e não uma `manage_economy` nova.** `set_gold` já significa "a staff escreve um número da economia por decreto, com audit log". Definir a alíquota de um Hold é exatamente isso, aplicado ao fluxo em vez do saldo — mesmo andar, mesmo tipo de poder, mesmos cargos. Criar um nome para um único sítio de chamada produziria uma permissão que nenhum cargo concede, que é o outro modo de falha que o `hasPermission` grita.
+
+**Por que os dois ficam fora do moderador.** Receita e imposto movem patrimônio de todo mundo, não de um alvo. É o mesmo andar de `add_item` e `set_gold`, que o moderador também não tem.
+
+**O que isto não é.** Não é reativação. Nenhum dos dois serviços entra no `core/module-registry.js`, e o comentário de PARKED no topo dos dois arquivos continua valendo. Corrigir a autorização de um serviço estacionado é reduzir a armadilha que ele guarda para quem o reativar — é o oposto de ligá-lo.
+
+**Cobertura.** `parked-staff-permissions.test.js`, 16 testes: matriz cargo × ação para os três handlers (chamando o handler real e olhando o efeito colateral, nunca o retorno — os três devolvem `undefined` no sucesso e na negação) mais uma varredura estática que reprova se qualquer arquivo de produção do gamemode voltar a passar número para `hasPermission`. Cinco mutações verificadas aplicando e executando, não prevendo: apagar cada uma das três checagens reprova 2; voltar ao nível numérico reprova 3; dar `manage_recipes` ao moderador reprova 3.
+
+**O que continua em aberto:** se `manage_recipes` deve ser de `admin` ou só de `owner` quando o `crafting-service` de fato voltar. Hoje ela segue o andar de `add_item` porque criar receita é trabalho de conteúdo, rotineiro — prender isso ao `owner` faria o servidor depender de uma pessoa para tarefa corriqueira. Se a economia real mostrar que receita é decisão rara e cara, mover para `owner` é uma linha em `ROLE_PERMISSIONS` e uma na MATRIZ do teste, que é onde a mudança fica declarada.
 
 ### 7.5 O que esta rodada mostra sobre a pergunta da primeira
 
@@ -198,6 +215,20 @@ A primeira rodada perguntou *"duplica algo ativo?"* e, para os três, respondeu 
 O que escapou é que **duplicar um serviço não é a única forma de carregar a dívida**: os dois duplicam um *padrão* — "mexer em patrimônio do jogador fora do arquivo que existe pra ser o único caminho" — sem duplicar nenhum serviço. Foi o que o item 2 apagou no ouro, e o filtro daquela rodada (`importa economy-service?`) só pegava a instância em ouro.
 
 Fica registrado como critério para a próxima reavaliação: **a pergunta é "toca patrimônio, estado ou identidade fora do dono desse assunto?", não "importa o arquivo errado?"**.
+
+### 7.6 Candidatos da 3ª varredura (07/08/2026), registrados e não decididos
+
+A auditoria estática por classe de bug conhecida rodou de novo, agora sobre o código que nasceu depois de `26ed196` (a varredura de 06/08). As cinco classes passaram limpas — ver o `CHANGELOG.md`. Estes dois achados apareceram de raspão e **não são membros de nenhuma das cinco**, então seguem a mesma regra da 7.4: registrados aqui em vez de corrigidos por conta própria.
+
+**1. `economy-regional.characterHold` cresce e nunca encolhe.** `Map` de `characterId → holdId` (linha 23), preenchido em `setCharacterHold` e nunca esvaziado. Não é a classe do `_lastHealth`: a chave é `characterId`, então não sofre reaproveitamento de slot e o valor continua correto no reconnect — ninguém recebe o Hold de outra pessoa. É vazamento puro, limitado ao número de personagens distintos que já usaram o comando na vida do processo.
+
+O precedente existe e é o `_soulCache`, que ganhou `cleanup()` no `removeActiveCharacter` com o argumento *"cache que só cresce é vazamento, e reler no próximo login custa uma query"*. A diferença é que o `soul` está no `module-registry` e a limpeza fica atrás de `isEnabled('soul')`; `economy-regional` não está registrado em lugar nenhum, então não há flag para consultar. Ligar a limpeza exigiria decidir como o `removeActiveCharacter` conversa com um módulo que o registry não conhece — decisão de arquitetura, não de varredura.
+
+**2. `withdrawHoldTreasury` carrega a forma do defeito do `craftItem`, num caminho que hoje não executa.** Linhas 225–226: `UPDATE holds SET treasury = treasury - ?` seguido de `UPDATE factions SET treasury = treasury + ?`, cada um no próprio `db.query`, sem `BEGIN`. É **exatamente** a forma que o `craftItem` tinha antes da Fase 3 — "cada função abre a própria transação; falhando a segunda, a primeira já commitou". A varredura da classe 1 não o alcança porque a busca é por `characters.gold`, e isto é tesouro de Hold e de facção: outras tabelas, mesmo desenho.
+
+**Mas o ouro não se perde hoje, e é importante ser exato sobre por quê:** a função morre antes de chegar nos dois `UPDATE`. Na linha 213 ela chama `governance.getMembership`, que existe como função mas **não está no `module.exports`** do `governance-service`, e nas linhas 226/231 usa um `factionInfo` que nunca foi declarado. As duas coisas já estavam registradas no comentário de `governance-service.js` (perto da checagem `isEnabled('economy-regional')`) e aparecem no `npm run typecheck` — o que também explica por que o módulo é o exemplo que aquele comentário usa para dizer que importar PARKED direto é a pior ideia possível.
+
+Ou seja: são **dois** defeitos empilhados, e consertar só o de cima seria pior que não mexer — transformaria um caminho que falha alto num caminho que move ouro pela metade em silêncio. Não foi corrigido porque o `core/transaction-service` é dono de **patrimônio de personagem** (ouro e inventário) e não tem primitiva para tesouro institucional. Fazer certo é decidir se `holds.treasury` e `factions.treasury` entram no mesmo ledger, com o mesmo rastro em `gold_transactions`, ou se são outra coisa — a pergunta da 7.5 aplicada a um patrimônio que não é de ninguém em particular. Decisão de economia, igual à da 7.4.
 
 ---
 

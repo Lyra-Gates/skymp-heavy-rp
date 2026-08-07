@@ -149,11 +149,25 @@ Confirming in game is still worth doing, but now as a check, not an investigatio
 
 Deliberate choice not to throw: that would kill the player's command over a programming mistake. Denying is the safe outcome; the log is what makes someone fix it. It also catches the opposite case — someone writing `hasPermission(id, 'manage_factions')` thinks they created a rule and actually created a door that never opens. 4 new tests.
 
+**Closed at the root and at the leaves on 2026-08-07.** The twelve calls are gone: `disguise-service`, `faction-service` and `justice-service` were deleted, and the three that remained (`/addrecipe`, `/addingredient`, `/settax`) moved to named permissions — `manage_recipes` (new) and `set_gold`. The reasoning behind which permission each command requires is in [§7.4 of `PARKED_SERVICES_DECISION.md`](PARKED_SERVICES_DECISION.md); a static sweep in `parked-staff-permissions.test.js` fails if any production file in the gamemode goes back to passing a number.
+
 ---
 
 ## 2-bis. Second pass (2026-08-06/07)
 
 The first pass read code. This one **installed the server and turned it on**, and the difference shows in which defects each finds: nine of the ten below are configuration or lifecycle — the class no unit test touches, because there is nothing to test in a file nobody reads.
+
+### 2.15 🔴 A client with an extra plugin passed the parity check — *fixed*
+
+Found while extracting the launcher logic for testing. Both parity checks walked **the server's list** asking "does the player have this?". Neither walked the player's list asking "does the server know about this?".
+
+Consequence: a client with **all** the right mods, with the right hash, **plus one extra `.esp`**, passed both. And one extra plugin in the load order occupies an index and shifts every following one — the `HeavyRP.esm` that is `02` on the server becomes `03` there, and **every `base_id` stored in the database starts pointing at a different record on that player's screen**.
+
+This is exactly the failure the FormID contract exists to prevent (`MODS_AND_GAMEMODE_CONTRACT.md` §3), and it produces no error at all: it produces a chest with something else inside.
+
+A second case came with it: when the server did not report a load order, the code fell back to the **local** one — comparing the player against themselves and always answering `ok`. The worst possible answer, because it looks like approval.
+
+**Fixed:** logic extracted into `apps/launcher/electron/parity.mjs` (no `fs`, no `http`, no `electron`), with 24 tests. The check now runs in both directions, uses `plugins.txt` to know what is actually enabled (a plugin present but disabled shifts nothing), and a missing load order now **fails**.
 
 ### 2.16 🔴 The gamemode never loaded its own `.env` — *fixed*
 

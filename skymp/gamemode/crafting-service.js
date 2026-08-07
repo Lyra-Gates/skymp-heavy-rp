@@ -159,7 +159,7 @@ async function craftItem(actorId, characterId, recipeId) {
  */
 async function addRecipe(actorId, stationType, resultBaseId, resultCount, name) {
   const adminService = require('./admin-service');
-  if (!adminService.hasPermission(actorId, 20)) return null;
+  if (!adminService.hasPermission(actorId, 'manage_recipes')) return null;
 
   const res = await db.query(
     'INSERT INTO crafting_recipes (name, station_type, result_base_id, result_count) VALUES (?, ?, ?, ?)',
@@ -180,7 +180,7 @@ async function addRecipe(actorId, stationType, resultBaseId, resultCount, name) 
  */
 async function addIngredient(actorId, recipeId, baseId, count) {
   const adminService = require('./admin-service');
-  if (!adminService.hasPermission(actorId, 20)) return;
+  if (!adminService.hasPermission(actorId, 'manage_recipes')) return;
 
   await db.query(
     'INSERT INTO crafting_ingredients (recipe_id, base_id, count) VALUES (?, ?, ?)',

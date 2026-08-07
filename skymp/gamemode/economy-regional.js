@@ -233,9 +233,14 @@ async function withdrawHoldTreasury(actorId, characterId, amount) {
 
 /**
  * Staff: /settax [holdId] [rate] — Define imposto de um Hold.
+ *
+ * Exige `set_gold`, e não uma permissão nova. `set_gold` já significa "a staff
+ * escreve um número da economia por decreto, com audit log" — que é exatamente
+ * isto, aplicado ao fluxo em vez do saldo. Inventar uma `manage_economy` para um
+ * único sítio de chamada criaria um nome que nenhum cargo concede hoje.
  */
 async function setTaxRate(actorId, holdId, rate) {
-  if (!admin.hasPermission(actorId, 20)) return;
+  if (!admin.hasPermission(actorId, 'set_gold')) return;
   await db.query('UPDATE holds SET tax_rate = ? WHERE id = ?', [rate, holdId]);
   await loadCache();
   if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Imposto de ${holdId} definido para ${(rate * 100).toFixed(1)}%.`]);
