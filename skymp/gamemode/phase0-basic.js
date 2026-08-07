@@ -152,7 +152,6 @@ moduleRegistry.register({
 // - crafting-service  (ENABLE_CRAFTING)
 // - housing-service   (ENABLE_HOUSING)
 // - trade-service     (ENABLE_TRADE)
-// - disguise-service  (ENABLE_DISGUISE)
 // - horse-service     (ENABLE_HORSES)
 //
 // APAGADOS em 06/08/2026 (ver docs/technical/PARKED_SERVICES_DECISION.md):
@@ -172,6 +171,16 @@ moduleRegistry.register({
 // - survival-service  Mexia em ActorValue (StaminaRate/CarryWeight), que é
 //                     exatamente o que o death-service lê pra detectar DOWNED.
 //                     Precisa nascer depois do death-service estar validado.
+//
+// APAGADO em 06/08/2026, na reavaliação dos três "independentes":
+// - disguise-service  Segunda autoridade sobre o nome que um observador vê, e
+//                     com a chave errada: o identity-service resolve por
+//                     (observador, alvo) e ele resolvia só por alvo, então o
+//                     disfarce nem conseguia expressar o único caso que importa
+//                     — parecer outra pessoa pra quem já te conhece. O lugar
+//                     certo já existe: `character_known_identities.source`
+//                     aceita 'disguise' e o painel já rotula "disfarce".
+//                     Ver docs/technical/PARKED_SERVICES_DECISION.md §7.
 //
 // Para reativar um módulo, implemente o descriptor correto acima
 // com initialize(), commands[], healthCheck() e dependencies[].
