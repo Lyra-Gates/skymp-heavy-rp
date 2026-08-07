@@ -14,8 +14,8 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 | Component | Tests | Installable | Real state |
 |---|---|---|---|
-| `skymp/gamemode` | 313/313 ✅ + 11/11 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
-| `apps/bot-discord` | 19/19 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
+| `skymp/gamemode` | 362/362 ✅ + 11/11 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
+| `apps/bot-discord` | 40/40 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
 | `apps/launcher` | 24/24 ✅ (parity) | ✅ | **Was broken end to end** (see 2.1) and had no tests at all. The modpack parity logic was extracted into `electron/parity.mjs` and tested — it found the extra-plugin hole (2.15). The rest of `main.ts` needs Electron. |
 | `apps/game-api` | 30/30 ✅ | ✅ | **New.** Serves port 7758, which the launcher always called and which didn't exist. |
@@ -279,7 +279,7 @@ Ordered by **what unblocks what**. Phase 1 items are prerequisites for any test 
 |---|---|---|
 | 3.1 | ✅ **Done** — `PANEL_PUBLIC_URL` (accepts a list) defines the CORS origin and the callback fallback | |
 | 3.2 | ✅ **Done** — pruning by age **and** by count (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), triggered after each receipt | Two limits because a crash loop generates hundreds of reports on the same day, and age alone wouldn't hold. |
-| 3.3 | **Sign the launcher installer** (the keys are already read from the environment by electron-builder) | Without a signature, SmartScreen blocks it and the player doesn't install. |
+| 3.3 | ⚙️ **Configured, certificate missing.** `win.signtoolOptions` and the `release-launcher.yml` workflow exist and actually verify the signature (`Get-AuthenticodeSignature` must return `Valid` **and** a timestamp); no signed installer has been produced, because there is no certificate. See [`LAUNCHER_DISTRIBUTION.md` §6](LAUNCHER_DISTRIBUTION.md). | Without a signature, SmartScreen blocks it and the player does not install. What is left are two human steps: buying the certificate (§6.3 compares OV, EV and Azure Trusted Signing) and confirming SmartScreen by hand on a clean machine — reputation is built by Microsoft across real downloads and is not automatable. |
 | 3.4 | ✅ **Done** — migration v7. Along with it: `DATE(created_at)=CURDATE()` in the dashboard became a range comparison, because wrapping the column in a function prevents index use | |
 
 ### Phase 4 — Maintenance (added 2026-08-06)

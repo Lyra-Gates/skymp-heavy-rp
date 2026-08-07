@@ -771,14 +771,42 @@ Rodar o projeto de forma sustentavel.
 
 ## 14. Próximo Passo Imediato
 
-Com a economia (Market Stalls, Regional NPCs) e o sistema de governo implementados, o próximo foco natural é o sistema de **Housing / Propriedades (Fase 6)** ou refinar o combate/física (laboratório).
+> Reescrito em 07/08/2026. A versão anterior apontava para **Housing** ou "refinar combate/física" e foi escrita antes de `hit-events`, `espm`, `safe-zones`, `core/soul.js` e do primeiro boot real do servidor existirem. Housing continua PARKED por decisão registrada, e o combate é do cliente — o servidor não arbitra golpe.
 
-O marco técnico atual é:
+**O próximo passo não é uma feature. É conectar um cliente.**
+
+Nada deste projeto foi validado numa sessão real. O servidor subiu pela primeira vez em 06/08/2026 e o gamemode carregou, mas **ninguém entrou**. Os testes usam `mp` mockado, e mock aceita qualquer coisa — foi assim que 22 chamadas Papyrus com argumento errado passaram meses com a suíte verde.
+
+Hoje há **quatro sistemas** com o mesmo aviso — *confirmado por teste automatizado, não confirmado em sessão real*:
+
+| Sistema | O que só o cliente prova | Etapa |
+|---|---|---|
+| `core/hit-events.js` | o snippet injetado roda e o evento chega | 9.1 |
+| `core/espm.js` | `lookupEspmRecordById` responde como a sonda mostrou | 9.2 |
+| `core/safe-zones.js` | a config carrega (o bloqueio ainda não tem chamador) | 9.3 |
+| `soul-service.js` | o primeiro sinal aparece na tela do jogador | 9.4 |
+
+O roteiro está em [`docs/technical/FASE_0_ROTEIRO.md`](docs/technical/FASE_0_ROTEIRO.md), pronto e **não executado**. Ele precisa de três pessoas, dois clientes e um servidor — nada que agente de código consiga fazer sozinho.
+
+**O que a Fase 0 desbloqueia**, e por isso ela vem antes de qualquer feature nova:
+
+- apagar o `checkDamageSpike` do `death-service` (a heurística só sai quando o evento de hit provar que chega);
+- tirar o polling do `death-service`, se `mp.onDeath` disparar como esperado;
+- remover `/internal/session/resolve`, se o master API confirmar;
+- liberar a **etapa 2 da Afinidade da Alma** — os quatro resultados em encantamento, que é o primeiro lugar onde a alma vira consequência mecânica.
+
+**Depois da Fase 0**, e não antes, a ordem que o resto da documentação já sustenta:
+
+1. **Etapa 2 do `soul-service`** (`docs/design/SOUL_AFFINITY.md`, "Proposta de implementação"). Escopo pequeno, economia mensurável, primeira profissão de verdade — e valida o mecanismo central do sistema num lugar onde errar é barato. Depende de tirar o `crafting-service` de PARKED, que já foi migrado pro `transaction-service` e está pronto para essa conversa.
+2. **Fase 1 — Identidade e Emotes**, que o `REFERENCE_STUDY_SKYMP_RED_HOUSE.md` já mapeou.
+3. **Housing / Propriedades**, se e quando a decisão de reativá-lo for tomada — `housing-service.js` está migrado e estacionado, e reativar é decisão de escopo, não de segurança (ver [`PARKED_SERVICES_DECISION.md`](docs/technical/PARKED_SERVICES_DECISION.md)).
+
+O marco técnico atual continua sendo:
 
 ```text
 Marco 0.1 - Teste de Conexao SkyMP
-- Servidor rodando
-- Dois clientes conectados
+- Servidor rodando            [feito em 06/08/2026]
+- Dois clientes conectados    [PENDENTE — e o que trava todo o resto]
 - Versao documentada
 - Modlist base documentada
 - Notas de crash/dessync documentadas

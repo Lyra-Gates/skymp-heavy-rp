@@ -14,8 +14,8 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 313/313 ✅ + 11/11 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
-| `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, escopo pequeno (sync de cargo + canais de voz temporários). |
+| `skymp/gamemode` | 362/362 ✅ + 13/13 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
+| `apps/bot-discord` | 40/40 ✅ | ✅ | **Funcional.** Sync de cargo, canais de voz temporários e, desde 07/08/2026, o log de moderação que a `ARCHITECTURE.md` 1.3 registrava como intenção nunca implementada. |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | 24/24 ✅ (paridade) | ✅ | **Estava quebrado ponta a ponta** (ver 2.1) e sem teste nenhum. A lógica de paridade de modpack foi extraída pra `electron/parity.mjs` e testada — achou o buraco do plugin extra (2.15). O resto do `main.ts` depende de Electron. |
 | `apps/game-api` | 30/30 ✅ | ✅ | **Novo.** Serve a porta 7758 que o launcher sempre chamou e que não existia. O gerador de manifesto ganhou teste e a flag `--only-load-order` (2.26). |
@@ -292,7 +292,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 |---|---|---|
 | 3.1 | ✅ **Feito** — `PANEL_PUBLIC_URL` (aceita lista) define origem do CORS e fallback do callback | |
 | 3.2 | ✅ **Feito** — poda por idade **e** por contagem (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), disparada após cada recebimento | Dois limites porque um crash em loop gera centenas de relatórios no mesmo dia, e só a idade não seguraria. |
-| 3.3 | **Assinar o instalador do launcher** (as chaves já são lidas do ambiente pelo electron-builder) | Sem assinatura, SmartScreen bloqueia e jogador não instala. |
+| 3.3 | ⚙️ **Configurado, falta o certificado.** `win.signtoolOptions` e o workflow `release-launcher.yml` existem e verificam a assinatura de verdade (`Get-AuthenticodeSignature` precisa devolver `Valid` **e** um carimbo de tempo); nenhum instalador assinado foi gerado, porque não há certificado. Ver [`LAUNCHER_DISTRIBUTION.md` §6](LAUNCHER_DISTRIBUTION.md). | Sem assinatura, SmartScreen bloqueia e o jogador não instala. O que falta são dois passos humanos: comprar o certificado (§6.3 compara OV, EV e Azure Trusted Signing) e confirmar o SmartScreen à mão numa máquina limpa — reputação é construída pela Microsoft ao longo de downloads reais e não é automatizável. |
 | 3.4 | ✅ **Feito** — migration v7. Junto: `DATE(created_at)=CURDATE()` no dashboard virou comparação por intervalo, porque envolver a coluna numa função impede o uso de índice | |
 
 ### Fase 4 — Manutenção (adicionada em 06/08/2026)

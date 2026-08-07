@@ -14,8 +14,8 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 | Componente | Pruebas | Instalable | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 313/313 ✅ + 11/11 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
-| `apps/bot-discord` | 19/19 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
+| `skymp/gamemode` | 362/362 ✅ + 11/11 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
+| `apps/bot-discord` | 40/40 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
 | `apps/launcher` | 24/24 ✅ (paridad) | ✅ | **Estaba roto de punta a punta** (ver 2.1) y sin ninguna prueba. La lógica de paridad del modpack se extrajo a `electron/parity.mjs` y se probó — encontró el agujero del plugin extra (2.15). El resto de `main.ts` necesita Electron. |
 | `apps/game-api` | 30/30 ✅ | ✅ | **Nuevo.** Sirve el puerto 7758 que el launcher siempre llamó y que no existía. |
@@ -279,7 +279,7 @@ Ordenado por **qué desbloquea qué**. Los puntos de la Fase 1 son prerrequisito
 |---|---|---|
 | 3.1 | ✅ **Hecho** — `PANEL_PUBLIC_URL` (acepta lista) define el origen del CORS y el fallback del callback | |
 | 3.2 | ✅ **Hecho** — poda por edad **y** por conteo (`CRASH_REPORT_MAX_AGE_DAYS`/`MAX_FILES`), disparada tras cada recepción | Dos límites porque un crash en bucle genera cientos de reportes el mismo día, y solo la edad no aguantaría. |
-| 3.3 | **Firmar el instalador del launcher** (electron-builder ya lee las claves del entorno) | Sin firma, SmartScreen lo bloquea y el jugador no instala. |
+| 3.3 | ⚙️ **Configurado, falta el certificado.** `win.signtoolOptions` y el workflow `release-launcher.yml` existen y verifican la firma de verdad (`Get-AuthenticodeSignature` debe devolver `Valid` **y** una marca de tiempo); no se generó ningún instalador firmado, porque no hay certificado. Ver [`LAUNCHER_DISTRIBUTION.md` §6](LAUNCHER_DISTRIBUTION.md). | Sin firma, SmartScreen lo bloquea y el jugador no instala. Faltan dos pasos humanos: comprar el certificado (§6.3 compara OV, EV y Azure Trusted Signing) y confirmar SmartScreen a mano en una máquina limpia — la reputación la construye Microsoft a lo largo de descargas reales y no es automatizable. |
 | 3.4 | ✅ **Hecho** — migración v7. Junto: `DATE(created_at)=CURDATE()` en el dashboard pasó a ser una comparación por intervalo, porque envolver la columna en una función impide usar el índice | |
 
 ### Fase 4 — Mantenimiento (añadida el 06/08/2026)
