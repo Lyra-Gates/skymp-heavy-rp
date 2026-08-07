@@ -1,11 +1,11 @@
 # Fase 0 — Roteiro de teste in-game
 
-**O único bloqueio real do projeto.** 360 testes automatizados passam, e nada nunca rodou numa sessão com jogador. Enquanto este roteiro não for executado, tudo o mais é qualidade sobre código não validado.
+**O único bloqueio real do projeto.** 426 testes automatizados passam, e nada nunca rodou numa sessão com jogador. Enquanto este roteiro não for executado, tudo o mais é qualidade sobre código não validado.
 
 > Substitui o `GOVERNANCE_MARKET_STALLS_TEST_PLAN.md` (13/07/2026), que cobria governança e barracas. Desde então entraram `death-service`, `/painel`, VOIP, master API de sessão e a fila — e o gamemode passou de ~15 para **mais de 60 comandos**. Aquele plano descrevia camadas; este descreve **passos, o que observar, e o que significa falhar**.
 
 **Quem precisa:** 2 pessoas (A e B) com Skyrim SE/AE. Uma terceira (C) só na etapa 6.
-**Tempo:** ~50 minutos se nada quebrar. Se quebrar, você para e anota — é para isso que serve.
+**Tempo:** ~60 minutos se nada quebrar. Se quebrar, você para e anota — é para isso que serve.
 
 ---
 
@@ -26,8 +26,8 @@ Copie o [registro em branco](#registro) para um arquivo novo antes de começar e
 
 | # | Faça | Espere | Se falhar |
 |---|---|---|---|
-| 0.1 | `cd skymp/gamemode && npm test` | 253 passando | Não comece. Conserte antes. |
-| 0.2 | `npm run test:systems` | 10/10 | Comando, permissão ou flag fora do lugar |
+| 0.1 | `cd skymp/gamemode && npm test` | 313 passando | Não comece. Conserte antes. |
+| 0.2 | `npm run test:systems` | 11/11 | Comando, permissão ou flag fora do lugar |
 | 0.3 | `npm run check:schema` | `[OK] banco e migrations estao alinhados` | **Aplique as migrations pendentes** (`v2`→`v9`, em ordem; são idempotentes). Banco meio-migrado não quebra o boot — quebra a query que toca a coluna faltante, no meio de uma cena. Foi assim que a v9 nasceu: `characters.gold` estava só no `schema.sql`, então banco antigo migrado em ordem nunca a recebia, e **toda** operação de ouro falharia na etapa 5.6 |
 | 0.4 | Confira `apps/game-api/mods.json` | Existe e tem `mods` e `loadOrder` | `/mods.json` responde 503 e **ninguém entra**. Gere com `node scripts/generate-mods-manifest.js` |
 | 0.5 | `.\scripts\phase0\Start-AllServices.ps1` | Nenhum aviso vermelho | O script diz o que não vai subir. Ele não mente por otimismo |
@@ -146,6 +146,64 @@ Só se o patch de client de `VOICE_CLIENT_PATCH.md` tiver sido aplicado. Sem ele
 
 ---
 
+## Etapa 9 — Os três sistemas do Red House (10 min, A e B) 🔴
+
+**Nenhum dos três jamais rodou com cliente conectado.** O primeiro boot real validou o servidor sozinho; estes dependem de alguém estar em jogo. Os três vieram do estudo do Red House (`REFERENCE_STUDY_SKYMP_RED_HOUSE.md` §4.1) e são descritos em `ARCHITECTURE.md` 1.4.5–1.4.7.
+
+Faça **depois da etapa 5** — o `hit-events` sobe dentro do `initDeathService`, então `ENABLE_DEATH_SERVICE=true` é pré-requisito dos três passos de 9.1.
+
+### 9.1 `hit-events` — o snippet de cliente chega ao servidor?
+
+Esta é a única parte que **não** foi verificada no boot: `mp.makeEventSource` existe e aceita o registro (o log diz `[hit-events] Evento de agressao registrado`), mas o trecho injetado só executa quando alguém conecta.
+
+| # | Faça | Espere | Se falhar |
+|---|---|---|---|
+| 9.1.1 | Confira o log de boot | `[hit-events] Evento de agressao registrado (evidencia, nao enforcement)` | Se disser `mp.makeEventSource indisponivel`, pare: **nada abaixo pode passar**. O resto de 9.1 não significa nada |
+| 9.1.2 | A bate em B **5 vezes**, sendo 2 golpes carregados (power attack). Depois **parem os dois e esperem 15 s** | Nada visível in-game — é evidência, não enforcement. Não deve haver mensagem, dano extra nem bloqueio | Se algo visível acontecer, alguém ligou enforcement. Ver `ARCHITECTURE.md` 1.4.5 |
+| 9.1.3 | `SELECT details FROM audit_logs WHERE action='combat:episode' ORDER BY id DESC LIMIT 1` | **Uma linha só**, com `golpes: 5` e `powerAttacks: 2` | Zero linhas = o evento nunca chegou (ver 9.1.6). Cinco linhas = a agregação por episódio quebrou |
+| 9.1.4 | No mesmo `details`, olhe `agressorCharacterId` e `alvoCharacterId` | **Os dois preenchidos**, batendo com A e B | ⚠️ **É o teste do `0x14`.** O cliente reporta `0x14` para si mesmo; se o servidor não trocar pelo `pcFormId`, o lado de quem bateu não resolve para personagem nenhum e vem `null`. É o detalhe que o próprio estudo aponta como o mais fácil de errar |
+| 9.1.5 | No mesmo `details`, olhe `origem` | `cliente (makeEventSource) — evidencia, nao prova` | A procedência tem que viajar junto com a linha, senão alguém a usa como prova numa arbitragem |
+| 9.1.6 | **Se 9.1.3 vier vazio:** A causa dano em si mesmo (queda) e repete | Continua vazio — dano em si mesmo é descartado de propósito | Se aparecer linha aqui e não em 9.1.2, o evento chega mas o par agressor/alvo está errado |
+
+> **A janela é de 10 s de silêncio.** O episódio só vira linha depois que os dois pararem de bater; consultar o banco no meio da briga dá vazio e não é falha.
+
+**Anote quantos segundos passaram entre o último golpe e a linha aparecer.** Muito acima de 10 s significa que a varredura não está rodando.
+
+### 9.2 `espm` — FormID inválido é barrado antes de virar linha no banco?
+
+Precisa de conta **admin+** (permissão `add_item`). O caso `0x14` é o que importa: a API devolve `{}` para ele, e `{}` é *truthy* — uma implementação ingênua deixaria o Player passar como item.
+
+| # | Faça | Espere | Se falhar |
+|---|---|---|---|
+| 9.2.1 | `/additem <actorId de B> 0xf 1` (`0xf` = Gold001, MISC — o FormID confirmado na sonda) | B recebe. Sem mensagem de item inválido | Se barrar um item **válido**, a lista `TIPOS_DE_INVENTARIO` está errada ou o formato do retorno mudou. **Isto é pior que não validar** |
+| 9.2.2 | `/additem <actorId de B> 0x14 1` (Player — existe no jogo, mas é referência, não item) | `[Staff] Item invalido: 0x14 nao existe nos plugins carregados.` | ⚠️ **Se o item "for entregue", a checagem `r && r.record` virou `if (r)`** e `{}` passou como item |
+| 9.2.3 | `/additem <actorId de B> 0x7fffffff 1` | Barrado, mesma mensagem com `0x7fffffff` | — |
+| 9.2.4 | `SELECT * FROM character_inventory WHERE base_id IN (20, 2147483647)` | **Zero linhas** | O ponto todo do sistema é não gravar o que nunca vira item na tela. Linha aqui = a validação está avisando e gravando assim mesmo |
+| 9.2.5 | Repita 9.2.2 e olhe o console do servidor | `[admin] ... tentou dar 0x14: ...` | — |
+| 9.2.6 | `/stalladd <stallId> 0x14 1 10 Teste` numa barraca de B | Barrado igual | É o segundo ponto de entrada de `base_id`, e o mais caro: aqui alguém **paga** por uma linha que nunca vira item |
+
+> **Se a mensagem de erro nunca aparecer em nenhum dos três**, verifique se `mp.lookupEspmRecordById` existe nesta build: por desenho, API ausente **deixa passar** (ver `ARCHITECTURE.md` 1.4.6). Silêncio pode ser "aprovou" ou "não sei" — o log de 9.2.5 é o que distingue.
+
+### 9.3 `safe-zones` — pré-requisito primeiro, e uma limitação a registrar
+
+⚠️ **Pré-requisito, não pule:** `skymp/config/safe-zones.json` **não existe** no repositório — só o `.example.json`. Sem ele o módulo responde "não há zona nenhuma" e o teste não prova nada.
+
+1. Copie `skymp/config/safe-zones.example.json` para `skymp/config/safe-zones.json`.
+2. Mude `"enabled"` para `true` e deixe **uma** zona: `cellId` = a célula onde A e B estão (o exemplo já traz `0x162e2`, o ponto de spawn atual), `blocks: ["combat"]`, `pos` e `radius` em `null` — célula inteira, que não exige medir nada in-game.
+3. **Isto é uma zona de teste, não uma decisão de design.** Zona segura é mecânica de mundo e a Constituição §15 pede as 15 perguntas antes; as quatro que mais mudam o desenho estão no próprio `.example.json`. **Apague o `safe-zones.json` ao terminar a etapa.**
+
+| # | Faça | Espere | Se falhar |
+|---|---|---|---|
+| 9.3.1 | Reinicie o servidor com o arquivo no lugar | Nenhum erro `[safe-zones]` no boot | `nao e JSON valido` = erro de digitação. `Zona ... nao proibe nada` = `blocks` vazio ou com categoria inexistente |
+| 9.3.2 | Ponha uma categoria inválida de propósito (`blocks: ["combate"]`, em português) e reinicie | `[safe-zones] Zona ... lista categoria(s) desconhecida(s): combate` e a zona é ignorada | Silêncio aqui é o pior resultado: seria uma regra que quem escreveu acha que criou e não criou. **Desfaça depois deste passo** |
+| 9.3.3 | Volte `"enabled"` para `false` e reinicie | Nenhuma zona ativa, nada muda | — |
+
+**A parte que decide (o bloqueio) não é alcançável in-game hoje — e isso não é bug, é escopo.** A checagem de lugar só roda quando quem chama `actionPolicy.canPerform` informa `context.actorId`, e **nenhum dos quatro chamadores atuais informa** (os quatro estão em `market-stalls-service.js`). Isso é deliberado e tem teste: uma regressão aí ligaria zona segura no servidor inteiro sem ninguém pedir.
+
+Consequência prática para este roteiro: **9.3 testa que a config carrega, não que ela barra.** Verificar `blocksBetween` — a regra dos dois lados, que é o achado que valia a leitura do Red House — exige antes ligar um chamador de verdade, e qual chamador ligar é a decisão de política que continua em aberto. Registre isso no log da Fase 0 como pendência conhecida, não como falha.
+
+---
+
 ## Registro
 
 Copie para um arquivo novo (`docs/roadmap/FASE_0_LOG_<data>.md`) e preencha durante o teste.
@@ -169,6 +227,10 @@ offlineMode: false ☐    Flags ENABLE_* ligadas: ___
 | 5.2 death:killer  | ☐ | killerId: ___ |
 | 6 Governança      | ☐ |  |
 | 7 Staff           | ☐ |  |
+| 9.1 hit-events    | ☐ | golpes/powerAttacks gravados: ___ / ___ · segundos até a linha: ___ |
+| 9.1.4 o `0x14`    | ☐ | agressorCharacterId: ___ · alvoCharacterId: ___ |
+| 9.2 espm          | ☐ | `0xf` passou ☐ · `0x14` barrado ☐ · `character_inventory` limpo ☐ |
+| 9.3 safe-zones    | ☐ | config carregou ☐ · `safe-zones.json` apagado ao fim ☐ |
 
 ## O que quebrou
 (erro exato, o que estava fazendo, o que o log disse)
@@ -179,6 +241,8 @@ offlineMode: false ☐    Flags ENABLE_* ligadas: ___
 - [ ] Remover `/internal/session/resolve` (se 1.6 passou)
 - [ ] Liberar Fase 1 da integração com a Chancelaria
 - [ ] Liberar o `soul-service`
+- [ ] Apagar o `checkDamageSpike` do `death-service` (se 9.1.3 e 9.1.4 passaram — só então o evento de hit substitui a heurística de verdade)
+- [ ] Decidir se algum chamador da `action-policy` passa a informar `context.actorId` — sem isso `safe-zones` continua carregado e inerte (ver 9.3)
 ```
 
 ---
@@ -192,6 +256,8 @@ Não é cerimônia. Cinco coisas estão **explicitamente esperando** o resultado
 | 5.2 (`death:killer`) | Tirar o polling de 2 s do `death-service` — com 40 jogadores ele come ~600 ms de cada janela |
 | 1.6 (`resolve_count`) | Confirmar o master API e apagar o `/internal/session/resolve`, que já é redundante |
 | 2.2 (vitais reais) | Confirmar o formato do `self` em Papyrus in-game |
+| 9.1.3 + 9.1.4 (`combat:episode` com os dois lados resolvidos) | Apagar o `checkDamageSpike` — a heurística de 25 de vida que não sabe quem bateu só sai quando o evento de hit provar que chega |
+| 9.2 (`0x14` barrado) | Confirmar que a validação de item pega erro de digitação sem quebrar `/additem` — os dois modos de falha estão no mesmo teste |
 | Tudo | Fase 1 da integração com a Chancelaria Real |
 | Tudo | O `soul-service` da Afinidade da Alma |
 

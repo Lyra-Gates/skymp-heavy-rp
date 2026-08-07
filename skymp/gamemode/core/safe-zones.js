@@ -1,6 +1,32 @@
 /**
  * core/safe-zones.js — zonas onde certas ações não valem
  *
+ * ─── Atribuição de origem (LICENSE_AND_AFFILIATION_POLICY.md §4) ────────────
+ *
+ *   Projeto : alekcey0211/red-house-public — build pública do Red House (SkyMP)
+ *   Autor   : alekcey0211 e colaboradores
+ *   Licença : GPL-3.0. Compatível com a AGPL-3.0-or-later deste projeto pela
+ *             GPLv3 §13; o conjunto continua distribuído sob AGPL.
+ *   Commit  : 65c66bb3e1b9f5765ed5fc036d69d75e3afbb53d (branch `master`,
+ *             01/11/2021 — repositório parado, último push em 16/11/2021)
+ *   Origem  : `functions-lib/src/` — a checagem da property `isInSafeLocation`
+ *             feita por `hitSync` antes de aplicar dano
+ *   Estudo  : docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md §4.1
+ *
+ *   **O que foi adaptado é técnica, não código.** Nenhuma linha foi copiada. O
+ *   que veio de lá são duas ideias: (a) que lugar pode barrar ação, e não só
+ *   estado do personagem; e (b) **a regra dos dois lados** — checar alvo *e*
+ *   agressor, senão dá para atirar de dentro da zona para fora dela. Essa
+ *   segunda é o achado que valia a leitura, e tem teste próprio aqui.
+ *
+ *   O resto diverge: lá é uma property booleana por ator, consultada dentro do
+ *   cálculo de dano; aqui é config declarativa em disco (célula/raio), com
+ *   categorias da `action-policy`, e o veredicto é "esta ação não vale" em vez
+ *   de "este dano não se aplica". Coerente com a decisão registrada em
+ *   `core/hit-events.js`: o evento de hit é evidência, nunca autoridade.
+ *
+ *   Registrado também no CHANGELOG.md, seção `[Não lançado]`.
+ *
  * ─── De onde veio ───────────────────────────────────────────────────────────
  *
  * Do Red House (`REFERENCE_STUDY_SKYMP_RED_HOUSE.md` §4.1). Antes de aplicar

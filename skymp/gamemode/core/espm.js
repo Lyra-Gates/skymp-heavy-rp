@@ -1,6 +1,28 @@
 /**
  * core/espm.js — leitura dos records dos plugins carregados
  *
+ * ─── Atribuição de origem (LICENSE_AND_AFFILIATION_POLICY.md §4) ────────────
+ *
+ *   Projeto : alekcey0211/red-house-public — build pública do Red House (SkyMP)
+ *   Autor   : alekcey0211 e colaboradores
+ *   Licença : GPL-3.0. Compatível com a AGPL-3.0-or-later deste projeto pela
+ *             GPLv3 §13; o conjunto continua distribuído sob AGPL.
+ *   Commit  : 65c66bb3e1b9f5765ed5fc036d69d75e3afbb53d (branch `master`,
+ *             01/11/2021 — repositório parado, último push em 16/11/2021)
+ *   Origem  : `functions-lib/src/` — é onde `mp.lookupEspmRecordById` aparece
+ *             em uso, para ler dano base de arma e armadura no cálculo de dano
+ *   Estudo  : docs/technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md §4.1,
+ *             "Outras coisas que aprendemos"
+ *
+ *   **O que foi adaptado é técnica, não código.** Nenhuma linha foi copiada: o
+ *   que veio de lá é *saber que a API existe* — que o servidor consegue ler
+ *   records dos plugins carregados, o que este projeto não sabia. O formato do
+ *   retorno **não veio deles**: foi lido de um servidor real (ver abaixo), e o
+ *   uso é outro — eles leem stats para calcular dano, nós lemos `type` para
+ *   conferir se um `base_id` digitado à mão é mesmo um item.
+ *
+ *   Registrado também no CHANGELOG.md, seção `[Não lançado]`.
+ *
  * ─── De onde veio, e como o formato foi descoberto ──────────────────────────
  *
  * `mp.lookupEspmRecordById` apareceu no estudo do Red House

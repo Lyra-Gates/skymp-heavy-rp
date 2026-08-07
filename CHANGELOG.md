@@ -37,6 +37,37 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 - **`--only-load-order` no gerador de manifesto**, para rodar a Fase 0 antes do modpack existir. Sem ele, gerar o `mods.json` de uma `Data/` de trabalho produz um manifesto que exige a máquina de quem gerou — o `compareMods` do launcher reprova todo arquivo que o cliente não tenha, então um testador com instalação limpa é barrado por um mod que não faz parte de nada. O gerador não tinha teste nenhum, sendo o que decide o contrato de FormID; ganhou 6.
 
+### Conformidade de licença
+
+- **Atribuição de origem completa nos três sistemas vindos do Red House.** A [política §4](docs/technical/LICENSE_AND_AFFILIATION_POLICY.md) exige registrar **projeto, autor, licença e commit** no cabeçalho do arquivo *e* aqui. Os três traziam só uma referência ao estudo — o que diz de onde veio a ideia, não sob que termos ela veio. Corrigido em `core/hit-events.js`, `core/espm.js` e `core/safe-zones.js`.
+
+  | | |
+  |---|---|
+  | Projeto | [`alekcey0211/red-house-public`](https://github.com/alekcey0211/red-house-public) — build pública do Red House (SkyMP) |
+  | Autor | alekcey0211 e colaboradores |
+  | Licença | **GPL-3.0** — compatível com a AGPL-3.0-or-later deste projeto pela GPLv3 §13; o conjunto continua sob AGPL |
+  | Commit | `65c66bb3e1b9f5765ed5fc036d69d75e3afbb53d` (branch `master`, 01/11/2021; repositório parado, último push em 16/11/2021) |
+
+  | Arquivo daqui | O que veio de lá |
+  |---|---|
+  | `core/hit-events.js` | `functions-lib/src/events/_onHit.ts` — que `mp.makeEventSource` é o caminho para o evento de hit, o formato do payload, e os dois detalhes de depuração (`0x14` é o jogador local; `ctx.getFormIdInServerFormat()` é obrigatório) |
+  | `core/espm.js` | `functions-lib/src/` — **que `mp.lookupEspmRecordById` existe**. Só isso: o formato do retorno foi lido de um servidor real, e o uso é outro (eles leem stats para calcular dano; nós lemos `type` para validar digitação) |
+  | `core/safe-zones.js` | `functions-lib/src/` — a checagem de `isInSafeLocation` em `hitSync`, e sobretudo **a regra dos dois lados**: proteger só o alvo deixa alguém atirar de dentro da zona para fora dela |
+
+- **A distribuição genérica de eventos de módulo foi avaliada e adiada** — decisão registrada em `core/module-registry.js` e no estudo. O sistema de módulos do Red House entrega `onHit`/`onCellChange` a qualquer módulo que queira escutar; o censo dos seis módulos registrados aqui dá **um consumidor e um tipo de evento** (só `death`, só `hit`), e `onCellChange` não tem nem um — `safe-zones` consulta `locationalData` sob demanda, e território está em Pós-Alfa no backlog. Um despacho genérico trocaria a linha atual (`hitEvents.start(cb)`) por um barramento que serve a um só, com uma chave viva e uma morta desde o primeiro dia.
+
+  O precedente do próprio projeto aponta igual: quando um segundo consumidor apareceu de verdade — governança precisando avisar o painel —, a resposta foi o `panel-refresh-bus`, pequeno e nomeado. **O gatilho de reabertura ficou escrito** junto com o desenho, para que a pergunta não seja redescoberta do zero.
+
+- **Nota no [`PARKED_SERVICES_DECISION.md`](docs/technical/PARKED_SERVICES_DECISION.md) sobre a janela de troca do Red House**, na entrada do `trade-service`. Nada portado: é um ponteiro para quem reativar não começar do zero no desenho da tela, com as três coisas que precisam estar decididas antes (commit duplo, ouro pelo `transaction-service`, atribuição §4 se algo for portado de fato). Ler aquele código antes da reativação é tempo gasto em algo que talvez nunca seja usado.
+
+- **A lista de animações do Red House não é coberta pelo Perfil 1** — avaliação registrada no estudo. Perfil 1 (OAR, Nemesis pré-gerado) entrega o **asset e a paridade**: garante que todo cliente tenha o mesmo behavior graph. O `animList` deles é **seleção pelo jogador** — emote. São camadas diferentes, e o roadmap já sabia disso: a Fase 1 chama-se "Identidade e Emotes" porque emote é feature própria, não subproduto de instalar OAR. Também não é troca de animação de combate.
+
+  **Mas não é "só UI", e por isso não entra agora.** A regra de autoridade do servidor é explícita — o servidor decide *"qual animação de gameplay foi autorizada"* —, então um emote precisa de comando, validação pela `action-policy` (quem está `DOWNED` ou algemado não dança) e a chamada Papyrus que toca. É feature da Fase 1 com as 15 perguntas da §15 pela frente, não item de aproveitamento.
+
+- **`ARCHITECTURE.md` 1.4 descreve os três sistemas** (novas seções 1.4.5–1.4.7), na mesma profundidade de `death-service` e `voip-service`. Eles já estavam em produção e a arquitetura não os mencionava — a mesma classe de problema que motivou boa parte dos achados do QA: configuração ou código que existe e ninguém sabe.
+
+  **Em nenhum dos três há código copiado** — o que atravessou foi técnica, que não é protegida por direito autoral. A atribuição fica registrada assim mesmo: o critério da política é a procedência, não o volume, e no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform, o que torna a fronteira entre "reescrito" e "portado" fina demais para se apoiar nela.
+
 ### Corrigido
 
 - **`characters.gold` não existia em banco migrado** (migration v9). A coluna está declarada no `schema.sql` e em nenhuma migration: banco novo funciona, e quem criou o banco antes dela e aplicou `v2`→`v8` em ordem, como o CONTRIBUTING manda, nunca a recebe. A v2 chega a criar a `gold_transactions` — o ledger da economia — sem garantir a coluna de saldo que esse ledger acompanha. Não quebra o boot: quebra na primeira operação de ouro, que é todo o `transaction-service`. Achado pelo `npm run check:schema` ao preparar a Fase 0, que é exatamente a classe de problema para a qual ele foi escrito.
@@ -99,6 +130,12 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Etapa 9 do [roteiro da Fase 0](docs/technical/FASE_0_ROTEIRO.md)** — os três sistemas vindos do Red House nunca rodaram com cliente conectado. O primeiro boot real validou o servidor sozinho; estes só executam quando alguém entra.
+
+  O passo que mais importa é `9.1.4`: o cliente reporta `0x14` para si mesmo, e se o servidor não trocar pelo `pcFormId` o lado de quem bateu não resolve para personagem nenhum. O estudo aponta esse como o detalhe mais fácil de errar, e ele **não aparece como erro** — aparece como um `null` numa coluna de JSON. Para `espm`, o caso decisivo é `/additem 0x14`: a API devolve `{}` para o Player, e `{}` é truthy, então "o item foi entregue" é exatamente o sintoma de a checagem ter virado `if (r)`.
+
+  **`safe-zones` só pode ser testado até a metade, e a etapa diz isso.** Falta o pré-requisito óbvio — `skymp/config/safe-zones.json` não existe, só o `.example.json`, e sem ele o módulo responde "não há zona nenhuma" —, mas falta também um chamador: a checagem de lugar só roda quando quem invoca `actionPolicy.canPerform` informa `context.actorId`, e nenhum dos quatro chamadores atuais informa. Então a etapa verifica que a config carrega e que categoria inválida grita, não que a zona barra. Ligar um chamador é decisão de política, não passo de teste — ficou registrada como pendência no log da Fase 0.
+
 - **[Roteiro da Fase 0](docs/technical/FASE_0_ROTEIRO.md)** — o teste in-game passa a ser um procedimento de ~50 min com passos, o que observar, o que significa falhar, e um registro para preencher enquanto testa. O plano anterior era de 13/07 e cobria só governança e barracas; desde ele entraram morte, painel, VOIP, master API e fila.
 - **Primeiros testes do launcher** (24) — ele tinha zero, e é o programa que todo jogador roda. A lógica de paridade saiu de dentro dos handlers `ipcMain` para `electron/parity.mjs`, sem `fs`, sem `http` e sem `electron`: as dependências de I/O entram como argumento, e o cabeçalho TES4 é testado com um plugin sintético de 60 bytes em vez de um `.esm` de 300 MB. O launcher entrou na matriz de testes do CI.
 
@@ -121,7 +158,7 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
 - **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
 
-Total de testes: 301 (218 gamemode + 40 web + 24 game-api + 19 bot) + 9 checks de sistema.
+Total de testes: **426** (313 gamemode + 40 web + 30 game-api + 24 launcher + 19 bot) + 11 checks de sistema. Contagem conferida rodando as cinco suítes em 06/08/2026 — a linha anterior dizia 301 e nenhuma das parcelas ainda batia. O roteiro da Fase 0 pedia "253 passando" no passo 0.1, que é o primeiro passo do teste: um testador pararia ali achando que quebrou alguma coisa.
 
 - **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
 
