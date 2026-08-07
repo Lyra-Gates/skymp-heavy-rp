@@ -211,3 +211,151 @@ describe('player-panel-service', () => {
     });
   });
 });
+
+/**
+ * O laço de vitals lê vida/magicka/stamina via Papyrus — três chamadas por
+ * jogador, e cada ida ao Papyrus custa dezenas de milissegundos (o Red House
+ * mediu 13–35 ms; ver REFERENCE_STUDY_SKYMP_RED_HOUSE.md §4.1).
+ *
+ * Até 06/08/2026 o laço lia os três para TODO painel aberto, a cada 2 s,
+ * mesmo o de quem estava na aba Social — pagando o custo para atualizar um
+ * número que ninguém estava vendo. O diffing que já existia não ajudava:
+ * ele evita reenviar, não evita ler.
+ *
+ * A UI já mandava a informação necessária (`panel:refresh:<aba>` a cada
+ * troca); o servidor é que a descartava.
+ *
+ * Estes testes contam as chamadas Papyrus de um tick. É a única forma de
+ * provar a economia: o comportamento visível para quem está no Status não
+ * muda, então nenhum teste de resultado pegaria uma regressão aqui.
+ */
+describe('player-panel — o tick de vitals só paga por quem está olhando', () => {
+  const ATOR_STATUS = ACTOR_ID;
+  const ATOR_SOCIAL = 0xff000456;
+  const CHAR_SOCIAL = 502;
+
+  let chamadasPapyrus;
+  const mpOriginal = global.mp;
+
+  before(() => {
+    commands.registerActiveCharacter(
+      ATOR_SOCIAL,
+      { id: CHAR_SOCIAL, first_name: 'Elda', last_name: 'Corvo' },
+      2,
+      2
+    );
+    characterState.set(CHAR_SOCIAL, STATES.NORMAL, {});
+
+    global.mp = {
+      getDescFromId: (id) => `${id.toString(16)}:Skyrim.esm`,
+      callPapyrusFunction: (tipo, classe, fn) => {
+        chamadasPapyrus.push(`${classe}.${fn}`);
+        return 100;
+      },
+      set: () => {}
+    };
+  });
+
+  after(() => {
+    commands.removeActiveCharacter(ATOR_SOCIAL);
+    playerPanel.cleanup(ATOR_SOCIAL);
+    if (mpOriginal === undefined) delete global.mp;
+    else global.mp = mpOriginal;
+  });
+
+  function prepara() {
+    chamadasPapyrus = [];
+    playerPanel.cleanup(ATOR_STATUS);
+    playerPanel.cleanup(ATOR_SOCIAL);
+  }
+
+  /**
+   * `openPanel` dispara `pushAllSections` sem await (fire-and-forget), e esse
+   * caminho tambem le vitals. Sem esperar ele terminar e zerar o contador, o
+   * teste mediria abertura + tick e nao so o tick.
+   */
+  async function abrirEZerar(...atores) {
+    for (const a of atores) playerPanel.openPanel(a);
+    await new Promise((resolve) => setImmediate(resolve));
+    chamadasPapyrus = [];
+  }
+
+  it('quem abre o painel entra no tick — a UI abre no Status', async () => {
+    prepara();
+    await abrirEZerar(ATOR_STATUS);
+
+    assert.deepEqual(playerPanel._atoresQuePrecisamDeVitals(), [ATOR_STATUS]);
+
+    await playerPanel._tickVitals();
+    assert.equal(
+      chamadasPapyrus.length, 3,
+      'Health, Magicka e Stamina — quem está no Status precisa das três'
+    );
+  });
+
+  it('trocar para outra aba tira o jogador do tick', async () => {
+    prepara();
+    playerPanel.openPanel(ATOR_STATUS);
+    await playerPanel.handleUiEvent(ATOR_STATUS, { type: 'panel:refresh:social' });
+
+    chamadasPapyrus = [];
+    await playerPanel._tickVitals();
+
+    assert.deepEqual(playerPanel._atoresQuePrecisamDeVitals(), []);
+    assert.equal(
+      chamadasPapyrus.length, 0,
+      'ninguém está olhando o Status — o tick não pode custar nada'
+    );
+  });
+
+  it('voltar para o Status recoloca o jogador no tick', async () => {
+    prepara();
+    playerPanel.openPanel(ATOR_STATUS);
+    await playerPanel.handleUiEvent(ATOR_STATUS, { type: 'panel:refresh:economy' });
+    await playerPanel.handleUiEvent(ATOR_STATUS, { type: 'panel:refresh:status' });
+
+    chamadasPapyrus = [];
+    await playerPanel._tickVitals();
+
+    assert.equal(chamadasPapyrus.length, 3, 'voltou pro Status, volta a ser lido');
+  });
+
+  it('com dois painéis abertos, paga só pelo que está no Status', async () => {
+    prepara();
+    playerPanel.openPanel(ATOR_STATUS);
+    playerPanel.openPanel(ATOR_SOCIAL);
+    await playerPanel.handleUiEvent(ATOR_SOCIAL, { type: 'panel:refresh:social' });
+
+    chamadasPapyrus = [];
+    await playerPanel._tickVitals();
+
+    // Antes desta mudança seriam 6 — três por painel aberto.
+    assert.equal(chamadasPapyrus.length, 3, 'metade dos painéis abertos, metade do custo');
+    assert.deepEqual(playerPanel._atoresQuePrecisamDeVitals(), [ATOR_STATUS]);
+  });
+
+  it('fechar o painel tira do tick e não deixa a aba para trás', async () => {
+    prepara();
+    await abrirEZerar(ATOR_STATUS);
+    await playerPanel.handleUiEvent(ATOR_STATUS, { type: 'panel:close' });
+
+    chamadasPapyrus = [];
+    await playerPanel._tickVitals();
+
+    assert.equal(chamadasPapyrus.length, 0);
+    // Reabrir precisa voltar pro Status, nao herdar a aba de uma sessao antiga.
+    playerPanel.openPanel(ATOR_STATUS);
+    assert.deepEqual(playerPanel._atoresQuePrecisamDeVitals(), [ATOR_STATUS]);
+  });
+
+  it('lê os três ActorValues, não outra coisa', async () => {
+    prepara();
+    await abrirEZerar(ATOR_STATUS);
+    await playerPanel._tickVitals();
+
+    assert.deepEqual(
+      chamadasPapyrus,
+      ['Actor.getActorValue', 'Actor.getActorValue', 'Actor.getActorValue']
+    );
+  });
+});

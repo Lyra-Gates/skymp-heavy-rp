@@ -251,11 +251,25 @@ A build publicada (v1.1-pub, 11/07/2021, 23 endorsements, 358 downloads únicos)
 
 Os autores convidam explicitamente ao reuso — *"You can take it as a basis for your development!"* — mas na mesma frase declaram: *"The server sources are distributed under the GPLv3 license."* O convite não dispensa a licença.
 
-### ⚖️ Licença: GPL-3.0 — não dá pra copiar código
+### ⚖️ Licença: GPL-3.0 — dá pra aproveitar código, com atribuição
 
-O repositório é **GPL-3.0**, confirmado tanto pelo arquivo `LICENSE` quanto pela própria página do Nexus. Copiar trechos para o nosso gamemode obrigaria a licenciar o nosso projeto sob GPL também.
+O repositório é **GPL-3.0**, confirmado tanto pelo arquivo `LICENSE` quanto pela própria página do Nexus.
 
-Isso não impede aprender: técnica e arquitetura não são protegidas por direito autoral, código específico é. Tudo abaixo é descrição do que eles fazem e por quê — qualquer implementação nossa precisa ser escrita do zero, e no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform de qualquer jeito.
+> **Correção de 06/08/2026.** Este parágrafo dizia "não dá pra copiar código" e que copiar "obrigaria a licenciar o nosso projeto sob GPL também". **As duas afirmações estavam erradas**, e a política do próprio projeto já dizia o contrário — ver [`LICENSE_AND_AFFILIATION_POLICY.md`](LICENSE_AND_AFFILIATION_POLICY.md) §4.
+>
+> Nosso projeto já é `AGPL-3.0-or-later`. A GPLv3 §13 permite explicitamente combinar obra coberta por ela com obra sob AGPLv3, e a AGPLv3 §13 é recíproca. Não há para onde "regredir": já estamos numa licença compatível e mais forte.
+>
+> O erro tinha custo real — ele empurrava para reescrever do zero coisas que dava para portar, o que é justamente o tempo que este estudo existe para economizar.
+
+O que a licença **exige** ao trazer código de lá, conforme a §4 da política:
+
+- **Registrar a origem** no cabeçalho do arquivo e no changelog: projeto, autor, licença, commit.
+- **Manter os avisos de copyright** originais.
+- O arquivo resultante fica sob GPL-3.0; o conjunto continua distribuído sob AGPL.
+
+O que continua valendo: técnica e arquitetura não são protegidas por direito autoral, então **descrever** o que eles fazem — como faz o resto desta seção — não depende de licença nenhuma. E no caso do evento de hit a forma é praticamente ditada pela API do Skyrim Platform de qualquer jeito, então escrever do zero costuma ser mais rápido que atribuir.
+
+A decisão passa a ser caso a caso, de engenharia e não de licença: portar com atribuição quando o código é substancial e testado; escrever do zero quando a API já dita a forma.
 
 ### O evento de hit existe, e eles o implementaram
 
@@ -303,7 +317,13 @@ São medições deles, em hardware e versão deles — mas a ordem de grandeza �
 
 Isso importa direto pra nós. O `death-service.js` varre até 50 profileIds a cada 2 segundos chamando `getActorValue('Health')` por ator. Se uma chamada custa ~15 ms, 40 jogadores conectados consomem ~600 ms de cada janela de 2 s — e o laço é síncrono. O polling não escala.
 
-É mais um argumento pra migração que já começamos (`mp.onDeath` como gatilho primário, `SKYMP_UPSTREAM_REFERENCE.md` §2.5) e pra tirar o polling de vez assim que o hook for confirmado in-game. Vale também rever o `player-panel-service`, que faz o mesmo tipo de leitura enquanto o painel está aberto.
+É mais um argumento pra migração que já começamos (`mp.onDeath` como gatilho primário, `SKYMP_UPSTREAM_REFERENCE.md` §2.5) e pra tirar o polling de vez assim que o hook for confirmado in-game.
+
+**O `player-panel-service` foi o primeiro a ser corrigido** (06/08/2026), por não depender da Fase 0. Ele lia vida/magicka/stamina — **três** chamadas — para todo painel aberto a cada 2 s, inclusive o de quem estava na aba Social. Com 10 painéis abertos eram 30 chamadas por janela, ~450 ms gastos para atualizar um número que ninguém estava vendo. O diffing que já existia não ajudava: ele evita reenviar, não evita ler.
+
+A informação para evitar isso já chegava e era descartada — a UI manda `panel:refresh:<aba>` a cada troca (`switchTab` em `skymp/ui/player-panel.js`). Hoje o laço só lê de quem está com a aba Status visível. Com metade dos painéis em outras abas, o custo cai pela metade; na prática cai mais, porque Status é a aba que se abre e as outras são onde se fica.
+
+Este é o modelo do que o Red House nos dá de mais útil: não código, mas **a medição que justifica mexer** em algo que parecia funcionar bem.
 
 ### Outras coisas que aprendemos
 
