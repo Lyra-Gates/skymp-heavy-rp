@@ -11,6 +11,16 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Agressão relatada pelo cliente vira evidência de combate** (`core/hit-events.js`). Quarto e último item do aproveitamento do Red House: `mp.makeEventSource` injeta um trecho no cliente que escuta o evento `hit` do Skyrim Platform e reporta quem bateu em quem.
+
+  Substitui o `checkDamageSpike` do `death-service`, que chamava de agressão qualquer queda de 25 pontos de vida num tick de 2 s — não distinguia combate de queda de penhasco, não sabia quem bateu, e só existia porque estava pendurado no polling.
+
+  **É evidência, não enforcement, e a diferença é deliberada.** O Red House recalcula o dano a partir deste evento e aplica; nós não. Quem manda o evento é a máquina do jogador, e o [CONTRIBUTING](CONTRIBUTING.md) §3.6 é explícito: evento de cliente é *"uma dica, não uma prova"*. Usar isso para decidir dano entregaria o combate a quem controla o cliente. A linha gravada diz de onde veio, para que ninguém a trate como prova numa arbitragem.
+
+  **Agrega em episódio.** Uma briga gera dezenas de eventos; gravar linha por golpe inutilizaria o `audit_logs` justamente quando a staff mais precisa dele. Uma linha dizendo "A bateu em B sete vezes, duas com power attack, ao longo de doze segundos" responde melhor do que sete linhas iguais.
+
+  `mp.makeEventSource` foi confirmada num servidor real e o boot registra o evento. **O snippet de cliente ainda não rodou** — ele só executa quando alguém conecta, o que é a Fase 0.
+
 - **Validação de item contra os plugins carregados** (`core/espm.js`). Terceiro item do aproveitamento do Red House: `mp.lookupEspmRecordById` deixa o servidor ler os records dos ESMs, então dá pra conferir se um `base_id` existe e é mesmo um item — em vez de gravar qualquer número no inventário.
 
   Ligado nos dois pontos onde um `base_id` **novo entra** no sistema: `/additem` e o anúncio em barraca. Nos dois o valor vem digitado à mão em hexadecimal, e antes disto um dígito errado gravava `character_inventory` do mesmo jeito — o item nunca aparecia in-game, mas ocupava linha no banco e no ledger, e ninguém descobria até alguém conferir inventário à mão. Na barraca é pior: alguém paga por uma linha que nunca vira item na tela.

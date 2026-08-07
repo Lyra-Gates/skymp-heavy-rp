@@ -289,6 +289,18 @@ Dois detalhes que economizariam horas de depuração:
 - **`0x14` é o jogador local.** O cliente reporta `0x14` como FormID de si mesmo; o servidor precisa trocar por `pcFormId` antes de usar. Sem isso, todo hit do próprio jogador aponta pro form errado.
 - **`ctx.getFormIdInServerFormat()` é obrigatório** no snippet. FormID do cliente e do servidor são espaços diferentes — mandar o número cru daria o objeto errado.
 
+> ✅ **Implementado em 06/08/2026 — como evidência, não como enforcement.**
+>
+> `core/hit-events.js` registra o event source e agrega os golpes; o `death-service` grava o episódio em `audit_logs` (`action='combat:episode'`). Substitui o `checkDamageSpike`, que chamava de agressão qualquer queda de 25 de vida, não distinguia combate de queda de penhasco e não sabia quem bateu.
+>
+> **É aqui que nos separamos deles, e a diferença é deliberada.** O Red House recalcula o dano a partir deste evento e aplica no ActorValue. Nós não: quem manda o evento é a máquina do jogador, e o `CONTRIBUTING.md` §3.6 é explícito — evento de cliente é *"uma dica, não uma prova"*. Usar isso para decidir dano entregaria o combate a quem controla o cliente. A própria linha gravada diz de onde veio, para que ninguém a trate como prova numa arbitragem.
+>
+> **Agrega em episódio, não grava golpe a golpe.** Uma briga de trinta segundos gera dezenas de eventos; eles podiam tratar cada um isoladamente porque o uso era efêmero, o nosso é persistente. Uma linha dizendo "A bateu em B sete vezes, duas com power attack, ao longo de doze segundos" responde melhor à pergunta da staff do que sete linhas iguais — e não inutiliza a tabela.
+>
+> Os dois detalhes que eles deixaram registrados economizaram a depuração óbvia: `0x14` é o jogador local (o servidor troca pelo `pcFormId`, e há teste de mutação) e `ctx.getFormIdInServerFormat()` é obrigatório.
+>
+> **O que ainda não foi validado:** `mp.makeEventSource` foi confirmada num servidor real — existe, aceita o registro, e o boot loga `[hit-events] Evento de agressao registrado`. Mas **o snippet de cliente nunca rodou**: ele só executa quando alguém conecta. Isso é a Fase 0.
+
 ### Eles calculam dano no servidor
 
 `hitSync` não só registra o hit: recalcula o dano e aplica. Lê a arma equipada (`baseDamage`, tipo), a armadura do alvo (`baseArmor`), aplica multiplicador de power/bash attack vindo do `server-options`, reduz 50% se o golpe foi bloqueado, e escreve o resultado no ActorValue de vida.
