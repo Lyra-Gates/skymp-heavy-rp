@@ -39,7 +39,7 @@ ENABLE_MARKET_STALLS_SERVICE=true
 ENABLE_DEATH_SERVICE=true
 ENABLE_PLAYER_PANEL_SERVICE=true
 ```
-Deixe `ENABLE_VOIP_SERVICE=false` — o VOIP depende de um patch de client que não existe (`VOICE_CLIENT_PATCH.md`). Ele é a etapa 8, opcional.
+Deixe `ENABLE_VOIP_SERVICE=false` — falar em jogo depende de um componente que ainda não é distribuído (o helper nativo de `VOICE_NATIVE_HELPER.md`; o patch de client de `VOICE_CLIENT_PATCH.md` foi descartado). Ele é a etapa 8, opcional.
 
 ⚠️ **`offlineMode: false` no `server-settings.json`.** Com `true` o cliente declara a própria identidade e o servidor acredita — a etapa 2 passaria sem provar nada.
 
@@ -142,7 +142,7 @@ A parte mais nova e menos verificada do gamemode.
 
 ## Etapa 8 — VOIP (opcional)
 
-A voz nativa é **opcional e Pós-Alfa** por decisão fechada em 07/08/2026 (§13 do `SKYMP_RP_DEVELOPMENT_PLAN.md`). Conectar de verdade só é possível se o patch de client de `VOICE_CLIENT_PATCH.md` tiver sido aplicado; sem ele `/voz` não conecta, e **isso é esperado, não é bug**.
+A voz nativa é **opcional e Pós-Alfa** por decisão fechada em 07/08/2026 (§13 do `SKYMP_RP_DEVELOPMENT_PLAN.md`). **Falar** em jogo exige o helper nativo de [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md), que ainda não é distribuído com o launcher; sem ele o microfone falha e **isso é esperado, não é bug**. O patch de client de `VOICE_CLIENT_PATCH.md` foi descartado e não deve ser aplicado.
 
 ### 8.1 O aviso de fallback aparece na tela? (1 pessoa, 1 client, 2 min)
 
@@ -151,6 +151,7 @@ Esta é a única verificação do roteiro que **não precisa de dois jogadores c
 Com `ENABLE_VOIP_SERVICE=true`, entre em jogo e rode `/voz`. O esperado:
 
 - o chip no topo termina em **`VOZ INDISPONÍVEL NESTE CLIENT — use o Discord`** e **fica nele** — se ele virar `VOZ DESCONECTADA`, o `state.voiceFatal` de `skymp/ui/index.html` não está segurando o `onclose` e o jogador está lendo o diagnóstico errado;
+- **exceção esperada:** se houver alguém em alcance usando o helper nativo, o chip vira âmbar com **`OUVINDO — SEM MICROFONE`**. Não é regressão: quem não captura ainda ouve, porque o WebSocket deixou de ser fechado na falha de microfone (`VOICE_NATIVE_HELPER.md` §6);
 - uma linha aparece no log de chat (canto inferior esquerdo) dizendo que é limitação do client, não do microfone nem do servidor, e apontando `/voz-criar` no Discord;
 - nada trava: dá para andar, abrir o `/painel` e continuar jogando com a mensagem na tela.
 

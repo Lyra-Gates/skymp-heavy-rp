@@ -11,6 +11,30 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Voz por proximidade sai do CEF: relay de áudio pelo servidor** (Fase 1, prova de conceito). O `voip-service.js` estava implementado e testado desde antes — sinalização WebRTC, ticket, volume por distância — e **nunca produziu áudio nenhum**, porque o navegador embutido do client recusa `getUserMedia`.
+
+  **O motivo real não era o que estava escrito.** Um comentário em `skymp/ui/index.html` e todo o [`VOICE_CLIENT_PATCH.md`](docs/technical/VOICE_CLIENT_PATCH.md) tratavam o bloqueio como omissão dos mantenedores — "falta um patch que nunca foi mergeado". O release notes da SkyrimPlatform 2.1 diz o contrário, com todas as letras: *"Removed Chromium flag that gives the ability to listen to recording devices via browser-side JavaScript"*. Foi **remoção deliberada**, e as três PRs auto-fechadas não estavam esperando atenção — estavam pedindo a reversão de uma decisão de segurança.
+
+  **E a decisão deles está certa.** O client SkyMP abre a URL que o servidor mandar. Com a flag ligada, qualquer JavaScript de *qualquer* servidor SkyMP captaria o microfone do jogador sem prompt e sem indicador. O escopo do risco não é este servidor: é o client inteiro, para sempre, em todo servidor que a pessoa conectar depois. O próprio diff descartado já concedia isso sem perceber — `use-fake-ui-for-media-stream` suprime o prompt e `enable-features` concede a permissão, que é exatamente "captura sem o usuário saber".
+
+  **Então a captura sai do navegador em vez de o navegador ser enfraquecido.** Um executável separado (`voice-helper/`) captura por WASAPI e manda os quadros pelo mesmo WebSocket e o mesmo handshake por ticket que a UI já usava; o servidor retransmite pra quem está em alcance, com o volume anexado; o navegador só **toca** — e tocar nunca foi bloqueado pela CEF, só a captura era.
+
+  De quebra resolve NAT/CGNAT: a malha P2P entre dois jogadores em redes residenciais distintas não fecharia sem um TURN, que é um relay com outro nome. Aqui tudo passa pelo servidor, que já é alcançável.
+
+  **A audiência é a transposta do que `tickProximity()` já jogava fora.** Proximidade é O(n²) de distância 3D e um quadro chega a 50/s por locutor — recalcular por quadro seria pagar esse O(n²) cinquenta vezes por segundo por pessoa falando. O volume que vai no `audio_frame` sai da *mesma* conta que alimenta o `proximity_update`, com teste travando a igualdade: fossem dois cálculos, a mesma pessoa soaria em dois volumes conforme o transporte que a entregou.
+
+  **PCM cru antes de Opus, de propósito.** Codec e transporte quebram de formas parecidas de quem escuta — sai silêncio ou sai ruído — e depurar os dois juntos foi como este VOIP chegou até aqui sem nunca ter emitido som. O preço está medido e registrado: ~1 Mbit/s de subida por locutor, aceitável em bancada e **não** em produção. Opus é Fase 2.
+
+  **O WebSocket deixou de ser fechado quando o microfone falha.** Era fechado com o argumento de que "sem microfone não faz sentido manter a sinalização aberta" — correto enquanto o socket só levasse sinalização. Agora ele leva áudio dos outros: fechar ali desligaria a *escuta* junto com a captura, garantindo que ninguém nunca ouça nada exatamente no client onde capturar sempre falha. As mensagens de erro e o `voiceFatal` continuam intactos; nasceu um chip âmbar `OUVINDO — SEM MICROFONE`, porque ler "VOZ INDISPONÍVEL" enquanto se ouve alguém falando é a tela contradizendo a caixa de som.
+
+  10 testes novos, verificados por mutação — seis defeitos plantados, seis reprovações. Um deles nasceu de um teste que passava pelo motivo errado: "descarta frame de conexão não autenticada" continuava verde com a guarda de auth removida, porque a tabela de audiência não tem chave `null`. O teste que faltava era o do ataque real — cliente **autenticado** mandando quadro carimbado com o `actorId` de outro.
+
+  ⚠️ **Provado até onde dava; o resto está dito.** O pipeline sonda→servidor→navegador foi medido com o `index.html` real num navegador que **bloqueou o microfone da página** — a mesma `NotAllowedError` do CEF, o que deu ao teste a condição exata do client oficial. Chegaram 960 amostras por buffer a 48kHz, pico 0.3000 (a amplitude exata do tom), energia em 440Hz 6300× acima do controle, e saída de 0.15 e 0.225 para ganhos de 0.5 e 0.75 — o volume da proximidade, conferido contra o valor teórico. Fora de alcance: zero buffers.
+
+  **O que não foi provado:** o `voice-helper` em C++ **nunca foi compilado** — a máquina não tem Visual Studio, CMake nem vcpkg (evidência exata em [`VOICE_NATIVE_HELPER.md`](docs/technical/VOICE_NATIVE_HELPER.md) §8), então nenhuma port do vcpkg chegou a ser resolvida e o `CMakeLists.txt`/`vcpkg.json` são **não verificados**. E **ninguém ouviu com o ouvido**: o que existe é medição do sinal onde ele entra no `destination` do Web Audio, o que é forte e não é a mesma coisa.
+
+  **Não construído nesta rodada, e listado:** handoff automático do ticket, empacotamento e assinatura do executável, cancelamento de eco, remoção do WebRTC antigo, e o bloqueador de uso real — `voipClients` é indexado por `actorId`, então o helper e a UI do *mesmo* jogador ainda não coexistem (a bancada contornou usando dois atores). Lista inteira em `VOICE_NATIVE_HELPER.md` §9.
+
 - **`soul-service.js` — a Afinidade da Alma passa a falar com o mundo.** `core/soul.js` (domínio puro, 28 testes) estava fechado desde antes; o que faltava era a camada que persiste a alma, entrega sinais, grava marcas, avança a árvore e audita rolagem. O desenho de [`SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) foi **implementado, não rediscutido**.
 
   Junto vieram as quatro tabelas que aquele documento especifica (migration v10): `character_soul`, `character_signs`, `character_marks`, `character_paths`. Registrado no `module-registry` atrás de `ENABLE_SOUL_SERVICE`, fase `lab`, **desligado por padrão**.
