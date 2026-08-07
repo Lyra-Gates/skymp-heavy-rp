@@ -54,6 +54,7 @@ const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
 const deathService  = require(path.join(gamemodeDir, 'death-service'));
 const voipService   = require(path.join(gamemodeDir, 'voip-service'));
+const soulService   = require(path.join(gamemodeDir, 'soul-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -131,6 +132,32 @@ moduleRegistry.register({
   shutdown: async () => {
     uiEventRouter.unregister('panel');
     playerPanel.shutdownPlayerPanelService();
+  }
+});
+
+// LAB: Afinidade da Alma — sinais, marcas e árvore de transformação.
+//
+// Desligado por padrão, como todo lab. Duas coisas precisam estar no `.env`
+// antes de ligar: `ENABLE_SOUL_SERVICE=true` e `SOUL_SECRET`. Sem o segredo o
+// módulo **falha no boot de propósito** — derivar alma com segredo vazio deixaria
+// qualquer pessoa recalcular a alma de qualquer personagem a partir da ficha, que
+// é pública no painel, e o estrago seria permanente porque a alma é congelada no
+// primeiro spawn.
+//
+// ⚠️ Confirmado por teste automatizado, não confirmado em sessão real — igual a
+// hit-events/espm/safe-zones. O que só o cliente prova está na Etapa 9.4 do
+// FASE_0_ROTEIRO.md e não foi executado.
+moduleRegistry.register({
+  id: 'soul',
+  enabledBy: 'ENABLE_SOUL_SERVICE',
+  phase: 'lab',
+  dependencies: [],
+  commands: soulService.commandDefs(),
+  initialize: async () => {
+    await soulService.initSoulService();
+  },
+  shutdown: async () => {
+    soulService.shutdownSoulService();
   }
 });
 

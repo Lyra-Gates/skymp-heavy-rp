@@ -47,6 +47,33 @@ async function grantStartingGold(characterId) {
   }
 }
 
+/**
+ * Deriva a alma e entrega o primeiro sinal (`SOUL_AFFINITY.md` §II.1).
+ *
+ * É aqui e não no `initialize()` do módulo porque o sinal é do **primeiro
+ * spawn**, não do boot do servidor: "todo personagem recebe o primeiro sinal na
+ * primeira sessão" resolve o problema mais mortal de servidor de RP, que não é
+ * balanceamento — é a primeira hora ser vazia.
+ *
+ * O require é preguiçoso e atrás do `isEnabled`, pela mesma razão da nota no
+ * topo deste arquivo: importar no topo faria o módulo carregar mesmo com
+ * `ENABLE_SOUL_SERVICE` desligado, e o `soul-service` lança no boot quando falta
+ * `SOUL_SECRET`. Com a flag desligada nada aqui roda, nem o require.
+ *
+ * Não bloqueia o spawn — mesma escolha do ouro inicial: entrar sem o sinal é um
+ * problema pequeno perto de não conseguir entrar.
+ */
+async function revelarPrimeiroSinal(characterId) {
+  const moduleRegistry = require('./core/module-registry');
+  if (!moduleRegistry.isEnabled('soul')) return;
+
+  try {
+    await require('./soul-service').onFirstSpawn(characterId);
+  } catch (err) {
+    console.error(`[whitelist] Falha ao revelar o primeiro sinal para ${characterId}:`, err.message);
+  }
+}
+
 async function checkWhitelist(userId, profileId, actorId) {
   try {
     console.log(`[whitelist] Running check for User:${userId}, Profile:${profileId}, Actor:${actorId.toString(16)}`);
@@ -159,6 +186,7 @@ async function checkWhitelist(userId, profileId, actorId) {
     await characterState.initialize(character.id);
 
     await grantStartingGold(character.id);
+    await revelarPrimeiroSinal(character.id);
 
     // 5. Atualizar posição do jogador in-game a partir do banco de dados
     if (typeof mp !== 'undefined' && actorId) {

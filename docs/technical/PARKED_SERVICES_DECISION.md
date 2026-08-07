@@ -181,7 +181,17 @@ Dois problemas menores, registrados para quem migrar:
 
 **Entra na Fase 3** pelo mesmo motivo do `crafting`.
 
-### 7.4 O que esta rodada mostra sobre a pergunta da primeira
+### 7.4 Candidato registrado, não decidido: permissão numérica em três lugares
+
+Encontrado pelo `npm run typecheck` durante a migração da Fase 3, e **deixado como está de propósito**.
+
+`crafting-service.js` (linhas 162 e 183) e `economy-regional.js` (linha 238) chamam `adminService.hasPermission(actorId, 20)` — um **nível numérico**, herança de um modelo antigo. O `admin-service` hoje trabalha com permissões nomeadas e trata esse caso explicitamente: grita no log e **nega**. O `disguise-service` tinha a mesma coisa (`hasPermission(actorId, 10)`) e saiu junto com o arquivo.
+
+Consequência: `/addrecipe`, `/addingredient` e o comando de staff do `economy-regional` **negam sempre**, para todo mundo, inclusive para admin. Como os três serviços estão PARKED, ninguém sente isso hoje.
+
+**Por que não foi corrigido nesta rodada:** o modo de falha aponta pro lado seguro (nega, não concede), então não é urgente; e escolher *qual* permissão nomeada cada comando exige é decisão de desenho, não de migração. `add_item`? Uma `manage_recipes` nova? A resposta muda quem no servidor pode criar receita, que é uma questão de economia e não de código. Quem reativar qualquer um dos dois decide — e o log já grita o suficiente para que não passe despercebido.
+
+### 7.5 O que esta rodada mostra sobre a pergunta da primeira
 
 A primeira rodada perguntou *"duplica algo ativo?"* e, para os três, respondeu não — corretamente, pelo critério dela. `crafting` e `jobs` de fato não duplicam nenhum serviço.
 

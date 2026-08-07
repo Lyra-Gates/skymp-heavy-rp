@@ -331,6 +331,60 @@ addCheck('registro no phase0', () => {
   ]);
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Afinidade da Alma
+//
+// Os testes unitarios cobrem o payload do painel (nenhum numero sai pro
+// jogador). O que eles NAO conseguem cobrir e a fronteira entre processos: a
+// semente vive no gamemode, e o painel web e o game-api sao outros processos,
+// com outro acesso ao mesmo banco. Se alguem escrever um endpoint que devolve
+// `soul_seed` ou `SOUL_SECRET`, nenhum teste do gamemode reprova — e o sistema
+// inteiro deixa de ser oculto, porque a ficha e publica e o codigo e aberto.
+//
+// Este check e a unica coisa que olha para os dois lados ao mesmo tempo.
+// ─────────────────────────────────────────────────────────────────────────────
+addCheck('a semente da alma nao sai do gamemode', () => {
+  const proibido = [/soul_seed/i, /SOUL_SECRET/i, /character_soul/i];
+
+  const varrer = (dir) => {
+    for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entrada.name === 'node_modules' || entrada.name.startsWith('.')) continue;
+      const alvo = path.join(dir, entrada.name);
+      if (entrada.isDirectory()) { varrer(alvo); continue; }
+      if (!/\.(js|ts|html|json)$/.test(entrada.name)) continue;
+
+      const texto = readText(alvo);
+      for (const padrao of proibido) {
+        assert(
+          !padrao.test(texto),
+          `${path.relative(repoRoot, alvo)} menciona ${padrao} — a semente da alma nao pode sair do gamemode ` +
+          '(SOUL_AFFINITY.md §III.3). Se o painel precisa mostrar algo da alma, mostre a ficcao, nunca o numero.'
+        );
+      }
+    }
+  };
+
+  for (const app of ['web', 'bot-discord', 'launcher', 'game-api']) {
+    const dir = rel('apps', app);
+    if (fs.existsSync(dir)) varrer(dir);
+  }
+  return 'nenhum app toca a semente';
+});
+
+addCheck('soul-service registrado e desligado por padrao', () => {
+  assertFileContains(path.join(gamemodeDir, 'phase0-basic.js'), [
+    "id: 'soul'",
+    "enabledBy: 'ENABLE_SOUL_SERVICE'",
+    "phase: 'lab'"
+  ]);
+  // A flag desligada e o segredo declarado vazio: ligar exige duas acoes
+  // conscientes, e o modulo falha alto se so a primeira for feita.
+  assertFileContains(path.join(gamemodeDir, '.env.example'), [
+    'ENABLE_SOUL_SERVICE=false',
+    'SOUL_SECRET='
+  ]);
+});
+
 addCheck('spawn visual usa Papyrus PlaceAtMe', () => {
   assertFileContains(path.join(gamemodeDir, 'market-stalls-service.js'), [
     "Game', 'getFormEx'",

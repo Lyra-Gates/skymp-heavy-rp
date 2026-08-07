@@ -202,6 +202,36 @@ Precisa de conta **admin+** (permissão `add_item`). O caso `0x14` é o que impo
 
 Consequência prática para este roteiro: **9.3 testa que a config carrega, não que ela barra.** Verificar `blocksBetween` — a regra dos dois lados, que é o achado que valia a leitura do Red House — exige antes ligar um chamador de verdade, e qual chamador ligar é a decisão de política que continua em aberto. Registre isso no log da Fase 0 como pendência conhecida, não como falha.
 
+### 9.4 `soul-service` — a alma existe, mas ninguém a viu chegar
+
+Mesmo aviso dos três acima: **confirmado por teste automatizado, não confirmado em sessão real.** São 31 testes de serviço mais os 28 do domínio, e nenhum deles prova a única coisa que importa aqui — que a frase chega na tela de quem está jogando.
+
+⚠️ **Pré-requisitos, nenhum deles opcional:**
+
+1. Aplicar a `migration-v10-soul.sql` (banco novo já vem com as tabelas pelo `schema.sql`). Confirme com `npm run check:schema`.
+2. Gerar o segredo e pôr no `skymp/gamemode/.env`:
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` → `SOUL_SECRET=<valor>`.
+3. `ENABLE_SOUL_SERVICE=true` no mesmo arquivo.
+4. **A e B precisam ter ficha preenchida** (`motivations`, `weaknesses`, `social_ties`). Personagem com os três campos vazios continua recebendo alma — mas a de todos eles é a mesma para o mesmo `characterId`, e o teste 9.4.3 não prova nada. Preencha pelo painel antes.
+
+> **Escolha o segredo uma vez.** Trocar depois muda a alma de quem ainda não foi derivado e deixa incoerente quem já foi — a alma é congelada no primeiro spawn, de propósito (`SOUL_AFFINITY.md` §14.1).
+
+| # | Faça | Espere | Se falhar |
+|---|---|---|---|
+| 9.4.1 | Reinicie o servidor com a flag ligada e `SOUL_SECRET` **vazio** | Boot falha alto com `SOUL_SECRET ausente`, e o módulo não sobe | ⚠️ **Se subir mesmo assim, o modo de falha está apontando pro lado errado.** Alma derivada de segredo vazio é recalculável por qualquer um a partir da ficha, que é pública no painel — e o estrago é permanente |
+| 9.4.2 | Preencha o segredo, reinicie, entre com A | Uma notificação com **uma frase** (ex.: *"Você não sonha. Nunca sonhou."*) logo depois do spawn | Nada aparecendo: confira se `revelarPrimeiroSinal` foi chamado (log `[soul] Sinal ... revelado`). Linha no log e nada na tela = o problema é `sendNotification`, não a alma |
+| 9.4.3 | `SELECT * FROM character_soul` | Uma linha por personagem que entrou. As quatro afinidades somam **200**, os três traços somam **150** | Soma diferente = o gerador quebrou, e isso é a regra 1 do sistema ("nenhuma alma é estritamente melhor") caindo em silêncio |
+| 9.4.4 | Saia e entre de novo com A | **Nenhum segundo sinal.** A frase de 9.4.2 não se repete | Sinal repetindo = o `UNIQUE (character_id, sign_key)` não foi aplicado, ou o `revealSign` está ignorando o que já existe |
+| 9.4.5 | `/alma` com A | As mesmas frases que ele já recebeu. **Nenhum número na tela** | ⚠️ Qualquer dígito aqui é vazamento: o jogador nunca pode ver valor, banda ou semente (§II.1) |
+| 9.4.6 | Peça a alguém com acesso ao painel web para abrir a aba de auditoria e procurar `soul:resolve` | Linhas com `outcome`, `peso`, `inputs` e `seedRef` — e **nunca** a semente inteira | Semente completa no `details` = ela saiu do servidor. Com ela e este repositório, qualquer pessoa reproduz todas as rolagens futuras daquele personagem |
+| 9.4.7 | Anote a alma de A (`SELECT * FROM character_soul WHERE character_id = <A>`), edite a ficha de A pelo painel, reinicie e entre de novo | Os sete valores **não mudaram** | Mudou = a alma está sendo rederivada, e quem jogou meses acordou com outro personagem. As marcas, que são a progressão, ficam órfãs |
+
+**O que 9.4 NÃO testa, e por quê.** Marcas e árvore de transformação existem no serviço e têm teste, mas **nenhum caminho de jogo chega até eles ainda**: `resolveAttempt` e `advancePath` não são chamados por nenhum comando nem por nenhum módulo ativo. Isso é escopo, não pendência — a ordem que o `SOUL_AFFINITY.md` recomenda coloca "os quatro resultados em UMA coisa só, encantamento" como etapa 2, e encantamento depende do `crafting-service`, que continua PARKED.
+
+Consequência prática: **9.4 testa a alma e o sinal, não a consequência.** Registre no log como escopo conhecido. Quem for ligar a etapa 2 precisa antes decidir onde os quatro resultados aparecem, e essa decisão passa pelas 15 perguntas da Constituição §15 como qualquer mecânica nova.
+
+**Ao terminar a etapa**, volte `ENABLE_SOUL_SERVICE=false`. O segredo pode ficar no `.env` — ele não faz nada com o módulo desligado, e trocá-lo depois é pior que mantê-lo.
+
 ---
 
 ## Registro
@@ -231,6 +261,8 @@ offlineMode: false ☐    Flags ENABLE_* ligadas: ___
 | 9.1.4 o `0x14`    | ☐ | agressorCharacterId: ___ · alvoCharacterId: ___ |
 | 9.2 espm          | ☐ | `0xf` passou ☐ · `0x14` barrado ☐ · `character_inventory` limpo ☐ |
 | 9.3 safe-zones    | ☐ | config carregou ☐ · `safe-zones.json` apagado ao fim ☐ |
+| 9.4 soul-service  | ☐ | primeiro sinal chegou ☐ · soma 200/150 ☐ · sem numero no `/alma` ☐ · semente fora do audit ☐ |
+| 9.4.7 alma congelada | ☐ | valores antes: ___ · depois de editar a ficha: ___ |
 
 ## O que quebrou
 (erro exato, o que estava fazendo, o que o log disse)
@@ -240,7 +272,7 @@ offlineMode: false ☐    Flags ENABLE_* ligadas: ___
 - [ ] QA 1.6 — confirmar master API (se 1.6 passou)
 - [ ] Remover `/internal/session/resolve` (se 1.6 passou)
 - [ ] Liberar Fase 1 da integração com a Chancelaria
-- [ ] Liberar o `soul-service`
+- [ ] Liberar a etapa 2 do `soul-service` — os quatro resultados em encantamento (se 9.4 passou). Depende de decidir onde eles aparecem, e de o `crafting-service` sair de PARKED
 - [ ] Apagar o `checkDamageSpike` do `death-service` (se 9.1.3 e 9.1.4 passaram — só então o evento de hit substitui a heurística de verdade)
 - [ ] Decidir se algum chamador da `action-policy` passa a informar `context.actorId` — sem isso `safe-zones` continua carregado e inerte (ver 9.3)
 ```

@@ -62,6 +62,15 @@ function removeActiveCharacter(actorId) {
     // completa em death-service.cleanup().
     require('./death-service').cleanup(actorId);
 
+    // A alma em cache e chaveada por characterId, entao nao sofre do
+    // reaproveitamento de slot — mas cache que so cresce e vazamento, e reler no
+    // proximo login custa uma query. Atras do isEnabled porque o soul-service
+    // lanca no boot quando falta SOUL_SECRET: com a flag desligada, nem o
+    // require acontece.
+    if (require('./core/module-registry').isEnabled('soul')) {
+      require('./soul-service').cleanup(char.characterId);
+    }
+
     activeCharacters.delete(actorId);
   }
 }

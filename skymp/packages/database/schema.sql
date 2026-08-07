@@ -430,3 +430,65 @@ CREATE TABLE IF NOT EXISTS `character_diseases` (
   `is_active`      TINYINT(1) NOT NULL DEFAULT 1,
   CONSTRAINT `fk_disease_char` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- 17. Afinidade da Alma (soul-service)
+-- Desenho: docs/design/SOUL_AFFINITY.md. Detalhes de cada decisao de modelagem
+-- estao em migration-v10-soul.sql, que cria estas mesmas quatro tabelas em banco
+-- ja existente.
+
+-- 17.1. A alma: sete valores derivados da ficha aprovada, mais a semente.
+-- SENSIVEL: `soul_seed` nunca sai do servidor (ver §III.3).
+CREATE TABLE IF NOT EXISTS `character_soul` (
+  `character_id`  INT NOT NULL PRIMARY KEY,
+  `soul_seed`     CHAR(64) NOT NULL COMMENT 'HMAC hex. SENSIVEL: nunca sai do servidor',
+  `arcana`        TINYINT UNSIGNED NOT NULL COMMENT '0-100. As quatro afinidades somam 200',
+  `divina`        TINYINT UNSIGNED NOT NULL,
+  `sombria`       TINYINT UNSIGNED NOT NULL,
+  `bestial`       TINYINT UNSIGNED NOT NULL,
+  `vontade`       TINYINT UNSIGNED NOT NULL COMMENT '0-100. Os tres tracos somam 150',
+  `sensibilidade` TINYINT UNSIGNED NOT NULL,
+  `estabilidade`  TINYINT UNSIGNED NOT NULL,
+  `created_at`    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT `fk_soul_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 17.2. Sinais: o primeiro sai no primeiro spawn, pra que a primeira sessao nao
+-- seja vazia. `sign_key` e chave de catalogo, nunca texto do jogador.
+CREATE TABLE IF NOT EXISTS `character_signs` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id` INT NOT NULL,
+  `sign_key`     VARCHAR(64) NOT NULL COMMENT 'Chave do catalogo em soul-service.js',
+  `source`       VARCHAR(32) NOT NULL DEFAULT 'first_spawn' COMMENT 'first_spawn, event, ritual',
+  `revealed_at`  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uk_sign_character_key` (`character_id`, `sign_key`),
+  CONSTRAINT `fk_sign_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 17.3. Marcas: sao a progressao. Marca nunca e removida, no maximo coberta —
+-- por isso nao ha `removed_at` nem status.
+CREATE TABLE IF NOT EXISTS `character_marks` (
+  `id`              INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id`    INT NOT NULL,
+  `kind`            VARCHAR(16) NOT NULL COMMENT 'fisica, espiritual, social',
+  `visibility`      VARCHAR(16) NOT NULL COMMENT 'visivel, sentida, conhecida',
+  `descriptor`      VARCHAR(64) NOT NULL COMMENT 'Chave do catalogo em soul-service.js',
+  `origin_event_id` VARCHAR(128) DEFAULT NULL COMMENT 'Rastro ate a linha soul:resolve em audit_logs',
+  `created_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `idx_marks_character` (`character_id`),
+  CONSTRAINT `fk_mark_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- 17.4. Arvore de Transformacao: maquina de estados irma de
+-- core/character-state.js, separada dela de proposito (segundos vs meses).
+-- `consented_at` obrigatorio em no irreversivel (SOUL_AFFINITY §14.2).
+CREATE TABLE IF NOT EXISTS `character_paths` (
+  `id`           INT AUTO_INCREMENT PRIMARY KEY,
+  `character_id` INT NOT NULL,
+  `tree`         VARCHAR(16) NOT NULL COMMENT 'arcana, divina, sombria, bestial',
+  `node`         VARCHAR(32) NOT NULL,
+  `entered_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `consented_at` TIMESTAMP NULL DEFAULT NULL COMMENT 'Obrigatorio em no irreversivel',
+  `metadata`     TEXT DEFAULT NULL COMMENT 'JSON',
+  UNIQUE KEY `uk_path_character_tree` (`character_id`, `tree`),
+  CONSTRAINT `fk_path_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB;
