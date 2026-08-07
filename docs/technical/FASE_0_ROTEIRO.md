@@ -163,12 +163,16 @@ Anote o que apareceu. **Isto nunca foi visto num CEF real** — `skymp/ui/` não
 menos gente — até com uma pessoa só, dois processos de helper e dois atores, como
 a bancada da Fase 1 já fez. O resto do roteiro não depende dele.
 
-**Pré-requisito que ainda não está fechado:** `voice-helper.exe` precisa existir.
-Ele **nunca foi compilado** — ver `VOICE_NATIVE_HELPER.md` §8 pro estado do
-toolchain. Enquanto não houver binário, os passos 3 em diante podem ser
-ensaiados com `node voice-helper/tools/frame-probe.js`, que fala exatamente o
-mesmo protocolo (inclusive `role: 'sender'`) com um tom de 440Hz no lugar do
-microfone. Isso valida tudo **menos a captura**, que é justamente o que falta.
+**O binário existe.** `voice-helper.exe` compilou em 07/08/2026 e a captura foi
+medida: 50,1 quadros/s, enquadramento exato, zero descartes
+(`VOICE_NATIVE_HELPER.md` §8.3 e §8.4). Se você não tiver o binário na sua
+máquina, compile seguindo o `voice-helper/README.md`, ou ensaie os passos 3 em
+diante com `node voice-helper/tools/frame-probe.js`, que fala exatamente o mesmo
+protocolo (inclusive `role: 'sender'`) com um tom de 440Hz no lugar do microfone.
+
+**O que este passo acrescenta ao que já foi medido:** ninguém escutou. Que a
+captura entrega sinal em tempo real está provado; que a **voz sai inteligível**
+não. É por isso que este passo existe e por que ele precisa de você.
 
 ⚠️ **`VOIP_DEBUG_EXPOSE_TICKET` grava um ticket de voz em texto puro no disco.**
 Ele vale 30 segundos e autentica como aquele jogador na cena de voz. É andaime de

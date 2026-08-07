@@ -1,10 +1,9 @@
 # Voz por Proximidade — Helper Nativo (Fase 1: prova de conceito)
 
-> **Status:** pipeline provado em bancada. O servidor já aguenta um jogador
-> falando e ouvindo ao mesmo tempo (§10) e existe um caminho para um testador
-> pegar o ticket (§11) — mas o **helper C++ continua nunca compilado** (§8.1) e
-> **ninguém nunca ouviu o áudio com o ouvido** (§8.2). Os dois bloqueios
-> restantes precisam de uma pessoa numa máquina com toolchain, não de mais código.
+> **Status:** o **helper compila e captura áudio real** (§8.3, §8.4), o servidor
+> aguenta um jogador falando e ouvindo ao mesmo tempo (§10), e existe um caminho
+> para um testador pegar o ticket (§11). Falta **uma pessoa escutar** e dizer se
+> a voz sai inteligível (§8.2) — não falta código para isso.
 > Substitui o caminho de [`VOICE_CLIENT_PATCH.md`](VOICE_CLIENT_PATCH.md), que
 > fica no repositório como registro de por que foi descartado.
 
@@ -268,14 +267,16 @@ quadros foi a sonda, não um microfone.
 
 ### ❌ O que NÃO foi verificado
 
-1. **Captura WASAPI. O helper C++ nunca foi compilado nem executado.** Ver §8.
-   Tudo acima foi validado com a sonda em Node, que gera o tom em vez de captar.
-   O `main.cpp` está escrito e revisado, e não está provado.
+1. ~~**Captura WASAPI. O helper C++ nunca foi compilado nem executado.**~~
+   **Resolvido em 07/08/2026 — ver §8.3 (build) e §8.4 (captura medida).** Os
+   números da tabela acima continuam sendo da sonda; a captura tem os seus, na
+   §8.4.
 
-2. **Ninguém ouviu o áudio com o ouvido.** Não há saída de áudio audível neste
-   ambiente. O que existe é medição do sinal no ponto em que ele entra no
-   `destination` do Web Audio, com frequência e amplitude conferidas contra o
-   valor teórico. É forte, e não é a mesma coisa que escutar.
+2. **Ninguém ouviu o áudio com o ouvido.** Continua valendo, e é agora o único
+   bloqueio de verdade. Não há saída de áudio audível neste ambiente, e quem
+   executou a rodada é um agente (§8.2). O que existe é medição — do sinal no
+   `destination` do Web Audio (sonda) e do que a captura entrega (§8.4). É
+   forte, e não é a mesma coisa que escutar.
 
 3. **Dois clientes Skyrim reais.** Posições vieram do `mp` mockado.
 
@@ -310,11 +311,16 @@ deve tratá-los como não verificados até o primeiro build passar, e registrar
 aqui o erro exato se alguma port não resolver — sem trocar de biblioteca sem
 anotar o motivo.
 
+> **Superado em 07/08/2026.** O toolchain foi instalado e o helper **compilou e
+> capturou áudio real** — ver §8.3. As §8.1 e §8.2 abaixo ficam como registro do
+> que estava bloqueado e por quê.
+
 ### 8.1 Reverificação em 07/08/2026 (rodada "pronto para teste")
 
 Esta rodada começou com a informação de que a máquina agora teria Visual Studio
-e vcpkg. **Não tem.** A varredura foi refeita, mais ampla que a da Fase 1, e o
-resultado é o mesmo:
+e vcpkg. **Não tinha** — o toolchain foi instalado depois, nesta mesma rodada
+(§8.3). A varredura foi refeita, mais ampla que a da Fase 1, e o resultado era o
+mesmo da Fase 1:
 
 | Verificação | Resultado |
 |---|---|
@@ -329,17 +335,8 @@ resultado é o mesmo:
 | `winget` | presente |
 | `node` / `npm` | v25.5.0 / 11.8.0 |
 
-**Nenhum erro de compilação foi registrado porque nenhuma compilação chegou a
-começar.** A falha antecipada no `README.md` — símbolo duplicado do `miniaudio`
-se a port vier pré-compilada — continua sendo uma hipótese não testada, e não
-deve ser lida como resolvida.
-
-O que existe é `winget`, ou seja o build é **alcançável**: instalar os
-*VS Build Tools 2022* (workload de C++), CMake e vcpkg é da ordem de 5–8 GB, pede
-elevação e altera a máquina de forma persistente. Isso não foi feito nesta rodada
-por ser uma mudança de ambiente que quem opera a máquina decide, não uma escolha
-de implementação. **É o único item desta rodada que continua bloqueado**, e é o
-que separa "helper escrito e revisado" de "helper que existe como binário".
+O que existia era `winget`, ou seja o build era **alcançável**. A instalação foi
+feita em seguida (§8.3).
 
 ### 8.2 Nem esta rodada nem a Fase 1 ouviram o áudio
 
@@ -356,6 +353,78 @@ julgamento**, e um sinal pode bater todos os números e ainda sair irreconhecív
 passo 6 da etapa 8.2 do `FASE_0_ROTEIRO.md` pede "voz **inteligível**, não só
 'tem sinal'": é a única verificação do roteiro de voz que exige uma pessoa e não
 pode ser delegada.
+
+### 8.3 Primeiro build de verdade — 07/08/2026
+
+Toolchain instalado nesta rodada: **VS Build Tools 2022** (MSVC 19.44.35228,
+toolset 14.44.35207), **CMake 4.4.2**, **vcpkg 2026-07-27**, Windows SDK
+10.0.26100.
+
+> O `winget` do VS Build Tools terminou com **exit 1603**, e ainda assim o
+> toolset ficou funcional (`cl.exe`, `vcvars64.bat` e `MSBuild.exe` presentes e
+> operantes; `vswhere` registra a instância). O 1603 foi de algum componente
+> "recomendado", não do workload de C++. **O código de saída do instalador não é
+> a prova** — `cl.exe` compilando é.
+
+**As três ports resolveram**, com os nomes exatos que estavam no `vcpkg.json`
+desde a Fase 1: `miniaudio` 0.11.25, `ixwebsocket` 12.0.1, `nlohmann-json`
+3.12.0#2. Compilaram em 1,2 min. Aquele arquivo deixa de ser "não verificado".
+
+**A falha antecipada no `README.md` não aconteceu.** A hipótese era símbolo
+duplicado do `miniaudio` caso a port entregasse uma biblioteca já compilada. Ela
+é **header-only** — o `portfile.cmake` instala só o `miniaudio.h` —, então o
+`#define MINIAUDIO_IMPLEMENTATION` do `main.cpp` está certo e o `main.cpp`
+compilou de primeira. O `find_package(unofficial-miniaudio CONFIG QUIET)` do
+`CMakeLists.txt` falha (não há config a achar) e cai no `find_path`, que era
+exatamente o fallback previsto. A precaução estava certa; o palpite, errado.
+
+**O erro real foi outro, e no link:**
+
+```
+mbedcrypto.lib(entropy_poll.c.obj) : error LNK2019: símbolo externo não
+resolvido, BCryptGenRandom, referenciado na função mbedtls_platform_entropy_poll
+voice-helper.exe : fatal error LNK1120: 1 externo não resolvidos
+```
+
+O `ixwebsocket` arrasta o `mbedtls` para ter TLS, e o `entropy_poll` do
+`mbedcrypto` chama `BCryptGenRandom`, que mora em `bcrypt.lib`. O
+`CMakeLists.txt` linkava `ws2_32 ole32 winmm` e não ela. **Não usamos TLS em
+lugar nenhum** — o helper fala `ws://` puro —, mas isso não isenta: o objeto
+entra junto com a biblioteca inteira, não só o que a gente chama.
+
+**Correção:** `bcrypt` no `target_link_libraries` do bloco `WIN32`. Uma linha,
+nenhuma troca de biblioteca. Com ela o build passa e sai
+`build/Release/voice-helper.exe` (1,37 MB).
+
+### 8.4 Primeira captura WASAPI — o helper capturou áudio real
+
+Binário real contra `voip-service` real (harness), autenticando com o novo
+`role: "sender"` da §10, e um ouvinte instrumentado do outro lado medindo o que
+chegou. 12 segundos de sala silenciosa:
+
+| Medido | Resultado | Significa |
+|---|---|---|
+| Autenticação | `auth_ok` como `sender` | a §10 funciona com o binário, não só em teste |
+| Quadros recebidos | 598 em 11,94s | — |
+| **Taxa** | **50,1 quadros/s** (nominal 50) | tempo real, sem deriva |
+| Amostras | 574080 = **exatamente** 598 × 960 | enquadramento certo, nada truncado |
+| Descartes na fila do helper | **0** | a rede acompanhou a captura |
+| Pico / RMS | 0.1677 / 0.01002 | ruído de sala — sinal real, não silêncio digital |
+| Amostras clipadas | **0** | sem saturação no nível ambiente |
+| Quadros ~silêncio | 376 de 598 | coerente com sala quieta |
+
+**Isto encerra o achado de re-bufferização da §7 como sendo da sonda.** Lá a
+fonte entregava a cada 30,8ms (limitação do `setInterval` do Node) e a folga do
+jitter buffer encolhia ~10ms por quadro. O helper entrega a **50,1/s**, ou seja
+19,96ms por quadro: é o relógio do dispositivo WASAPI, e a política de underrun
+não é provocada por ele. O item §9.11 (buffer adaptativo) continua válido para
+jitter de **rede real**, que segue não exercitado fora de `127.0.0.1`.
+
+**O que isto ainda NÃO prova:** que a voz sai inteligível. Ninguém falou no
+microfone e ninguém escutou a saída — vale integralmente a §8.2. O que está
+provado é que a captura abre, entrega em tempo real, com enquadramento exato e
+sem saturar. O julgamento de inteligibilidade continua sendo o passo 6 da etapa
+8.2 do `FASE_0_ROTEIRO.md`, e continua precisando de uma pessoa.
 
 Escolha do `miniaudio` sobre WASAPI/COM cru: header-only, licença permissiva
 (MIT/domínio público), e evita ~400 linhas de `IMMDeviceEnumerator`/`IAudioClient`

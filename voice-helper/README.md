@@ -10,13 +10,14 @@ exporia o microfone do jogador a qualquer servidor SkyMP que ele conectasse
 depois. A arquitetura e o porquê estão em
 [`docs/technical/VOICE_NATIVE_HELPER.md`](../docs/technical/VOICE_NATIVE_HELPER.md).
 
-> ⚠️ **Fase 1 — prova de conceito.** O código deste diretório **nunca foi
-> compilado**: a máquina onde foi escrito não tem Visual Studio, CMake nem vcpkg
-> (evidência em VOICE_NATIVE_HELPER.md §8, reverificada em §8.1 — continua sem).
-> O pipeline servidor→navegador foi validado com a sonda em Node
-> (`tools/frame-probe.js`); a captura WASAPI não.
-> Trate `CMakeLists.txt`, `vcpkg.json` e `src/main.cpp` como **não verificados**
-> até o primeiro build passar.
+> ✅ **Compilado e executado em 07/08/2026.** O primeiro build de verdade passou
+> (MSVC 19.44, CMake 4.4.2, vcpkg 2026-07-27) e o helper **capturou áudio real**:
+> 50,1 quadros/s contra 50 nominal, enquadramento exato, zero descartes. Números
+> e o erro de link que apareceu no caminho: VOICE_NATIVE_HELPER.md §8.3 e §8.4.
+>
+> ⚠️ **Ainda ninguém escutou.** Que a captura entrega sinal está medido; que a
+> voz sai **inteligível** não — isso precisa de uma pessoa (§8.2). É o passo 6 da
+> etapa 8.2 do `FASE_0_ROTEIRO.md`.
 
 ## Limitações desta fase (deliberadas)
 
@@ -84,12 +85,24 @@ Se alguma port não resolver, **anote o erro exato em VOICE_NATIVE_HELPER.md §8
 antes de trocar de biblioteca** — a decisão de usar `miniaudio` está registrada
 com motivo, e trocá-la em silêncio apagaria o motivo junto.
 
-**Falha mais provável no primeiro build**, já que nada disto foi verificado:
-`src/main.cpp` faz `#define MINIAUDIO_IMPLEMENTATION` antes do include, o que
-assume que a port entrega o `miniaudio.h` como header-only. Se a port do vcpkg
-entregar uma biblioteca já compilada, isso vira erro de **símbolo duplicado** no
-link. Nesse caso remova o `#define` e deixe o `target_link_libraries` resolver —
-e registre a correção aqui.
+**O que de fato aconteceu no primeiro build (07/08/2026).** As três ports
+resolveram com os nomes que já estavam no `vcpkg.json`.
+
+A falha que este README antecipava — símbolo duplicado do `miniaudio` se a port
+viesse pré-compilada — **não aconteceu**: a port é header-only (instala só o
+`miniaudio.h`), então o `#define MINIAUDIO_IMPLEMENTATION` está certo e o
+`find_path` do `CMakeLists.txt` é o caminho correto.
+
+O erro real foi no **link**, e de outra dependência:
+
+```
+mbedcrypto.lib(entropy_poll.c.obj) : error LNK2019: símbolo externo não
+resolvido, BCryptGenRandom
+```
+
+O `ixwebsocket` arrasta `mbedtls`, que precisa de `bcrypt.lib` no Windows —
+mesmo sem usarmos TLS. Corrigido adicionando `bcrypt` ao `target_link_libraries`.
+Detalhe em VOICE_NATIVE_HELPER.md §8.3.
 
 ## Rodar
 
