@@ -13,7 +13,12 @@
   },
   "win": {
     "target": "nsis",
-    "icon": "public/logo.png"
+    "icon": "public/logo.png",
+    "signtoolOptions": {
+      "timeStampServer": "http://timestamp.digicert.com",
+      "rfc3161TimeStampServer": "http://timestamp.digicert.com",
+      "signingHashAlgorithms": ["sha256"]
+    }
   },
   "nsis": {
     "oneClick": false,

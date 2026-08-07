@@ -99,3 +99,66 @@ O ponto decisivo é a última linha. Uma Collection instalada "corretamente" em 
 **Ainda assim aproveitamos o ecossistema Nexus:** nada impede a staff usar Vortex/Collections como ferramenta de trabalho pra montar e testar a modlist antes de gerar o manifesto final — é um passo manual de conveniência, não uma integração. E a política de licenciamento (`docs/technical/LICENSE_AND_AFFILIATION_POLICY.md`) já exige verificar permissão de redistribuição mod a mod, exatamente como o Nexus exige pra Collections públicas: o processo de compliance é o mesmo, só o formato de saída muda.
 
 **Decisão:** manter manifestos próprios. Não migrar.
+
+---
+
+## 6. Assinatura do instalador
+
+**Estado: configurado e nunca executado com certificado.** O `electron-builder.json` e o workflow existem; **nenhum instalador assinado foi gerado**, porque não há certificado. O que falta é uma compra e uma decisão de quem opera o servidor — não é código.
+
+Sem assinatura o SmartScreen mostra *"O Windows protegeu o computador"* e esconde o botão de executar atrás de "Mais informações". O launcher é a única porta de entrada do servidor, então "o jogador não instala" significa "o jogador não joga". É o item 3.3 do [QA_REPORT](QA_REPORT_2026-08.md).
+
+### 6.1 Como está configurado
+
+O certificado **não fica no repositório e não fica no `electron-builder.json`**. O electron-builder lê duas variáveis do ambiente por conta própria:
+
+| Variável | O que é |
+|---|---|
+| `CSC_LINK` | caminho para o `.pfx` **ou** o conteúdo dele em base64 |
+| `CSC_KEY_PASSWORD` | senha do `.pfx` |
+
+O que está declarado no `electron-builder.json` é só o que não é segredo:
+
+```json
+"signtoolOptions": {
+  "timeStampServer": "http://timestamp.digicert.com",
+  "rfc3161TimeStampServer": "http://timestamp.digicert.com",
+  "signingHashAlgorithms": ["sha256"]
+}
+```
+
+**O carimbo de tempo não é detalhe.** Sem ele, todo instalador já distribuído vira "assinatura inválida" no dia em que o certificado vencer — inclusive os que os jogadores baixaram meses antes. Com carimbo, a assinatura continua válida porque o Windows consegue provar que ela foi feita enquanto o certificado valia.
+
+> ⚠️ O `electron-builder.json` **não aceita comentário**, nem no formato `"//chave"` que o `package.json` usa neste repositório: o schema declara `additionalProperties: false` e o build falha na validação. Toda explicação de configuração de build mora aqui.
+
+**Sem `CSC_LINK`, o build continua funcionando** e gera o instalador não assinado, com aviso no log. Isso é deliberado: contribuidor e build local não podem depender de um certificado que só quem opera o servidor tem.
+
+### 6.2 O workflow
+
+`.github/workflows/release-launcher.yml`, em `windows-latest` (o `signtool` é do Windows). Dispara por tag `launcher-v*` ou à mão pela aba Actions.
+
+Ele avisa em alto e bom som se o build vai sair assinado, constrói, e então **verifica de verdade** — `Get-AuthenticodeSignature` precisa devolver `Valid` **e** um carimbo de tempo. Se havia certificado e a assinatura não colou, o job falha: um instalador não assinado saindo de um build que deveria assinar é pior que um build quebrado, porque parece que deu certo.
+
+Os segredos esperados no repositório são `WINDOWS_CSC_LINK` e `WINDOWS_CSC_KEY_PASSWORD`.
+
+### 6.3 O que falta, e é decisão humana
+
+**1. Escolher e comprar o certificado.** Três caminhos, e eles não são equivalentes:
+
+| Opção | Custo anual aproximado | SmartScreen | Observação |
+|---|---|---|---|
+| **OV** (Organization Validation) | US$ 200–400 | Reputação construída ao longo de downloads — **o aviso continua aparecendo no começo** | Desde 2023 exige armazenamento em token físico ou HSM, o que complica CI |
+| **EV** (Extended Validation) | US$ 300–600 | Reputação **imediata** | Token físico obrigatório; assinar em CI exige HSM na nuvem |
+| **Azure Trusted Signing** | ~US$ 10/mês | Reputação imediata (certificado emitido pela Microsoft) | Nasceu para este caso: sem `.pfx`, sem token, integra com CI. Exige entidade verificada com 3+ anos |
+
+Para um servidor mantido por uma pessoa, o **Azure Trusted Signing** é o caminho que faz mais sentido — é o único dos três que não exige um token USB plugado numa máquina para assinar. O `electron-builder` 26 já o suporta por `win.azureSignOptions`, e trocar para ele significa mexer no `electron-builder.json` e nos segredos, não no workflow.
+
+**Este documento não decide qual comprar.** A escolha depende de a pessoa ter CNPJ com a idade que a Microsoft exige, e de quanto o projeto quer gastar por ano.
+
+**2. Confirmar o SmartScreen na mão.** Isto **não é automatizável** e não está no workflow. Reputação de SmartScreen é construída pela Microsoft ao longo de downloads reais; a única verificação possível é:
+
+1. Baixar o instalador pelo navegador (não `curl` — o SmartScreen reage à marca de origem que o navegador grava no arquivo).
+2. Numa máquina Windows limpa, que nunca viu este instalador.
+3. Executar e anotar exatamente o que aparece: nada, "Mais informações", ou bloqueio.
+
+Registre o resultado aqui quando acontecer. Enquanto esta seção não tiver esse registro, o item 3.3 do QA continua **aberto**, mesmo com o workflow verde — pela mesma razão que vale para o resto do projeto: *build verde significa que não quebrou o que já era verificado, não que funciona na mão do jogador.*

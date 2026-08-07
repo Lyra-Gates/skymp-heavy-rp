@@ -1,0 +1,122 @@
+# Build do instalador do launcher, assinado quando há certificado.
+#
+# Separado do `ci.yml` de propósito. O CI roda em `ubuntu-latest` a cada push e
+# precisa ser rápido; isto roda em `windows-latest` (o `signtool` é do Windows),
+# leva minutos e só faz sentido numa tag ou sob demanda.
+#
+# ─── O que este workflow prova, e o que não prova ───────────────────────────
+#
+# **Prova** que o instalador é gerado, e — quando os segredos existem — que a
+# assinatura foi aplicada e é válida (o passo de verificação usa `Get-AuthenticodeSignature`).
+#
+# **Não prova** que o SmartScreen deixa passar. Reputação de SmartScreen é
+# construída pela Microsoft ao longo de downloads, e a única forma de conferir é
+# baixar o instalador numa máquina limpa e ver o que o Windows diz. Isso está
+# registrado como passo manual em `docs/technical/LAUNCHER_DISTRIBUTION.md` §6 e
+# **não é executável aqui**.
+name: Launcher — build e assinatura
+
+on:
+  push:
+    tags:
+      - 'launcher-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: instalador Windows
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/launcher/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: apps/launcher
+        run: npm ci
+
+      # O build não é o lugar de descobrir erro de tipo — mas se o typecheck do
+      # CI não rodou nesta ref (tag empurrada direto), rodar aqui é barato.
+      - name: Typecheck
+        working-directory: apps/launcher
+        run: npm run typecheck
+
+      # Diz em alto e bom som se este build vai sair assinado ou não. Sem isto,
+      # um instalador não assinado passa despercebido até um jogador reclamar do
+      # SmartScreen — que é semanas depois e longe daqui.
+      - name: Há certificado neste ambiente?
+        id: cert
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+        run: |
+          if [ -n "$CSC_LINK" ]; then
+            echo "assinado=true" >> "$GITHUB_OUTPUT"
+            echo "Certificado presente: o instalador sai ASSINADO."
+          else
+            echo "assinado=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::WINDOWS_CSC_LINK ausente. O instalador sai NAO ASSINADO e o SmartScreen vai bloquear. Ver LAUNCHER_DISTRIBUTION.md secao 6."
+          fi
+
+      # `CSC_LINK` e `CSC_KEY_PASSWORD` são lidos pelo próprio electron-builder;
+      # não há nada no `electron-builder.json` apontando pro certificado, e é
+      # assim que tem que ser. Ausentes, ele gera o instalador sem assinar e
+      # avisa no log — que é o que mantém o build de contribuidor funcionando.
+      - name: Build
+        working-directory: apps/launcher
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: npm run build
+
+      # Verificação de verdade, não "o arquivo existe". `Get-AuthenticodeSignature`
+      # devolve `Valid` só quando a cadeia fecha e o carimbo de tempo está lá.
+      #
+      # Falha o job quando havia certificado e a assinatura não colou: um
+      # instalador que sai não assinado de um build que deveria assinar é pior
+      # que um build quebrado, porque parece que deu certo.
+      - name: Verificar a assinatura
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path apps/launcher/dist-electron -Filter *.exe -Recurse |
+                 Where-Object { $_.Name -like '*Setup*' } |
+                 Select-Object -First 1
+          if (-not $exe) { Write-Error 'Nenhum instalador gerado.'; exit 1 }
+          Write-Host "Instalador: $($exe.FullName)"
+
+          $sig = Get-AuthenticodeSignature $exe.FullName
+          Write-Host "Status: $($sig.Status)"
+          Write-Host "Signatario: $($sig.SignerCertificate.Subject)"
+          Write-Host "Carimbo de tempo: $($sig.TimeStamperCertificate.Subject)"
+
+          if ('${{ steps.cert.outputs.assinado }}' -eq 'true') {
+            if ($sig.Status -ne 'Valid') {
+              Write-Error "Havia certificado e a assinatura nao ficou valida (status: $($sig.Status))."
+              exit 1
+            }
+            if (-not $sig.TimeStamperCertificate) {
+              # Sem carimbo, todo instalador ja distribuido vira "assinatura
+              # invalida" no dia em que o certificado vencer — inclusive os que
+              # os jogadores baixaram meses antes.
+              Write-Error 'Assinado sem carimbo de tempo. Ver timeStampServer no electron-builder.json.'
+              exit 1
+            }
+            Write-Host 'OK: assinado e carimbado.'
+          } else {
+            Write-Host '::warning::Instalador NAO assinado (sem certificado no ambiente). Nao distribua.'
+          }
+
+      - name: Publicar o instalador como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-instalador
+          path: apps/launcher/dist-electron/*.exe
+          if-no-files-found: error
+          # Curto de propósito: artefato de CI não é canal de distribuição. O
+          # canal é o GitHub Releases (LAUNCHER_DISTRIBUTION.md §2).
+          retention-days: 14
