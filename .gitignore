@@ -9,6 +9,18 @@ apps/*/node_modules/
 .env.*
 !.env.example
 
+# Build do helper nativo. O `cmake -B build` cria isto, e com o vcpkg em modo
+# manifesto ele carrega tambem as dependencias compiladas (`vcpkg_installed/`) —
+# centenas de MB de artefato de maquina, nada versionavel.
+voice-helper/build/
+voice-helper/vcpkg_installed/
+
+# Andaime de teste da voz (VOIP_DEBUG_EXPOSE_TICKET). Contem um ticket de voz em
+# texto puro — vale 30s e autentica como aquele jogador. E gerado so quando a
+# flag e ligada a mao durante teste manual, e some com a Fase 3.
+# Ver docs/technical/VOICE_NATIVE_HELPER.md §11.
+skymp/gamemode/.voip-debug-ticket.json
+
 skymp/server/
 skymp/artifacts/
 skymp/client-backups/

@@ -15,8 +15,13 @@
  *
  * Uso:
  *   node frame-probe.js --actor-id 0xFF000A12 --ticket <token> [--host h] [--port p]
- *                       [--freq 440] [--seconds 10]
+ *                       [--freq 440] [--seconds 10] [--role sender|listener]
  *   node frame-probe.js --listen --actor-id 0xFF000A13 --ticket <token>
+ *
+ * O papel segue o modo: gerando tom autentica como `sender` (o que o helper faz),
+ * com `--listen` autentica como `listener` (o que a UI faz). Como os tickets são
+ * por papel, peça ao harness o ticket certo: `/ticket?actorId=…&role=sender`.
+ * Ver docs/technical/VOICE_NATIVE_HELPER.md §10.
  */
 
 // `ws` é resolvido a partir do gamemode, onde ele já é dependência declarada.
@@ -37,11 +42,12 @@ const SAMPLES_PER_FRAME = (SAMPLE_RATE / 1000) * FRAME_MS; // 960
 function parseArgs(argv) {
   const opt = {
     host: '127.0.0.1', port: 7778, freq: 440, seconds: 0,
-    listen: false, actorId: null, ticket: null, amplitude: 0.3
+    listen: false, actorId: null, ticket: null, amplitude: 0.3, role: null
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--listen') opt.listen = true;
+    else if (a === '--role') opt.role = argv[++i];
     else if (a === '--actor-id') opt.actorId = Number.parseInt(argv[++i], 0) || Number(argv[i]);
     else if (a === '--ticket') opt.ticket = argv[++i];
     else if (a === '--host') opt.host = argv[++i];
@@ -55,7 +61,17 @@ function parseArgs(argv) {
     console.error('faltou --actor-id e/ou --ticket. Ver o cabeçalho deste arquivo.');
     process.exit(2);
   }
+  if (opt.role !== null && opt.role !== 'listener' && opt.role !== 'sender') {
+    console.error(`--role invalido: ${opt.role} (use 'listener' ou 'sender')`);
+    process.exit(2);
+  }
   return opt;
+}
+
+/** Papel efetivo: explícito se veio, senão o que o modo implica. */
+function effectiveRole(opt) {
+  if (opt.role !== null) return opt.role;
+  return opt.listen ? 'listener' : 'sender';
 }
 
 /** Um quadro de 20ms de senoide, PCM 16-bit LE mono, contínuo entre quadros. */
@@ -81,7 +97,14 @@ let phase = 0;
 
 ws.on('open', () => {
   console.log(`[probe] conectado em ${url}; autenticando como 0x${opt.actorId.toString(16)}`);
-  ws.send(JSON.stringify({ type: 'auth', actorId: opt.actorId, ticket: opt.ticket }));
+  // O papel espelha o modo: quem gera tom faz o que o helper faz (`sender`),
+  // quem só mede faz o que a UI faz (`listener`). Assim a sonda exercita a
+  // mesma conexão dupla de um jogador real, e não o arranjo de dois atores
+  // distintos que a Fase 1 usou pra contornar a colisão de actorId.
+  // `--role` força, pra testar explicitamente o lado errado.
+  ws.send(JSON.stringify({
+    type: 'auth', actorId: opt.actorId, ticket: opt.ticket, role: effectiveRole(opt)
+  }));
 });
 
 const received = new Map(); // fromActorId -> { frames, bytes, volumes:Set }

@@ -269,8 +269,17 @@ int main(int argc, char** argv) {
 
   ws.setOnMessageCallback([&](const ix::WebSocketMessagePtr& msg) {
     if (msg->type == ix::WebSocketMessageType::Open) {
-      std::printf("[helper] Conectado em %s; autenticando.\n", url.c_str());
-      nlohmann::json auth{{"type", "auth"}, {"actorId", opt.actor_id}, {"ticket", opt.ticket}};
+      std::printf("[helper] Conectado em %s; autenticando como sender.\n", url.c_str());
+      // `role: "sender"` é o que permite este processo coexistir com o
+      // index.html do MESMO jogador. Sem o campo o servidor assume "listener"
+      // (o padrão de compatibilidade), e as duas conexões brigariam pelo mesmo
+      // slot — quem autenticasse por último derrubaria o outro. O ticket também
+      // é por papel: o `/voz` emite um pra UI e um pro helper.
+      // Ver docs/technical/VOICE_NATIVE_HELPER.md §10.
+      nlohmann::json auth{{"type", "auth"},
+                          {"actorId", opt.actor_id},
+                          {"ticket", opt.ticket},
+                          {"role", "sender"}};
       ws.send(auth.dump());
     } else if (msg->type == ix::WebSocketMessageType::Message) {
       nlohmann::json parsed = nlohmann::json::parse(msg->str, nullptr, false);

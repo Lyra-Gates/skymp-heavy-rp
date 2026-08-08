@@ -10,20 +10,26 @@ exporia o microfone do jogador a qualquer servidor SkyMP que ele conectasse
 depois. A arquitetura e o porquê estão em
 [`docs/technical/VOICE_NATIVE_HELPER.md`](../docs/technical/VOICE_NATIVE_HELPER.md).
 
-> ⚠️ **Fase 1 — prova de conceito.** O código deste diretório **nunca foi
-> compilado**: a máquina onde foi escrito não tem Visual Studio, CMake nem vcpkg
-> (evidência em VOICE_NATIVE_HELPER.md §8). O pipeline servidor→navegador foi
-> validado com a sonda em Node (`tools/frame-probe.js`); a captura WASAPI não.
-> Trate `CMakeLists.txt`, `vcpkg.json` e `src/main.cpp` como **não verificados**
-> até o primeiro build passar.
+> ✅ **Compilado e executado em 07/08/2026.** O primeiro build de verdade passou
+> (MSVC 19.44, CMake 4.4.2, vcpkg 2026-07-27) e o helper **capturou áudio real**:
+> 50,1 quadros/s contra 50 nominal, enquadramento exato, zero descartes. Números
+> e o erro de link que apareceu no caminho: VOICE_NATIVE_HELPER.md §8.3 e §8.4.
+>
+> ⚠️ **Ainda ninguém escutou.** Que a captura entrega sinal está medido; que a
+> voz sai **inteligível** não — isso precisa de uma pessoa (§8.2). É o passo 6 da
+> etapa 8.2 do `FASE_0_ROTEIRO.md`.
 
 ## Limitações desta fase (deliberadas)
 
 - **O ticket é passado à mão**, por linha de comando. Não há handoff automático
-  entre o jogo e o helper — é trabalho da Fase 2.
-- **O helper e a UI do mesmo jogador não coexistem.** O `voip-service` indexa
-  clientes por `actorId`: quem autenticar por último derruba o anterior. Para
-  testar, use atores diferentes (helper = jogador A, navegador = jogador B).
+  entre o jogo e o helper — é trabalho da Fase 3. Para conseguir ler o ticket
+  durante um teste manual existe um andaime temporário
+  (`VOIP_DEBUG_EXPOSE_TICKET`), descrito em VOICE_NATIVE_HELPER.md §11.
+- ~~**O helper e a UI do mesmo jogador não coexistem.**~~ **Resolvido em
+  07/08/2026.** O `auth` passou a levar `role` (`listener` para a UI, `sender`
+  para o helper) e o `voip-service` guarda as duas conexões por ator. O helper
+  manda `role: "sender"` sozinho — não há nada a fazer na linha de comando. Ver
+  VOICE_NATIVE_HELPER.md §10.
 - **Sem UI, sem bandeja, sem serviço.** É um processo de terminal; sai com Ctrl+C.
 - **Sem cancelamento de eco.** Use fone, ou sua voz volta pra cena.
 - **PCM cru** (~1 Mbit/s de subida). Opus fica pra Fase 2.
@@ -32,6 +38,22 @@ depois. A arquitetura e o porquê estão em
 
 Requisitos: Windows, Visual Studio 2022 (workload "Desenvolvimento para desktop
 com C++"), CMake ≥ 3.21 e vcpkg.
+
+**0. Se a máquina não tiver o toolchain** (é o caso da máquina de
+desenvolvimento até 07/08/2026 — ver VOICE_NATIVE_HELPER.md §8.1). Cada comando
+pede elevação; o primeiro baixa ~5–8 GB e demora:
+
+```bash
+winget install --id Microsoft.VisualStudio.2022.BuildTools --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+```bash
+winget install --id Kitware.CMake
+```
+
+Depois abra um terminal novo (o PATH só vale a partir dele) e confirme com
+`where cmake` e `where cl` antes de seguir. Se `cl` não aparecer, use o
+"Developer Command Prompt for VS 2022" em vez do terminal comum.
 
 **1. vcpkg, se ainda não houver**
 
@@ -63,12 +85,24 @@ Se alguma port não resolver, **anote o erro exato em VOICE_NATIVE_HELPER.md §8
 antes de trocar de biblioteca** — a decisão de usar `miniaudio` está registrada
 com motivo, e trocá-la em silêncio apagaria o motivo junto.
 
-**Falha mais provável no primeiro build**, já que nada disto foi verificado:
-`src/main.cpp` faz `#define MINIAUDIO_IMPLEMENTATION` antes do include, o que
-assume que a port entrega o `miniaudio.h` como header-only. Se a port do vcpkg
-entregar uma biblioteca já compilada, isso vira erro de **símbolo duplicado** no
-link. Nesse caso remova o `#define` e deixe o `target_link_libraries` resolver —
-e registre a correção aqui.
+**O que de fato aconteceu no primeiro build (07/08/2026).** As três ports
+resolveram com os nomes que já estavam no `vcpkg.json`.
+
+A falha que este README antecipava — símbolo duplicado do `miniaudio` se a port
+viesse pré-compilada — **não aconteceu**: a port é header-only (instala só o
+`miniaudio.h`), então o `#define MINIAUDIO_IMPLEMENTATION` está certo e o
+`find_path` do `CMakeLists.txt` é o caminho correto.
+
+O erro real foi no **link**, e de outra dependência:
+
+```
+mbedcrypto.lib(entropy_poll.c.obj) : error LNK2019: símbolo externo não
+resolvido, BCryptGenRandom
+```
+
+O `ixwebsocket` arrasta `mbedtls`, que precisa de `bcrypt.lib` no Windows —
+mesmo sem usarmos TLS. Corrigido adicionando `bcrypt` ao `target_link_libraries`.
+Detalhe em VOICE_NATIVE_HELPER.md §8.3.
 
 ## Rodar
 
@@ -104,18 +138,28 @@ node voice-helper/tools/e2e-harness.js --voip-port 7778 --http-port 8099
 > autenticação** — é exatamente o furo que o handshake por ticket fecha. Só em
 > `127.0.0.1`, em máquina de desenvolvimento.
 
-Rotas: `/` (a UI), `/ticket?actorId=`, `/move?actorId=&x=&y=&z=`, `/state`.
+Rotas: `/` (a UI), `/ticket?actorId=&role=`, `/move?actorId=&x=&y=&z=`, `/state`.
+
+O `role` do `/ticket` é `listener` (padrão, o que a página busca) ou `sender` (o
+que a sonda e o helper usam). São tickets diferentes de propósito — um não serve
+no lugar do outro, e é isso que deixa os dois papéis do mesmo jogador conectados
+ao mesmo tempo. Ver VOICE_NATIVE_HELPER.md §10.
 
 **Sonda** — fala o mesmo protocolo do helper, com um tom de 440Hz no lugar do
 microfone. É o que isola falha de captura de falha de transporte:
 
 ```bash
-node voice-helper/tools/frame-probe.js --actor-id 0xFF000A12 --ticket <token> --seconds 10
+node voice-helper/tools/frame-probe.js --actor-id 0xFF000A12 --ticket <token de sender> --seconds 10
 ```
 
 ```bash
-node voice-helper/tools/frame-probe.js --listen --actor-id 0xFF000A13 --ticket <token>
+node voice-helper/tools/frame-probe.js --listen --actor-id 0xFF000A13 --ticket <token de listener>
 ```
+
+O papel segue o modo: gerando tom ela autentica como `sender` (o que o helper
+faz), com `--listen` como `listener` (o que a UI faz). `--role` força o contrário,
+pra testar o lado errado de propósito. Peça ao harness o ticket do papel certo —
+`/ticket?actorId=0xFF000A12&role=sender` — ou a auth é recusada.
 
 Roteiro completo do teste e os números medidos: VOICE_NATIVE_HELPER.md §7.
 

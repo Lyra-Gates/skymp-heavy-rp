@@ -4,12 +4,16 @@
  *
  * Arquitetura:
  * - Um WebSocketServer (porta 7778, bind local por padrão) recebe conexoes dos clientes CEF.
- * - Cada cliente se autentica enviando { type: 'auth', actorId, ticket }. O ticket é um
- *   token de uso único e curta duração emitido pelo servidor (issueTicket) quando o
+ * - Cada cliente se autentica enviando { type: 'auth', actorId, ticket, role }. O ticket é
+ *   um token de uso único e curta duração emitido pelo servidor (issueTicket) quando o
  *   jogador roda /voz — sem isso, qualquer processo que conecte no WebSocket local
  *   poderia reivindicar o actorId de outro jogador e sequestrar o slot de voz dele.
  * - O servidor calcula a distancia entre atores a cada 2 segundos.
  * - Com base na distancia, envia { type: 'proximity_update', peers: [...] } ao cliente.
+ *
+ * Um mesmo jogador tem DUAS conexões, porque falar e ouvir saem por processos
+ * diferentes desde que a captura foi pra fora do CEF (ver `role` em §2 abaixo e
+ * `docs/technical/VOICE_NATIVE_HELPER.md` §10).
  *
  * Dois caminhos convivem aqui de propósito, e a Fase 2 remove o primeiro:
  *
@@ -33,6 +37,8 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer, WebSocket } = require('ws');
 const commands = require('./commands');
 
@@ -40,12 +46,79 @@ const VOIP_PORT = Number.parseInt(process.env.VOIP_PORT, 10) || 7778;
 const VOIP_BIND_HOST = process.env.VOIP_BIND_HOST || '127.0.0.1';
 const VOIP_PUBLIC_HOST = process.env.VOIP_PUBLIC_HOST || '127.0.0.1';
 
-// Mapa de clientes conectados: actorId -> { ws, actorId }
+/**
+ * ⚠️ ANDAIME DE TESTE, padrão desligado. Ver `_exposeDebugTicket`.
+ *
+ * Ligada, faz o /voz gravar o ticket do helper em texto puro (arquivo + log).
+ * Não entra em nenhum `.env.example`: quem precisa liga à mão durante o teste
+ * manual e desliga depois. A Fase 3 remove a flag inteira.
+ *
+ * Lida a cada chamada, não uma vez no load: o padrão é desligado, e uma flag que
+ * só pode ser ligada reiniciando o servidor é uma flag que alguém vai deixar
+ * ligada no `.env` pra não ter que reiniciar de novo. Custa um `process.env` por
+ * /voz — que é um comando humano, não um caminho quente.
+ */
+const VOIP_DEBUG_TICKET_FILE = path.join(__dirname, '.voip-debug-ticket.json');
+
+function _debugExposeTicketEnabled() {
+  return process.env.VOIP_DEBUG_EXPOSE_TICKET === 'true';
+}
+
+/**
+ * Os dois papéis de conexão de um mesmo jogador.
+ *
+ * `listener` é o `index.html` dentro do CEF: recebe `proximity_update`,
+ * `audio_frame` e a sinalização WebRTC, e é ele quem toca som.
+ * `sender` é o helper nativo (`voice-helper/`): só empurra `audio_frame` e
+ * ignora tudo que chega, porque não tem alto-falante nenhum pra alimentar.
+ *
+ * `listener` é o padrão de propósito — o `index.html` atual não manda o campo
+ * `role`, e um cliente antigo que só escuta é exatamente um listener. Assim a
+ * compatibilidade não custa um ramo de código, ela é o caso base.
+ */
+const VOIP_ROLES = ['listener', 'sender'];
+const DEFAULT_VOIP_ROLE = 'listener';
+
+/**
+ * Clientes conectados: actorId -> entrada do ator.
+ *
+ *   { listener: conexão|null, sender: conexão|null, voiceMode, muted }
+ *
+ * Cada conexão é `{ ws, actorId, role, oversizedFrameLogged }`.
+ *
+ * Era `Map<actorId, conexão>` — uma conexão por ator — e isso impedia um jogador
+ * de falar e ouvir ao mesmo tempo: helper e UI autenticam com o MESMO actorId, e
+ * quem chegasse por último derrubava o outro. Enquanto a captura morava no
+ * navegador as duas coisas saíam pelo mesmo socket e o índice estava certo; ela
+ * saiu (a CEF bloqueia `getUserMedia`), e o índice ficou errado.
+ *
+ * O que é por CONEXÃO e o que é por ATOR:
+ *
+ * - Por conexão: o socket e o log de frame grande (é o socket que se comporta mal).
+ * - Por ator: `voiceMode` e `muted`. Mutar é uma decisão da pessoa sobre a própria
+ *   voz na cena, não sobre um cabo. Se `muted` vivesse na conexão, mutar pela UI
+ *   deixaria o helper transmitindo — a pessoa se veria mutada e continuaria sendo
+ *   ouvida, que é o pior defeito possível num controle de microfone.
+ *
+ * Ver `docs/technical/VOICE_NATIVE_HELPER.md` §10.
+ */
 const voipClients = new Map();
 
-// Tickets pendentes emitidos por /voz: actorId -> { token, expiresAt }
+/**
+ * Tickets pendentes emitidos por /voz: `${actorId}:${role}` -> { token, expiresAt }
+ *
+ * A chave leva o papel porque o ticket é de uso único e `issueTicket` sobrescrevia
+ * o pendente do ator: com uma chave só, o `/voz` que serve a UI queima o ticket que
+ * o helper usaria, e os dois papéis nunca conseguem estar autenticados juntos.
+ * Um ticket por papel é o mínimo pra que a conexão dupla seja alcançável na prática
+ * — sem isso a mudança em `voipClients` acima seria correta e inútil.
+ */
 const _pendingTickets = new Map();
 const TICKET_TTL_MS = 30 * 1000;
+
+function _ticketKey(actorId, role) {
+  return `${actorId}:${role}`;
+}
 
 // Distancias de voz — derivadas dos raios do chat em core/proximity-ranges.js,
 // pra que falar e escrever cheguem exatamente nas mesmas pessoas.
@@ -98,24 +171,48 @@ let _proximityTimer = null;
 const _audienceByActor = new Map();
 
 /**
- * Emite um ticket de uso único para um actorId poder se autenticar no VOIP.
+ * Emite um ticket de uso único para um actorId se autenticar num papel.
  * Chamado pelo comando /voz — nunca client-initiated.
  * @param {number} actorId
+ * @param {string} [role] 'listener' (padrão) ou 'sender'
  * @returns {string} token
  */
-function issueTicket(actorId) {
+function issueTicket(actorId, role = DEFAULT_VOIP_ROLE) {
   const token = crypto.randomBytes(16).toString('hex');
-  _pendingTickets.set(actorId, { token, expiresAt: Date.now() + TICKET_TTL_MS });
+  _pendingTickets.set(_ticketKey(actorId, role), { token, expiresAt: Date.now() + TICKET_TTL_MS });
   return token;
 }
 
-function _consumeTicket(actorId, token) {
-  const pending = _pendingTickets.get(actorId);
+function _consumeTicket(actorId, token, role = DEFAULT_VOIP_ROLE) {
+  const key = _ticketKey(actorId, role);
+  const pending = _pendingTickets.get(key);
   if (!pending) return false;
-  _pendingTickets.delete(actorId); // uso único, válido ou não
+  _pendingTickets.delete(key); // uso único, válido ou não
   if (pending.expiresAt < Date.now()) return false;
   if (pending.token !== token) return false;
   return true;
+}
+
+/** Entrada do ator, criada sob demanda no primeiro `auth` daquele actorId. */
+function _entryFor(actorId) {
+  let entry = voipClients.get(actorId);
+  if (!entry) {
+    entry = { listener: null, sender: null, voiceMode: 'normal', muted: false };
+    voipClients.set(actorId, entry);
+  }
+  return entry;
+}
+
+/** A conexão `listener` de um ator, se estiver aberta. É quem recebe qualquer coisa. */
+function _openListener(actorId) {
+  const entry = voipClients.get(actorId);
+  const conn = entry && entry.listener;
+  return conn && conn.ws.readyState === WebSocket.OPEN ? conn : null;
+}
+
+/** True se o ator tem ao menos uma conexão aberta, em qualquer papel. */
+function _hasOpenConnection(entry) {
+  return VOIP_ROLES.some((role) => entry[role] && entry[role].ws.readyState === WebSocket.OPEN);
 }
 
 function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
@@ -129,6 +226,7 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
 
   wss.on('connection', (ws) => {
     let clientActorId = null;
+    let clientRole = null;
 
     ws.on('message', (raw) => {
       let msg;
@@ -141,23 +239,47 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
       switch (msg.type) {
         case 'auth': {
           // Cliente se registra com seu actorId — exige ticket válido emitido por /voz.
+          //
+          // `role` ausente = 'listener'. O `index.html` não manda o campo e não
+          // precisa passar a mandar: quem só escuta É um listener.
           const claimedActorId = parseInt(msg.actorId);
-          if (!Number.isFinite(claimedActorId) || !_consumeTicket(claimedActorId, msg.ticket)) {
-            console.log(`[voip] Auth rejeitada (ticket inválido/expirado) para actorId ${msg.actorId}.`);
+          const claimedRole = msg.role === undefined ? DEFAULT_VOIP_ROLE : msg.role;
+          if (!VOIP_ROLES.includes(claimedRole)) {
+            console.log(`[voip] Auth rejeitada (role desconhecido: ${msg.role}) para actorId ${msg.actorId}.`);
             ws.send(JSON.stringify({ type: 'auth_failed' }));
             ws.close();
             return;
           }
+          if (!Number.isFinite(claimedActorId) || !_consumeTicket(claimedActorId, msg.ticket, claimedRole)) {
+            console.log(`[voip] Auth rejeitada (ticket inválido/expirado) para actorId ${msg.actorId} como ${claimedRole}.`);
+            ws.send(JSON.stringify({ type: 'auth_failed' }));
+            ws.close();
+            return;
+          }
+
           clientActorId = claimedActorId;
-          voipClients.set(clientActorId, { ws, actorId: clientActorId, voiceMode: 'normal' });
-          console.log(`[voip] Actor 0x${clientActorId.toString(16)} connected to VOIP.`);
-          ws.send(JSON.stringify({ type: 'auth_ok', actorId: clientActorId }));
+          clientRole = claimedRole;
+
+          const entry = _entryFor(clientActorId);
+          // Reconexão no MESMO papel substitui a anterior; o papel oposto não é
+          // tocado. Fechar a antiga aqui dispara o handler de `close` dela, que
+          // por isso confere a identidade do socket antes de limpar o slot —
+          // sem essa checagem o close atrasado da conexão velha apagaria a nova.
+          const previous = entry[clientRole];
+          if (previous && previous.ws !== ws) {
+            try { previous.ws.close(); } catch { /* já morto */ }
+          }
+          entry[clientRole] = { ws, actorId: clientActorId, role: clientRole, oversizedFrameLogged: false };
+
+          console.log(`[voip] Actor 0x${clientActorId.toString(16)} connected to VOIP as ${clientRole}.`);
+          ws.send(JSON.stringify({ type: 'auth_ok', actorId: clientActorId, role: clientRole }));
           break;
         }
 
         case 'voice_mode':
-          // Cliente altera seu modo de voz (normal/whisper/shout)
-          if (clientActorId && voipClients.has(clientActorId)) {
+          // Modo de voz é do ator, não do socket: define o alcance com que a
+          // pessoa é ouvida, e quem fala (helper) não é quem tem o seletor (UI).
+          if (clientActorId !== null && voipClients.has(clientActorId)) {
             voipClients.get(clientActorId).voiceMode = msg.mode || 'normal';
           }
           break;
@@ -165,10 +287,11 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
         case 'offer':
         case 'answer':
         case 'ice':
-          // Repassa sinalizacao WebRTC para o peer alvo
+          // Repassa sinalizacao WebRTC para o peer alvo — sempre pro `listener`
+          // dele. É o navegador que tem `RTCPeerConnection`; o helper ignoraria.
           if (msg.targetActorId) {
-            const target = voipClients.get(parseInt(msg.targetActorId));
-            if (target && target.ws.readyState === WebSocket.OPEN) {
+            const target = _openListener(parseInt(msg.targetActorId));
+            if (target) {
               target.ws.send(JSON.stringify({
                 ...msg,
                 fromActorId: clientActorId
@@ -182,13 +305,18 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
           // servidor retransmite pra quem está em alcance. Só para autenticados
           // — sem isso, uma conexão anônima injetaria áudio na cena de todo
           // mundo, que é o mesmo furo que o ticket fechou no `auth`.
+          // Aceito de qualquer papel, não só do `sender`. Os dois sockets
+          // provaram a mesma identidade pelo mesmo handshake, então exigir papel
+          // aqui não fecharia furo nenhum — só quebraria a sonda em Node e quem
+          // ainda autentica sem `role`. O relay usa a identidade autenticada.
           if (clientActorId === null) break;
           if (typeof msg.data !== 'string') break;
           if (msg.data.length > MAX_AUDIO_FRAME_B64) {
-            const client = voipClients.get(clientActorId);
+            const entry = voipClients.get(clientActorId);
+            const conn = entry && clientRole ? entry[clientRole] : null;
             // Loga uma vez por conexão: o descarte é barato, o log em 50Hz não.
-            if (client && !client.oversizedFrameLogged) {
-              client.oversizedFrameLogged = true;
+            if (conn && conn.ws === ws && !conn.oversizedFrameLogged) {
+              conn.oversizedFrameLogged = true;
               console.warn(
                 `[voip] Actor 0x${clientActorId.toString(16)} mandou audio_frame de ` +
                 `${msg.data.length} chars (teto ${MAX_AUDIO_FRAME_B64}); descartando.`
@@ -201,8 +329,10 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
         }
 
         case 'mute':
-          // Jogador solicita mute de si mesmo
-          if (clientActorId && voipClients.has(clientActorId)) {
+          // Mute é do ator, não da conexão: silencia a pessoa na cena, venha a
+          // voz pelo helper ou pelo caminho antigo. Por conexão, mutar pela UI
+          // deixaria o helper transmitindo — mutado na tela e audível na cena.
+          if (clientActorId !== null && voipClients.has(clientActorId)) {
             voipClients.get(clientActorId).muted = msg.muted === true;
             console.log(`[voip] Actor 0x${clientActorId.toString(16)} mute=${msg.muted}`);
           }
@@ -211,12 +341,29 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
     });
 
     ws.on('close', () => {
-      if (clientActorId) {
-        voipClients.delete(clientActorId);
-        // Notifica todos os pares que o jogador saiu
+      if (clientActorId === null || clientRole === null) return;
+      const entry = voipClients.get(clientActorId);
+      if (!entry) return;
+
+      // Só limpa o slot se ele ainda for DESTE socket. Uma reconexão no mesmo
+      // papel fecha a conexão antiga, e o close dela chega depois de a nova já
+      // estar registrada — sem esta checagem, o adeus da velha derrubaria a nova.
+      if (entry[clientRole] && entry[clientRole].ws !== ws) return;
+      entry[clientRole] = null;
+
+      // `peer_left` só quando sai o `listener`. Sair o `sender` significa que a
+      // pessoa fechou o helper: ela para de falar, mas continua na cena de voz e
+      // continua ouvindo pela UI. Anunciar saída aí faria os outros derrubarem o
+      // caminho de áudio de alguém que ainda está lá, ouvindo.
+      if (clientRole === 'listener') {
         broadcast({ type: 'peer_left', actorId: clientActorId }, clientActorId);
-        console.log(`[voip] Actor 0x${clientActorId.toString(16)} disconnected from VOIP.`);
       }
+
+      // A entrada só some quando os dois papéis se foram — enquanto sobrar um, o
+      // ator segue na cena, com seu `muted`/`voiceMode` preservados.
+      if (!entry.listener && !entry.sender) voipClients.delete(clientActorId);
+
+      console.log(`[voip] Actor 0x${clientActorId.toString(16)} disconnected from VOIP (${clientRole}).`);
     });
 
     ws.on('error', (err) => {
@@ -245,34 +392,29 @@ function tickProximity() {
 
   if (typeof mp === 'undefined') return;
 
-  const clientList = [...voipClients.values()];
-
-  for (const client of clientList) {
-    if (client.ws.readyState !== WebSocket.OPEN) continue;
-    if (client.muted) continue;
-
-    let posA;
+  // A posição é lida uma vez por ATOR, não por conexão. Um jogador com helper e
+  // UI abertos é uma pessoa num lugar só; iterar conexões faria a mesma posição
+  // ser lida duas vezes e o par aparecer duplicado na audiência — cada quadro
+  // entregue em dobro pro mesmo ouvinte.
+  const actors = [];
+  for (const [actorId, entry] of voipClients.entries()) {
+    if (!_hasOpenConnection(entry)) continue;
+    if (entry.muted) continue;
     try {
-      const locA = mp.get(client.actorId, 'locationalData');
-      if (!locA) continue;
-      posA = locA.pos;
+      const loc = mp.get(actorId, 'locationalData');
+      if (!loc) continue;
+      actors.push({ actorId, entry, pos: loc.pos });
     } catch { continue; }
+  }
 
+  for (const client of actors) {
     const proximityData = [];
 
-    for (const peer of clientList) {
+    for (const peer of actors) {
       if (peer.actorId === client.actorId) continue;
-      if (peer.muted) continue;
 
-      let posB;
-      try {
-        const locB = mp.get(peer.actorId, 'locationalData');
-        if (!locB) continue;
-        posB = locB.pos;
-      } catch { continue; }
-
-      const dist = distance3D(posA, posB);
-      const range = VOICE_RANGES[peer.voiceMode || 'normal'];
+      const dist = distance3D(client.pos, peer.pos);
+      const range = VOICE_RANGES[peer.entry.voiceMode || 'normal'];
       const volume = calcVolume(dist, range);
 
       if (volume > 0) {
@@ -291,9 +433,12 @@ function tickProximity() {
       }
     }
 
-    // Envia o mapa de volume para o cliente
-    if (client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(JSON.stringify({ type: 'proximity_update', peers: proximityData }));
+    // O mapa de volume vai só pro `listener`: é ele que tem ganho pra ajustar.
+    // Um ator que só tem `sender` aberto (helper sem UI) continua entrando na
+    // audiência dos outros — ele fala —, apenas não tem pra onde receber.
+    const listener = _openListener(client.actorId);
+    if (listener) {
+      listener.ws.send(JSON.stringify({ type: 'proximity_update', peers: proximityData }));
     }
   }
 }
@@ -318,8 +463,13 @@ function relayAudioFrame(fromActorId, msg) {
 
   let delivered = 0;
   for (const listener of audience) {
-    const client = voipClients.get(listener.actorId);
-    if (!client || client.ws.readyState !== WebSocket.OPEN) continue;
+    // Sempre a conexão `listener` do ouvinte, nunca um `sender` dele: o helper
+    // do outro não toca nada, e mandar áudio pra lá seria gastar banda pra que
+    // um processo o descarte. A audiência já exclui o próprio locutor (o tick
+    // pula `peer.actorId === client.actorId`), então o `listener` de quem fala
+    // não recebe a própria voz de volta — isso seria eco, não voz.
+    const client = _openListener(listener.actorId);
+    if (!client) continue;
 
     // Serializado por ouvinte porque o `volume` muda por ouvinte. Custa uma
     // cópia do payload por destinatário; com PCM cru isso é ~2,5KB cada. Está
@@ -354,12 +504,18 @@ function distance3D(a, b) {
   );
 }
 
+/**
+ * Envia para o `listener` de todo mundo, menos o excluído.
+ *
+ * Só listeners: o que passa por aqui hoje é `peer_left`, que existe pra UI
+ * desmontar o áudio de quem saiu. O helper não tem o que desmontar.
+ */
 function broadcast(msg, excludeActorId) {
   const raw = JSON.stringify(msg);
-  for (const [id, client] of voipClients.entries()) {
-    if (id !== excludeActorId && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(raw);
-    }
+  for (const actorId of voipClients.keys()) {
+    if (actorId === excludeActorId) continue;
+    const listener = _openListener(actorId);
+    if (listener) listener.ws.send(raw);
   }
 }
 
@@ -407,7 +563,15 @@ function requestVoiceConnection(actorId) {
     return;
   }
 
-  const ticket = issueTicket(actorId);
+  // Dois tickets, um por papel. O da UI vai pela property, como sempre; o do
+  // helper é emitido sempre, esteja ou não exposto — emitir é barato (expira em
+  // 30s sem uso) e assim a EXPOSIÇÃO, que é a parte arriscada, fica sendo a
+  // única coisa atrás da flag. Um ticket só não serviria: é de uso único, e
+  // quem chegasse primeiro queimaria o do outro.
+  const ticket = issueTicket(actorId, 'listener');
+  const senderTicket = issueTicket(actorId, 'sender');
+
+  _exposeDebugTicket(actorId, senderTicket);
 
   if (typeof mp === 'undefined') return;
   try {
@@ -420,6 +584,56 @@ function requestVoiceConnection(actorId) {
     });
   } catch (err) {
     console.error('[voip] Falha ao enviar ticket de voz:', err.message);
+  }
+}
+
+/**
+ * ⚠️ ANDAIME DE TESTE — TEMPORÁRIO. Remover junto com a Fase 3.
+ *
+ * Escreve o ticket do `sender` num arquivo local e loga em `warn`, pra que uma
+ * pessoa testando consiga copiá-lo pro `--ticket` do `voice-helper.exe`. Hoje o
+ * ticket só existe dentro da property `voipTicket`, que é lida pelo navegador do
+ * jogo — não há como um humano vê-lo.
+ *
+ * Por que atrás de flag, desligada por padrão: isto grava em disco, em texto
+ * puro, uma credencial que autentica como aquele jogador na cena de voz. Vale 30
+ * segundos, o que limita o estrago, e ainda assim quem ler o arquivo dentro da
+ * janela fala pela boca da pessoa. É aceitável numa bancada com um engenheiro
+ * olhando, e em nenhum outro lugar.
+ *
+ * A Fase 3 (handoff automático, jogo → helper, sem intervenção manual) substitui
+ * isto por completo, e esta função e a flag devem sumir junto.
+ * Ver `docs/technical/VOICE_NATIVE_HELPER.md` §11.
+ */
+function _exposeDebugTicket(actorId, senderTicket) {
+  if (!_debugExposeTicketEnabled()) return;
+
+  const payload = {
+    actorId,
+    actorIdHex: `0x${actorId.toString(16).toUpperCase()}`,
+    ticket: senderTicket,
+    role: 'sender',
+    host: VOIP_PUBLIC_HOST,
+    port: VOIP_PORT,
+    issuedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + TICKET_TTL_MS).toISOString(),
+    ttlSeconds: TICKET_TTL_MS / 1000,
+    aviso: 'ANDAIME DE TESTE. Desligue VOIP_DEBUG_EXPOSE_TICKET depois do teste.'
+  };
+
+  console.warn(
+    `[voip] ⚠️  VOIP_DEBUG_EXPOSE_TICKET ligado — ticket de 'sender' exposto em texto puro.\n` +
+    `[voip]     voice-helper.exe --actor-id ${payload.actorIdHex} --ticket ${senderTicket} ` +
+    `--host ${VOIP_PUBLIC_HOST} --port ${VOIP_PORT}\n` +
+    `[voip]     Vale ${payload.ttlSeconds}s. Desligue a flag depois do teste.`
+  );
+
+  // O arquivo é conveniência; falhar em escrevê-lo não pode derrubar o /voz —
+  // o log acima já entregou o ticket.
+  try {
+    fs.writeFileSync(VOIP_DEBUG_TICKET_FILE, JSON.stringify(payload, null, 2));
+  } catch (err) {
+    console.warn(`[voip] Não consegui escrever ${VOIP_DEBUG_TICKET_FILE}: ${err.message}`);
   }
 }
 
@@ -451,8 +665,16 @@ module.exports = {
   // teste do relay precisa de um tick determinístico em vez de esperar o timer.
   tickProximity,
   calcVolume,
+  // Papéis de conexão — o helper manda 'sender', a UI não manda nada e vira
+  // 'listener'. Ver `voipClients` e VOICE_NATIVE_HELPER.md §10.
+  VOIP_ROLES,
+  DEFAULT_VOIP_ROLE,
   // Exposto só pra testes
   _consumeTicket,
   _pendingTickets,
-  _audienceByActor
+  _ticketKey,
+  _audienceByActor,
+  _voipClients: voipClients,
+  _debugExposeTicketEnabled,
+  VOIP_DEBUG_TICKET_FILE
 };
