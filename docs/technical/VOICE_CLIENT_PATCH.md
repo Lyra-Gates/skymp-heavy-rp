@@ -1,5 +1,59 @@
 # Patch de Client — Liberar Microfone no CEF (Voz por Proximidade)
 
+> ## ⛔ CAMINHO DESCARTADO — substituído em 07/08/2026
+>
+> **Não aplique este patch.** O caminho ativo é o helper nativo:
+> [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md).
+>
+> O documento abaixo está preservado inteiro, e de propósito. Ele registra por
+> que a ideia foi levada a sério — três PRs upstream, um diff pronto, um runbook
+> completo — e o que se descobriu depois. Apagá-lo faria alguém redescobrir o
+> caminho daqui a seis meses e refazer o percurso inteiro.
+>
+> ### O que ele não sabia
+>
+> O texto abaixo trata o bloqueio como uma omissão: `OnBeforeCommandLineProcessing`
+> "não habilita nenhuma flag de mídia", e as PRs "não foram mergeadas" sem review.
+> A leitura implícita é a de esquecimento dos mantenedores.
+>
+> Não foi. O release notes da **SkyrimPlatform 2.1** — a engine que o SkyMP usa,
+> hoje na 2.6 — registra a **remoção deliberada**:
+>
+> > "Removed Chromium flag that gives the ability to listen to recording devices
+> > via browser-side JavaScript"
+>
+> A flag existiu e foi tirada de propósito. Isso reclassifica as três PRs
+> auto-fechadas: elas não estavam esperando atenção, estavam pedindo a reversão
+> de uma decisão de segurança.
+>
+> ### Por que a decisão deles está certa
+>
+> O client SkyMP **abre a URL que o servidor mandar**. Com a flag ligada num
+> build distribuído, qualquer JavaScript servido por **qualquer** servidor SkyMP
+> captaria o microfone do jogador em silêncio — sem prompt do sistema, sem
+> indicador, sem consentimento. O escopo do risco não é este servidor: é o client
+> inteiro, para sempre, em todo servidor que aquele jogador conectar depois.
+>
+> Note que o próprio diff abaixo já concedia isso sem perceber: ele passa
+> `use-fake-ui-for-media-stream` (suprime o prompt) junto de `enable-features`
+> (concede a permissão) — exatamente a combinação "captura sem o usuário saber" —
+> e ainda desliga a same-origin policy. O comentário do `disable-web-security`
+> defende a mudança com "o CEF do SkyMP só carrega a UI local, não navega pra
+> origens arbitrárias". Essa premissa é falsa: carregar a UI que o servidor
+> aponta é precisamente navegar para uma origem arbitrária.
+>
+> ### O que substitui
+>
+> Tirar a captura do navegador em vez de enfraquecer o navegador. Um executável
+> separado captura o microfone pela API de áudio do Windows e manda os quadros
+> para o servidor, que retransmite por proximidade; o navegador do jogo só
+> **toca** o que chega — e tocar nunca foi bloqueado pela CEF, só a captura era.
+>
+> De quebra resolve o NAT/CGNAT que travaria a malha P2P entre jogadores em redes
+> residenciais diferentes. Ver [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md).
+
+---
+
 ## Contexto
 
 O `voip-service.js` (`skymp/gamemode/voip-service.js`, comando `/voz`) já está implementado e testado no lado servidor: sinalização WebRTC, autenticação por ticket, cálculo de volume por distância. Mas o navegador embutido do SkyMP (CEF3, baseado em Chromium ~70) **recusa `getUserMedia({audio:true})` com `NotAllowedError`** mesmo com permissão de microfone concedida pelo Windows, porque `OnBeforeCommandLineProcessing` (em `skyrim-platform/src/tilted/ui/MyChromiumApp.cpp`, no client oficial) não habilita nenhuma flag de mídia do Chromium.
@@ -67,3 +121,12 @@ void MyChromiumApp::OnBeforeCommandLineProcessing(
 ## Enquanto isso não existe
 
 `/voz` continua registrado e funcional no servidor (`ENABLE_VOIP_SERVICE`), mas o client vai falhar ao pedir o microfone com `NotAllowedError` — o comportamento esperado é a UI mostrar isso claramente e sugerir canal de voz do Discord como alternativa (ver `docs/ARCHITECTURE.md` 1.4.4 e a seção de canais de voz temporários do bot Discord).
+
+---
+
+**Atualização (07/08/2026).** O parágrafo acima continua valendo para *falar*: sem
+o helper nativo instalado, o microfone segue bloqueado e o Discord segue sendo a
+alternativa. O que mudou é que **ouvir deixou de depender disso** — o
+`voip-service` retransmite os quadros de quem tem o helper, e a UI toca. Por isso
+a UI não fecha mais o WebSocket quando o microfone falha; fechar deixaria a
+pessoa muda *e* surda. Ver [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md) §6.

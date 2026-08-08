@@ -76,6 +76,9 @@
     #voip-status .dot { width: 7px; height: 7px; border-radius: 50%; }
     #voip-status.ok .dot { background:#4caf50; }
     #voip-status.error .dot { background:#e53935; }
+    /* Âmbar: estado parcial. Hoje só um caso — ouvindo pelo relay, sem
+       microfone pra falar. Verde mentiria e vermelho também. */
+    #voip-status.warn .dot { background:#fb8c00; }
 
     /* === TRADE OVERLAY === */
     #trade-overlay {
@@ -454,6 +457,14 @@
     ws: null,
     voiceFatal: false,         // motivo terminal já exibido — ver setStatus/onclose
 
+    // Caminho novo (helper nativo): actorId -> { gainNode, nextPlayTime, volume }.
+    // Mapa separado do `peers` de propósito — ali toda entrada tem um
+    // RTCPeerConnection e `removePeer` chama `pc.close()`. Uma fonte de relay não
+    // tem `pc`, e enfiá-la no mesmo mapa transformaria cada uso de `peers` num
+    // campo minado de `if (peer.pc)`.
+    relayPeers: new Map(),
+    relayHeard: false,         // já chegou algum audio_frame nesta sessão de voz
+
     audioCtx: null,
     localStream: null,
     interaction: {
@@ -672,6 +683,7 @@
   function connectVoip(actorId, ticket, host, port) {
     state.actorId = actorId;
     state.voiceFatal = false; // nova tentativa de /voz — o motivo anterior não vale mais
+    state.relayHeard = false; // idem: o chip volta a poder ser corrigido nesta sessão
     const wsUrl = `ws://${host || '127.0.0.1'}:${port || 7778}`;
     state.ws = new WebSocket(wsUrl);
 
@@ -725,6 +737,15 @@
             removePeer(id);
           }
         }
+        // Idem para as fontes de relay. Precisa de laço próprio: quem só é
+        // ouvido pelo helper nunca entra em `state.peers`, então o laço acima
+        // não o alcança e a cadeia de áudio dele ficaria pendurada pra sempre.
+        for (const [id] of state.relayPeers) {
+          if (!msg.peers.find(p => p.actorId === id)) {
+            removeRelayPeer(id);
+            removePeerHUD(id);
+          }
+        }
         break;
 
       case 'offer':
@@ -743,17 +764,147 @@
         }
         break;
 
+      case 'audio_frame':
+        // Caminho novo: PCM cru vindo do helper nativo, já retransmitido pelo
+        // servidor com o volume calculado para *este* ouvinte. Não há WebRTC
+        // envolvido — só decodificar e tocar. Ver docs/technical/VOICE_NATIVE_HELPER.md.
+        playRelayFrame(msg.fromActorId, msg.volume, msg.data);
+        break;
+
       case 'peer_left':
         removePeer(msg.actorId);
         break;
     }
   }
 
+  // ── Áudio retransmitido pelo servidor (helper nativo) ─────────────────────
+  // Formato do fio, fixo na Fase 1 e igual ao declarado em voip-service.js:
+  // PCM 16-bit little-endian, mono, 48kHz, quadros de 20ms.
+  const RELAY_SAMPLE_RATE = 48000;
+
+  // Jitter buffer: quanto agendar à frente do relógio do AudioContext. Menos que
+  // isso e qualquer atraso de rede vira um buraco audível entre quadros de 20ms.
+  const RELAY_JITTER_S = 0.06;
+
+  // Teto de fila. Se os quadros chegarem mais rápido que o tempo real (rajada
+  // depois de um congestionamento), `nextPlayTime` cresce sem limite e a latência
+  // só aumenta — o jogador ouviria a fala de dez segundos atrás. Passando disso,
+  // pula pro presente: numa conversa, atrasar é pior que perder um pedaço.
+  const RELAY_MAX_QUEUE_S = 0.5;
+
+  /**
+   * AudioContext sob demanda, independente do microfone.
+   *
+   * Antes o contexto nascia dentro de `initMicrophone()`, o que era suficiente
+   * quando a única fonte era o WebRTC. Agora tocar áudio recebido não depende
+   * mais de conseguir capturar — e no client oficial a captura *não* funciona,
+   * que é justamente o caso em que este caminho precisa funcionar.
+   */
+  function ensureAudioContext() {
+    if (!state.audioCtx) {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      state.audioCtx = new Ctor({ sampleRate: RELAY_SAMPLE_RATE });
+    }
+    // Navegador comum pode nascer 'suspended' até um gesto do usuário; no CEF em
+    // jogo não há gesto nenhum, então pedir resume a cada quadro é barato e é a
+    // diferença entre tocar e ficar mudo sem erro nenhum no console.
+    if (state.audioCtx.state === 'suspended') state.audioCtx.resume().catch(() => {});
+    return state.audioCtx;
+  }
+
+  function getRelayChain(actorId) {
+    let chain = state.relayPeers.get(actorId);
+    if (!chain) {
+      const ctx = ensureAudioContext();
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 0; // silencioso até o primeiro volume do servidor
+      gainNode.connect(ctx.destination);
+      chain = { gainNode, nextPlayTime: 0, volume: null };
+      state.relayPeers.set(actorId, chain);
+    }
+    return chain;
+  }
+
+  /** base64 → Float32 mono. PCM 16-bit little-endian, como o helper envia. */
+  function decodeRelayFrame(b64) {
+    const bin = atob(b64);
+    const samples = bin.length >> 1;
+    const pcm = new Float32Array(samples);
+    for (let i = 0; i < samples; i++) {
+      const lo = bin.charCodeAt(i * 2);
+      const hi = bin.charCodeAt(i * 2 + 1);
+      const signed = ((hi << 8) | lo) << 16 >> 16; // estende o sinal de 16 bits
+      pcm[i] = signed / 32768;
+    }
+    return pcm;
+  }
+
+  function playRelayFrame(fromActorId, volume, b64) {
+    if (typeof b64 !== 'string' || !b64.length) return;
+
+    let pcm;
+    try {
+      pcm = decodeRelayFrame(b64);
+    } catch (err) {
+      console.error('[voip] audio_frame ilegível:', err);
+      return;
+    }
+    if (!pcm.length) return;
+
+    const ctx = ensureAudioContext();
+    const chain = getRelayChain(fromActorId);
+
+    // Só reprograma o ganho quando o volume muda de verdade. Chamar
+    // setTargetAtTime 50x por segundo empilharia eventos na timeline do
+    // AudioParam sem mudar nada — o servidor só recalcula volume a cada 2s.
+    const volumeMudou = volume !== chain.volume;
+    if (volumeMudou) {
+      chain.volume = volume;
+      chain.gainNode.gain.setTargetAtTime(volume, ctx.currentTime, 0.1);
+    }
+
+    const buffer = ctx.createBuffer(1, pcm.length, RELAY_SAMPLE_RATE);
+    buffer.getChannelData(0).set(pcm);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(chain.gainNode);
+
+    const now = ctx.currentTime;
+    if (chain.nextPlayTime < now || chain.nextPlayTime > now + RELAY_MAX_QUEUE_S) {
+      chain.nextPlayTime = now + RELAY_JITTER_S;
+    }
+    source.start(chain.nextPlayTime);
+    chain.nextPlayTime += buffer.duration;
+
+    // Pelo mesmo motivo do ganho: o HUD só muda quando o volume muda. Sem a
+    // guarda seriam 50 escritas de DOM por segundo por locutor, num overlay
+    // desenhado por cima do jogo, pra pintar sempre a mesma largura de barra.
+    if (volumeMudou) updatePeerHUD(fromActorId, volume, false);
+
+    // Corrige o chip na primeira vez que áudio realmente chega. Sem isto, quem
+    // está no client oficial lê "VOZ INDISPONÍVEL" enquanto ouve outra pessoa
+    // falando — o estado na tela contradizendo o que sai da caixa de som. O
+    // motivo terminal continua valendo pra *falar*, e `voiceFatal` segue marcado
+    // porque é ele que impede o onclose de sobrescrever a explicação.
+    if (!state.relayHeard) {
+      state.relayHeard = true;
+      setStatus(state.voiceFatal ? 'warn' : 'ok',
+        state.voiceFatal ? 'OUVINDO — SEM MICROFONE' : 'VOZ ATIVA');
+    }
+  }
+
+  function removeRelayPeer(actorId) {
+    const chain = state.relayPeers.get(actorId);
+    if (!chain) return;
+    try { chain.gainNode.disconnect(); } catch { /* contexto já fechado */ }
+    state.relayPeers.delete(actorId);
+  }
+
   // ── WebRTC ────────────────────────────────────────────────────────────────
   async function initMicrophone() {
     try {
       state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      state.audioCtx = new AudioContext();
+      ensureAudioContext();
       console.log('[voip] Microphone initialized.');
     } catch (err) {
       console.error('[voip] Mic error:', err);
@@ -765,11 +916,18 @@
       state.voiceFatal = true;
 
       if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
-        // Limitação conhecida do client SkyMP oficial: o CEF embutido (Chromium
-        // ~70) recusa getUserMedia por padrão — falta um patch em
-        // MyChromiumApp.cpp que nunca foi mergeado upstream (ver
-        // docs/technical/VOICE_CLIENT_PATCH.md). Não adianta reconectar, o
-        // resultado vai ser o mesmo até esse client ser trocado.
+        // Limitação do client SkyMP oficial: o CEF embutido recusa getUserMedia.
+        //
+        // Até 07/08/2026 este comentário dizia que "falta um patch que nunca foi
+        // mergeado upstream", como se fosse esquecimento. Não é: o release notes
+        // da SkyrimPlatform 2.1 registra a *remoção deliberada* da flag do
+        // Chromium que dava acesso a dispositivos de gravação pelo JavaScript do
+        // navegador. Reverter globalmente exporia o microfone do jogador a
+        // qualquer servidor SkyMP que ele conectasse depois — o client abre a URL
+        // que o servidor mandar. Ver docs/technical/VOICE_CLIENT_PATCH.md
+        // (caminho descartado) e VOICE_NATIVE_HELPER.md (o caminho atual).
+        //
+        // Não adianta reconectar: capturar por aqui não vai voltar a funcionar.
         setStatus('error', 'VOZ INDISPONÍVEL NESTE CLIENT — use o Discord');
         showInteractionToast(
           'Voz no jogo indisponível: este client do SkyMP não libera o microfone. ' +
@@ -790,9 +948,23 @@
         );
       }
 
-      // Sem microfone não há como publicar nem faz sentido manter a sinalização
-      // aberta — fecha em vez de deixar uma conexão pela metade.
-      if (state.ws) state.ws.close();
+      // A conexão FICA ABERTA, e isso é uma mudança deliberada.
+      //
+      // Antes ela era fechada aqui, com o argumento de que "sem microfone não há
+      // como publicar nem faz sentido manter a sinalização aberta". O argumento
+      // era correto enquanto o único tráfego deste socket fosse sinalização
+      // WebRTC: sem captura não há o que sinalizar.
+      //
+      // Deixou de ser correto neste PR. O mesmo socket agora entrega `audio_frame`
+      // — áudio de outras pessoas, capturado pelo helper nativo delas e
+      // retransmitido pelo servidor. Fechar aqui desligaria a *escuta* junto com
+      // a captura, e no client oficial a captura falha sempre: seria garantir que
+      // ninguém nunca ouve nada, exatamente no caso que este caminho existe pra
+      // resolver.
+      //
+      // O que não mudou: `voiceFatal` continua marcado e a mensagem específica
+      // continua na tela. Quem não tem o helper continua sem falar, e continua
+      // sendo mandado pro Discord — só não fica mais surdo de graça.
     }
   }
 
@@ -857,6 +1029,7 @@
       peer.pc.close();
       state.peers.delete(actorId);
     }
+    removeRelayPeer(actorId);
     removePeerHUD(actorId);
   }
 
