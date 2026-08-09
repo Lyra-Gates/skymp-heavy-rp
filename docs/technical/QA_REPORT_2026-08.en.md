@@ -26,7 +26,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 > ⚠️ **Until 2026-08-06 the flags turned nothing on** — the gamemode never loaded its own `.env` (2.16). The server's first real boot happened on 2026-08-06, with four active modules and 33 registered commands.
 
-**Eight** modules registered in `core/module-registry.js`, all behind an `ENABLE_*` flag and **all off by default**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
+**Ten** modules registered in `core/module-registry.js`, all behind an `ENABLE_*` flag and **all off by default**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag`, `fauna-census`, `corpse-probe` (lab). The last two are not mechanics: they are Phase 0 observation instruments for the hostile-mob question — see [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md).
 
 Seven services exist on disk and are **never registered** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Four others were deleted on 2026-08-06 (`economy-service`, `justice`, `faction`, `survival`) for duplicating an active system or being unsafe — see `PARKED_SERVICES_DECISION.md`. Those that stayed and touched gold were migrated to `core/transaction-service`.
 

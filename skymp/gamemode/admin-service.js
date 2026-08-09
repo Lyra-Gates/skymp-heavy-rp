@@ -48,10 +48,27 @@ const { actorRef } = require('./core/papyrus');
 // desenhar uma variante com escopo (revelar só quem é parte de uma denúncia
 // aberta). Alargar o cargo resolveria a fila criando o problema que a permissão
 // existe para evitar.
+//
+// `run_world_probe` (08/08/2026) cobre os instrumentos de observação da Fase 0 —
+// `/censofauna` e `/sondacadaver`, as Peças 1 e 2 da §16 do
+// `HOSTILE_MOB_ACTIVATION_DECISION.md`. Nasce pelo mesmo critério das duas
+// acima, e contra o mesmo candidato fácil.
+//
+// O óbvio seria `view_audit` — "staff olhando o servidor" —, e é errado pela
+// razão de sempre: `view_audit` significa ler o que a STAFF fez, não vasculhar o
+// mundo nem escrever no inventário de um ator. Quem auditasse "quem pode
+// view_audit?" receberia a resposta errada sobre quem pode esvaziar um cadáver.
+//
+// Fica fora do moderador porque uma das duas ferramentas **escreve**: a sonda
+// esvazia o inventário do ator alvo para provar que a escrita funciona, e
+// restaura em seguida. A restauração pode falhar. O censo, sozinho, seria
+// inofensivo o bastante para moderador — mas separar em duas permissões daria a
+// este projeto uma permissão a mais para justificar sem que ninguém tivesse
+// pedido, e as duas ferramentas rodam na mesma sessão, pela mesma pessoa.
 const ROLE_PERMISSIONS = {
   moderator: ['kick', 'teleport', 'view_audit', 'manage_whitelist'],
-  admin:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'retire_character', 'manage_recipes', 'reveal_identity'],
-  owner:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'manage_staff', 'retire_character', 'manage_recipes', 'reveal_identity']
+  admin:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'retire_character', 'manage_recipes', 'reveal_identity', 'run_world_probe'],
+  owner:     ['kick', 'teleport', 'view_audit', 'manage_whitelist', 'ban', 'add_item', 'set_gold', 'manage_staff', 'retire_character', 'manage_recipes', 'reveal_identity', 'run_world_probe']
 };
 
 // Cache em memória: actorId → { role, permissions: Set<string> }

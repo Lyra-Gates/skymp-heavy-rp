@@ -158,10 +158,31 @@ interface Mp {
    */
   makeEventSource(eventName: string, functionBody: string): void;
 
-  /** [DOC] Lê uma property. `undefined` se não houver valor. */
+  /**
+   * [DOC] Lê uma property. `undefined` se não houver valor.
+   *
+   * Properties usadas por este gamemode: `baseDesc`, `locationalData`, `pos`,
+   * `neighbors`, `type`, mais as criadas por `makeProperty`.
+   *
+   * ⚠️ **`'inventory'`** é **[DOC]** (`SKYMP_UPSTREAM_REFERENCE.md` §2.5) e
+   * **nunca foi exercitada por este projeto** — nem o formato de retorno é
+   * conhecido. A hipótese de trabalho é `{ entries: [{ baseId, count }] }`, e é
+   * hipótese: `corpse-probe.js` existe justamente para descobrir, e grava o
+   * retorno verbatim porque o formato observado vale tanto quanto o resultado.
+   * As duas vezes em que este projeto assumiu formato de API sem ver — o `self`
+   * do Papyrus e o require nu de `dotenv` — custaram caro e só apareceram em
+   * jogo.
+   */
   get(formId: FormId, propertyName: string): any;
 
-  /** [DOC] Escreve uma property. */
+  /**
+   * [DOC] Escreve uma property.
+   *
+   * ⚠️ Vale para `'inventory'` o mesmo aviso de `get`, com um risco a mais: se
+   * a API aceitar a chamada e **ignorar o valor em silêncio**, nenhuma exceção
+   * avisa. Confirme relendo — é o que `corpse-probe.js` faz, e o motivo de ele
+   * ter um passo separado só para isso.
+   */
   set(formId: FormId, propertyName: string, newValue: any): void;
 
   /** [DOC] Limpa properties e event sources adicionados. */

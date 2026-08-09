@@ -26,7 +26,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 > ⚠️ **Hasta el 06/08/2026 las banderas no encendían nada** — el gamemode nunca cargó su propio `.env` (2.16). El primer arranque real del servidor ocurrió el 06/08/2026, con cuatro módulos activos y 33 comandos registrados.
 
-**Ocho** módulos registrados en `core/module-registry.js`, todos detrás de una flag `ENABLE_*` y **todos apagados por defecto**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
+**Diez** módulos registrados en `core/module-registry.js`, todos detrás de una flag `ENABLE_*` y **todos apagados por defecto**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag`, `fauna-census`, `corpse-probe` (lab). Los dos últimos no son mecánica: son instrumentos de observación de la Fase 0 para la cuestión de los mobs hostiles — ver [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md).
 
 Siete servicios existen en disco y **nunca se registran** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Otros cuatro se borraron el 06/08/2026 (`economy-service`, `justice`, `faction`, `survival`) por duplicar un sistema activo o por ser inseguros — ver `PARKED_SERVICES_DECISION.md`. Los que quedaron y tocaban oro fueron migrados a `core/transaction-service`.
 

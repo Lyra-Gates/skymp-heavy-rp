@@ -1,8 +1,36 @@
 # Ativação de Mobs Hostis — decisão
 
-**Estado: ANÁLISE FECHADA, NADA IMPLEMENTADO.** Nenhuma linha de código foi
-escrita nesta rodada, inclusive o campo de configuração que a Tarefa 3 do pedido
-autorizava — ver §17, que explica por que não fazer era a decisão certa.
+**Estado: ANÁLISE FECHADA. A MECÂNICA CONTINUA SEM UMA LINHA DE CÓDIGO —
+os dois INSTRUMENTOS que a decidem existem desde 08/08/2026.**
+
+Na rodada de 07/08 nada foi escrito, inclusive o campo de configuração que a
+Tarefa 3 do pedido autorizava — ver §17, que explica por que não fazer era a
+decisão certa, e que **continua valendo**.
+
+Em 08/08 saíram as **Peças 1 e 2** da §16, e só elas:
+
+| Peça | Arquivo | O que é |
+|---|---|---|
+| 1 — censo de fauna | `skymp/gamemode/fauna-census.js` | Varredura somente-leitura. Não desabilita, não habilita, não apaga, não dá item |
+| 2 — prova do cadáver | `skymp/gamemode/corpse-probe.js` | Lê, esvazia, relê e **restaura** o inventário de um ator morto. Recusa ator de jogador |
+
+Modo de usar em [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md). Os dois
+são módulos `lab`, desligados por padrão (`ENABLE_FAUNA_CENSUS`,
+`ENABLE_CORPSE_PROBE`), atrás da permissão `run_world_probe` (admin/owner).
+**Nenhum dos dois é a feature**, e nenhum deles rodou ainda — como todo o resto,
+dependem de alguém conectado.
+
+Saiu junto o `core/death-events.js`, que resolve a §7.3 antes que ela cobrasse o
+preço — ver lá.
+
+Em **09/08/2026** nada foi escrito: só se leu. A §7.4 — a pergunta sobre escala
+por cliente — foi investigada no código do upstream e **subiu a `[DOC]`**, com
+os arquivos e funções citados lá. Ela sai da lista de riscos que derrubam o
+desenho e entra na lista de expectativas que o censo confirma. **Continua na
+§16.**
+
+**`hunting-service` continua não existindo**, e não deve existir antes do
+veredito da Peça 2.
 
 Análise conforme [`CONSTITUICAO.md`](../CONSTITUICAO.md) §15. Estende, e não
 substitui, o [`NPC_POLICY_DECISION.md`](NPC_POLICY_DECISION.md): aquele documento
@@ -45,11 +73,15 @@ Três coisas mudam de forma em relação ao que o pedido presumia:
 3. **Bandidos ficam fora da primeira rodada.** Não por lore — por economia e por
    papel social. Detalhado em §II.1.
 
-E há uma pergunta técnica que ninguém deste projeto fez ainda e que decide se o
-mundo é compartilhado ou não: **o Skyrim escala encontros ao nível do jogador. Se
-o SkyMP herdar isso por cliente, dois jogadores lado a lado veem o mesmo lobo com
-forças diferentes** — e realidade compartilhada é pré-requisito de Heavy RP, não
-detalhe de balanceamento. §10.4.
+E há uma pergunta técnica que decide se o mundo é compartilhado ou não: **o
+Skyrim escala encontros ao nível do jogador. Se o SkyMP herdasse isso por
+cliente, dois jogadores lado a lado veriam o mesmo lobo com forças diferentes** —
+e realidade compartilhada é pré-requisito de Heavy RP, não detalhe de
+balanceamento. Em 09/08/2026 a leitura do código do upstream mostrou que a
+resolução de lista nivelada é **do servidor**, com nível constante e resultado
+guardado por ator — o que **aponta para a decisão desta rodada ser sustentável**,
+sem fechá-la. Continua na lista do censo, agora como expectativa a confirmar e
+não como risco que derruba tudo. §7.4.
 
 ---
 
@@ -408,13 +440,13 @@ distinção), então é CPU em Node e não ida ao motor. Ainda assim, se a lista
 bloqueio um dia for preenchida e o mundo tiver muito mais atores, este é o
 arquivo que sente primeiro.
 
-### 7.3 O segundo consumidor de `mp.onDeath` — e um gatilho já escrito
+### 7.3 O segundo consumidor de `mp.onDeath` — RESOLVIDO em 08/08/2026
 
-Hoje `death-service.initDeathService()` faz `mp.onDeath = ...`, o que é
-**posse exclusiva do hook**. Um segundo consumidor sobrescreve o primeiro em
-silêncio, e a falha é a pior possível: morte de jogador para de ser detectada
-pelo caminho primário e ninguém percebe, porque o polling de rede de segurança
-disfarça com dois segundos de atraso.
+**O problema, como estava:** `death-service.initDeathService()` fazia
+`mp.onDeath = ...`, o que é **posse exclusiva do hook**. Um segundo consumidor
+sobrescreveria o primeiro em silêncio, e a falha seria a pior possível: morte de
+jogador para de ser detectada pelo caminho primário e ninguém percebe, porque o
+polling de rede de segurança disfarça com dois segundos de atraso.
 
 O `core/module-registry.js` já escreveu, em 06/08/2026, a condição exata para
 reabrir esse assunto:
@@ -422,25 +454,180 @@ reabrir esse assunto:
 > *"O gatilho para reabrir isto (…): um segundo módulo que precise de um evento
 > de jogo já capturado por outro."*
 
-**Mobs hostis é a primeira coisa deste projeto que atende esse gatilho.** Quando
-a implementação chegar, o desenho já está escrito lá: `descriptor.on = { death:
-fn }` opcional no `register()`, despachado de onde o evento já é capturado. Não
-é infraestrutura especulativa — é a condição prevista se realizando.
+**Mobs hostis é a primeira coisa deste projeto que atende esse gatilho** — e a
+correção foi feita **antes** do consumidor chegar, de propósito: consertar depois
+significaria consertar durante o primeiro bug, e o bug é invisível.
 
-### 7.4 ⚠️ A pergunta que decide se o mundo é compartilhado
+**O que existe agora:** `core/death-events.js` — dono único de `mp.onDeath`, com
+assinantes nomeados. `subscribe(nome, fn)`, cada handler isolado por `try/catch`
+(um assinante que quebra não impede os outros), nome duplicado lança, e a
+instalação do hook grita se encontrar uma função já atribuída direto. O
+`death-service` passou a assinar em vez de atribuir; o `hunting-service` assina
+do lado dele quando existir. O barramento não filtra e não sabe o que é um mob —
+entrega `(actorId, killerId)` cru, e cada assinante decide em O(1) se o assunto é
+dele, que é o requisito da §7.2.
+
+**Diverge do desenho sugerido acima, e o motivo está no cabeçalho do arquivo.**
+A sugestão original era `descriptor.on = { death: fn }` no `register()`. O
+registry não conhece `mp` e não captura evento nenhum — despachar de lá exigiria
+o `death-service` chamar de volta para dentro dele, uma inversão de dependência
+sem necessidade. O precedente da casa é o outro: quando um segundo consumidor
+apareceu de verdade (governança avisando o painel), a resposta foi o
+`core/panel-refresh-bus.js`, um barramento pequeno e nomeado. O canal genérico
+continua não existindo, e continua não devendo existir enquanto `onCellChange`
+não tiver nenhum consumidor.
+
+Oito testes, com quatro mutações aplicadas e executadas — a que importa é voltar
+o `death-service` para `mp.onDeath = ...`: o assinante que chega depois passa por
+cima e a queda do jogador nunca vira `DOWNED`.
+
+### 7.4 A pergunta que decide se o mundo é compartilhado — investigada em 09/08/2026
 
 O Skyrim vanilla **escala encontros ao nível do jogador**. Um lobo perto de um
 personagem novo e o "mesmo" lobo perto de um veterano não são a mesma criatura.
 
-Se o SkyMP herdar isso por cliente, então dois jogadores lado a lado veem forças
-diferentes no mesmo ator, e "socorri você contra o urso" deixa de ser uma frase
-com sentido único. **Isso não é balanceamento; é realidade compartilhada, que é
-pré-requisito de Heavy RP.**
+Se o SkyMP herdasse isso por cliente, então dois jogadores lado a lado veriam
+forças diferentes no mesmo ator, e "socorri você contra o urso" deixaria de ser
+uma frase com sentido único. **Isso não é balanceamento; é realidade
+compartilhada, que é pré-requisito de Heavy RP.**
 
-Não sabemos a resposta. Ninguém deste projeto perguntou. É item de Fase 0 e está
-na §16, e **se a resposta for "escala por cliente", a decisão desta rodada precisa
-ser revista** — porque nesse caso escala uniforme não é uma escolha nossa, é uma
-impossibilidade.
+Em 09/08/2026 a pergunta deixou de estar sem resposta nenhuma. Ela **não está
+fechada** — só o censo fecha, e o porquê está em (c) —, mas duas evidências
+apontam para o mesmo lado. O peso delas é muito diferente, e por isso estão
+separadas.
+
+#### (a) Relato do dono do projeto — evidência real, de fora deste build
+
+Em **outros servidores SkyMP**, o dono do projeto observou dois jogadores vendo
+o mesmo mob, com a mesma força.
+
+> **Procedência: observação empírica em servidores de terceiros. Não é
+> observação neste código, não é `[DOC]`, e não é "confirmado".**
+
+Nenhuma sessão deste servidor existiu ainda (Fase 0), então nada aqui foi visto
+por ninguém. O que o relato vale — e não é pouco — é derrubar a hipótese de que
+escala por cliente seja o comportamento *normal e inevitável* do SkyMP: se
+fosse, apareceria naqueles servidores. O que ele não pode dizer é o que **este**
+build, com **estas** versões, faz.
+
+#### (b) O código do upstream — isto sim é `[DOC]`
+
+Leitura direta dos arquivos em
+[`skyrim-multiplayer/skymp`](https://github.com/skyrim-multiplayer/skymp),
+branch `main`, em 09/08/2026. Não é resumo de wiki: são os arquivos.
+
+> **Sobre os números de linha.** `main` se move, e numa reconferência no mesmo
+> dia eles já tinham deslizado — o campo `espm` apareceu perto da L260, não da
+> L240. **Quem for reconferir deve procurar pelo nome do símbolo, nunca pela
+> âncora de linha.** O que esta seção afirma são os símbolos e o que eles fazem;
+> a linha é só onde estavam quando foram lidos. Todos os trechos abaixo foram
+> conferidos duas vezes, em leituras independentes, e bateram.
+
+**1. O `espm::Loader` pertence ao `WorldState`, que é do servidor e é um só.**
+Em [`WorldState.h`](https://github.com/skyrim-multiplayer/skymp/blob/main/skymp5-server/cpp/server_guest_lib/WorldState.h)
+o campo é membro privado da classe — `espm::Loader* espm = nullptr;` (≈L240–260),
+exposto por `espm::Loader& GetEspm() const;` (≈L193) — e é preenchido uma vez em
+`WorldState::AttachEspm`
+([`WorldState.cpp`](https://github.com/skyrim-multiplayer/skymp/blob/main/skymp5-server/cpp/server_guest_lib/WorldState.cpp),
+≈L79):
+
+```cpp
+void WorldState::AttachEspm(espm::Loader* espm_,
+                            const FormCallbacksFactory& formCallbacksFactory_)
+{
+  espm = espm_;
+  formCallbacksFactory = formCallbacksFactory_;
+  espmCache.reset(new espm::CompressedFieldsCache);
+  espmFiles = espm->GetFileNames();
+}
+```
+
+**2. O mecanismo de nível existe** — e é ele que assustava.
+[`LeveledListUtils.h`](https://github.com/skyrim-multiplayer/skymp/blob/main/skymp5-server/cpp/server_guest_lib/LeveledListUtils.h)
+recebe `pcLevel` na família inteira, com o comentário do próprio arquivo
+(L17-18):
+
+```cpp
+// It seems that pcLevel=0 makes it thinking that pcLevel=maximum possible pc
+// level
+static std::vector<Entry> EvaluateList(
+  const espm::CombineBrowser& br, const espm::LookupResult& lookupRes,
+  uint32_t pcLevel = 0, uint8_t* chanceNoneOverride = nullptr);
+```
+
+e em `LeveledListUtils.cpp` o filtro é literalmente
+`if (!pcLevel || data.entries[i].level <= pcLevel)`. Se alguém passasse o nível
+real de um jogador ali, a escala por jogador existiria.
+
+**3. Ninguém passa. Todo chamador do servidor passa uma constante.** É este o
+ponto que fecha a leitura, e ele não estava no resumo da wiki:
+
+| Chamador | Arquivo | `pcLevel` passado |
+|---|---|---|
+| `MpActor::EnsureTemplateChainEvaluated` | `MpActor.cpp` | `constexpr auto kPcLevel = 0;` |
+| `WorldState::AttachEspmRecord` | `WorldState.cpp` | `const int kPcLevel = 0;` |
+| `MpActor::EvaluateDeathItem` | `MpActor.cpp` | `kPlayerCharacterLevel` (= 1) |
+| `MpObjectReference::AddContainerObject` | `MpObjectReference.cpp` | `kPlayerCharacterLevel` (= 1) |
+| `MpObjectReference::GivePickupItemsToActivationSource` | `MpObjectReference.cpp` | `kPlayerCharacterLevel` (= 1) |
+
+**4. E o resultado é guardado no ator, não recalculado por observador.**
+`MpActor::EnsureTemplateChainEvaluated`
+([`MpActor.cpp`](https://github.com/skyrim-multiplayer/skymp/blob/main/skymp5-server/cpp/server_guest_lib/MpActor.cpp))
+resolve a cadeia de template do NPC — a etapa que decide **qual record o ator
+nivelado vira** — e grava o resultado:
+
+```cpp
+constexpr auto kPcLevel = 0;
+...
+const auto& templateChain = ChangeForm().templateChain;
+if (!templateChain.empty()) { /* ...valida e retorna cedo... */ }
+
+EditChangeForm([&](MpChangeFormREFR& changeForm) {
+    auto headNpc = loader.GetBrowser().LookupById(baseId);
+    std::vector<uint32_t> res = LeveledListUtils::EvaluateTemplateChain(
+      loader.GetBrowser(), headNpc, kPcLevel);
+    ...
+    changeForm.templateChain = std::move(templateChain);
+  }, mode);
+```
+
+`templateChain` é campo de `MpChangeFormREFR`
+([`MpChangeForms.h`](https://github.com/skyrim-multiplayer/skymp/blob/main/skymp5-server/cpp/server_guest_lib/MpChangeForms.h)) —
+`std::vector<FormDesc> templateChain;`, ≈L105 —, que é o estado por objeto do
+servidor. O `if (!templateChain.empty())`
+com retorno cedo é memoização: **resolve uma vez por ator, não uma vez por
+cliente que olha.**
+
+> **`[DOC]`** — resolução de lista nivelada e de cadeia de template roda no
+> servidor, dentro do `WorldState`, com nível **constante e hardcoded**, e o
+> resultado é gravado no `ChangeForm` do ator. Não há caminho, nesses arquivos,
+> em que o nível de um jogador entre na conta. Fonte: os arquivos e funções
+> citados acima, no branch `main` do upstream.
+
+É o mecanismo que explicaria o relato de (a) — e agora é leitura de código, não
+hipótese.
+
+#### (c) O que continua em aberto, e por que o censo não sai da lista
+
+Três limites, e nenhum é formalidade:
+
+1. **É o `main` do upstream, não o build que este projeto roda.** Nada aqui fixa
+   a versão do servidor que vamos subir. `[DOC]` de upstream é o padrão da casa
+   (§7.5) e significa exatamente isto: documentado, não exercitado aqui.
+2. **Cadeia de template não é a força inteira.** O que ficou provado é que o
+   servidor decide **qual record** o ator nivelado é, uma vez, para todo mundo.
+   O Skyrim também escala estatística por *flag de auto-cálculo relativo ao
+   nível do PC* dentro do record de NPC, e essa conta pode ser do motor local.
+   Não encontrei, nesses arquivos, nada que a resolva no servidor — **e também
+   nada que a delegue ao cliente.** Não sei, e afirmar que sei seria inventar.
+3. **A leitura do servidor é uma só.** É o limite que a Peça 1 já registrava: se
+   sobrar alguma diferença, ela mora nas duas telas, e só duas telas a mostram.
+
+**Consequência para o escopo desta rodada:** a decisão de "escala uniforme,
+vanilla, intocada" (§II.3, §12) **deixa de estar sob risco de ser revertida**. O
+que era "pode ser uma impossibilidade" virou "aponta para ser sustentável".
+**Não virou certeza**, e o item continua na §16 — rebaixado de bloqueio que
+derruba o desenho para **expectativa a confirmar**.
 
 ### 7.5 Procedência das APIs
 
@@ -604,7 +791,7 @@ não se recupera mexendo em número nenhum.
 | Eixo | v1 | Por quê |
 |---|---|---|
 | **Densidade** | Vanilla, intocada | Não sabemos o número real. O censo (§16) precede qualquer ajuste |
-| **Nível** | Vanilla, sem escala nossa | §II.3 — e a incógnita da §7.4 pode tornar isso não-escolha |
+| **Nível** | Vanilla, sem escala nossa | §II.3 — a §7.4 aponta para o servidor resolver isso uniformemente; falta o censo confirmar |
 | **Respawn** | Vanilla (reset de célula) | §II.2 — não temos o que respawnar |
 | **Letalidade** | Vanilla, mediada pelo `death-service` | Já há socorro de 4 min e bleed-out. Mob não deve ter caminho de morte próprio |
 | **Rendimento de loot** | Baixo, fixo, material puro, teto por janela | §II.4 |
@@ -647,9 +834,9 @@ como padrão da casa:
 | Loot deve passar pelo `transaction-service` | **Fato** — regra do projeto, sem exceção |
 | `mp.onDeath` existe e traz `killerId` | **[DOC]** — nunca disparou aqui |
 | `hit-events` já registra golpe contra ator sem personagem | **Provável** — o código não filtra por personagem, mas o snippet de cliente nunca rodou |
-| **Criaturas hostis vanilla já estão ativas no mundo** | 🟡 **Hipótese.** É a inferência central deste documento e ela **não foi verificada** — é o item 1 da §16 |
-| Servidor consegue controlar inventário de cadáver | 🔴 **Desconhecido.** É o item 2 da §16 |
-| Encontros escalam por jogador ou por servidor | 🔴 **Desconhecido.** É o item 3 da §16, e pode invalidar a §II.3 |
+| **Criaturas hostis vanilla já estão ativas no mundo** | 🟡 **Hipótese.** É a inferência central deste documento e ela **não foi verificada**. O instrumento que a verifica existe desde 08/08 (`fauna-census.js`); a verificação, não |
+| Servidor consegue controlar inventário de cadáver | 🔴 **Desconhecido.** Idem: `corpse-probe.js` existe, a resposta não |
+| Encontros escalam por jogador ou por servidor | 🟢 **[DOC] no upstream, não observado aqui.** O `WorldState` resolve lista nivelada e cadeia de template no servidor, com `pcLevel` constante, e guarda no `ChangeForm` do ator (§7.4b). Some-se a isso o relato do dono do projeto em servidores de terceiros — **evidência de fora deste build, não confirmação** (§7.4a). Continua no censo como expectativa a confirmar, não como bloqueio |
 
 ---
 
@@ -724,10 +911,18 @@ não são a mesma ameaça. Isso é balanceamento autorado, coerente com a lore, 
 graça, e recusá-lo para escrever o nosso seria construir o sistema customizado
 que já foi recusado.
 
-⚠️ **Com a ressalva da §7.4, que pode anular esta decisão.** Se o SkyMP herdar a
-escala vanilla **por jogador**, "uniforme" não é uma escolha nossa — é uma
-impossibilidade, e o mundo deixa de ser compartilhado. Esta decisão está
-condicionada à resposta do item 3 da §16.
+**Com a ressalva da §7.4 — que em 09/08/2026 passou a apontar a favor desta
+decisão, não contra.** A leitura do código do upstream mostrou que a resolução
+de lista nivelada e de cadeia de template roda no servidor, com nível constante,
+e é gravada por ator (§7.4b) — ou seja, "uniforme" tende a ser o que o SkyMP já
+faz, e não algo que precisaríamos construir. Some-se o relato do dono do projeto
+em servidores de terceiros, que é **evidência de fora deste build e não
+confirmação** (§7.4a).
+
+Isso **não fecha a decisão**: continua condicionada ao item 4 da Peça 1 da §16,
+agora como **expectativa a confirmar** e não como risco de reversão. Se o censo
+contrariar — dois clientes vendo forças diferentes no mesmo ator —, "uniforme"
+volta a ser impossibilidade e a decisão cai.
 
 ## II.4 Como o loot é decidido
 
@@ -795,6 +990,17 @@ são a feature.** São as perguntas cuja resposta decide se a feature existe.
 
 ### Peça 1 — Censo de fauna (observação, não mecânica)
 
+> ✅ **Instrumento escrito em 08/08/2026: `skymp/gamemode/fauna-census.js`**,
+> comando `/censofauna`, flag `ENABLE_FAUNA_CENSUS`, permissão
+> `run_world_probe`. **Nunca executado** — depende de sessão. Protocolo em
+> [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md).
+>
+> Doze testes. A mutação que importa: acrescentar **qualquer**
+> `callPapyrusFunction` ao laço da varredura reprova — a única regra deste
+> instrumento é olhar e não tocar, e uma ida ao motor por ator custaria 13–35 ms
+> vezes a densidade do mundo. A leitura cara ficou isolada em
+> `/censofauna alvo <actorId>`, um ator por vez.
+
 **O que é:** durante a Fase 0, com o servidor rodando e uma pessoa conectada, um
 script somente-leitura que percorre `mp.getActorsByProfileId(0)`, lê `baseDesc` e
 distância, e escreve um arquivo. Nenhum `disable`, nenhum `enable`, nenhuma
@@ -812,11 +1018,42 @@ Anexo A.1(b), a mesma isenção que permite a Fase 0 existir.
    ser escrita — e é exatamente por isso que a §4 do `NPC_POLICY_DECISION.md`
    está pendente desde 05/08. **Este censo desbloqueia aquela seção também.**
 3. **Qual a densidade real perto de onde se joga?**
-4. **⚠️ Encontros escalam por jogador?** (§7.4) Com dois clientes de níveis
-   diferentes no mesmo lugar, o mesmo ator tem os mesmos valores? Esta é a
-   pergunta cuja resposta pode anular a §II.3.
+4. **Encontros escalam por jogador?** (§7.4) Com dois clientes de níveis
+   diferentes no mesmo lugar, o mesmo ator tem os mesmos valores?
+
+   **Mudou de peso em 09/08/2026, e continua na lista.** A leitura do código do
+   upstream (§7.4b) mostrou que a resolução acontece no servidor com nível
+   constante e é guardada por ator, e o relato do dono do projeto em servidores
+   de terceiros (§7.4a) aponta na mesma direção. **A expectativa agora é que os
+   valores batam.** O que o censo faz deixou de ser "descobrir se o desenho cai"
+   e passou a ser **confirmar a expectativa neste build** — o que continua sendo
+   obrigatório, porque nada disso foi observado aqui e o item 2 da §7.4c (escala
+   de estatística por flag de auto-cálculo) não foi resolvido por leitura
+   nenhuma.
+
+   ⚠️ **O instrumento não responde esta sozinho, e é honesto dizer por quê:** o
+   servidor tem uma leitura só. Se sobrar alguma escala no cliente, ele não vê a
+   diferença. `/censofauna alvo` **fixa a identidade** do ator para que A e B
+   saibam que olham a mesma criatura; a comparação que decide é entre as duas
+   telas, e é passo de protocolo, não de código.
 
 ### Peça 2 — Prova do cadáver
+
+> ✅ **Instrumento escrito em 08/08/2026: `skymp/gamemode/corpse-probe.js`**,
+> comando `/sondacadaver <actorId>`, flag `ENABLE_CORPSE_PROBE` (separada do
+> censo de propósito — este **escreve**), permissão `run_world_probe`.
+> **Nunca executado.**
+>
+> Quatro passos: ler, esvaziar, **reler**, restaurar. O terceiro é o que separa
+> *"`mp.set` não lançou"* de *"`mp.set` funcionou"* — uma API que aceita a
+> chamada e ignora o valor em silêncio é o caso mais provável de todos, e o
+> único que uma checagem de exceção nunca pegaria. O quarto devolve o mundo ao
+> estado anterior e prova a escrita duas vezes.
+>
+> Treze testes. Duas recusas duras e independentes impedem que a sonda toque o
+> inventário de um jogador. O retorno de `mp.get(id,'inventory')` é gravado
+> **verbatim**: o formato nunca foi observado por este projeto, e vale tanto
+> quanto o veredito.
 
 **O que é:** matar um lobo com o servidor observando e responder uma pergunta.
 
@@ -846,10 +1083,11 @@ nova). **Só aqui** o campo de configuração faz sentido — ver §17.
 
 ### Peça 4 — `hunting-service`, mínimo
 
-Consumidor de `mp.onDeath`; despacho resolvido no `module-registry` (§7.3);
-tabela fixa; `transaction-service.giveItem` com `reason`/`module`/`idempotencyKey`;
-`enabledBy: 'ENABLE_HUNTING_SERVICE'`, fase `lab`, desligado por padrão. Nenhum
-timer novo (§7.1).
+Consumidor de `mp.onDeath` via `deathEvents.subscribe('hunting-service', fn)` —
+o despacho já existe e já está testado (§7.3), então esta peça não paga esse
+custo; tabela fixa; `transaction-service.giveItem` com
+`reason`/`module`/`idempotencyKey`; `enabledBy: 'ENABLE_HUNTING_SERVICE'`, fase
+`lab`, desligado por padrão. Nenhum timer novo (§7.1).
 
 **Testes obrigatórios antes de ligar**, no padrão do `CONTRIBUTING.md` §6 —
 verificar o argumento e o efeito, nunca só o retorno:
@@ -858,9 +1096,10 @@ verificar o argumento e o efeito, nunca só o retorno:
 2. Duas mortes do mesmo `actorId` com a mesma chave concedem **uma** vez.
 3. O caminho de morte de mob **não toca o banco** antes de decidir que é um mob
    da tabela (§7.2).
-4. Adicionar um consumidor de `mp.onDeath` **não silencia** o do
-   `death-service` — o teste que protege a detecção de morte de jogador, e que
-   deve ser escrito primeiro.
+4. ~~Adicionar um consumidor de `mp.onDeath` **não silencia** o do
+   `death-service`.~~ ✅ **Feito em 08/08/2026, antes de tudo**, como a própria
+   linha mandava: `core/death-events.test.js`, e a mutação que o valida é voltar
+   o `death-service` para a atribuição direta. Ver §7.3.
 5. Nenhum caminho de item fora do `transaction-service`.
 6. Teto por janela consultado no ledger, não em memória — sobrevive a restart.
 
@@ -915,16 +1154,28 @@ faz (estes records rendem loot governado) sem afirmar que algo é ligado —
 | Criaturas hostis ficam ativas? | **Sim** — e provavelmente já estão, sem que ninguém tenha olhado |
 | Sistema novo de spawn? | **Não.** Não spawnamos nada na v1 |
 | Inverter o `npc-cleaner`? | **Não.** Não há o que ativar. Compartilha config e curadoria, não lógica |
-| Morte de mob pelo `death-service`? | **Não.** Pipeline separado, mesma fonte (`mp.onDeath`), despacho no `module-registry` |
+| Morte de mob pelo `death-service`? | **Não.** Pipeline separado, mesma fonte (`mp.onDeath`), despacho pelo `core/death-events.js` — que já existe (§7.3) |
 | Loot existe? | **Sim, condicionado** à prova do cadáver (Peça 2). Sempre pelo `transaction-service` |
 | Loot puxa da Afinidade da Alma? | **Não.** Tabela fixa por tipo |
 | Bandidos na v1? | **Não** — loot proibido, papel que é de jogador, e crime que abre outra conversa |
 | Draugr, Falmer, vampiro, dragão? | **Não decidido aqui.** Aprovação de narrativa/staff em rodada separada |
-| Respawn e nível? | **Vanilla, intocados.** Condicionado à §7.4 |
-| Primeiro passo? | **Censo de fauna e prova do cadáver.** Nenhum dos dois é a feature |
-| Tarefa 3 executada? | **Não**, por §17 — registrada como passo depois do censo |
+| Respawn e nível? | **Vanilla, intocados.** A §7.4 aponta para isso ser sustentável — o servidor resolve lista nivelada com nível constante, `[DOC]` no upstream — mas só o censo confirma neste build |
+| Primeiro passo? | **Censo de fauna e prova do cadáver.** Nenhum dos dois é a feature. Os dois instrumentos existem desde 08/08; nenhum rodou |
+| Tarefa 3 executada? | **Não**, por §17 — e continua não executada. Só depois do censo |
 
-**Nada aqui está pronto para implementar. A Fase 0 continua sendo pré-requisito
-de tudo,** e nesta mecânica ela não é só bloqueio de calendário: as duas
-perguntas que decidem o desenho (o cadáver e a escala) só podem ser respondidas
-com alguém conectado.
+**A mecânica continua sem uma linha de código, e a Fase 0 continua sendo
+pré-requisito de tudo** — nesta mecânica ela não é só bloqueio de calendário: as
+duas perguntas que decidem o desenho (o cadáver e a escala) só podem ser
+**confirmadas** com alguém conectado.
+
+Das duas, elas não pesam mais igual. **O cadáver continua sendo a que pode matar
+a feature** e não tem nenhuma evidência a favor — nem de dentro, nem de fora.
+**A escala deixou de ser risco de reversão em 09/08/2026**: o código do upstream
+diz que a resolução é do servidor, com nível constante e guardada por ator
+(§7.4b), e o dono do projeto viu o comportamento esperado em servidores de
+terceiros — evidência de fora deste build, não confirmação (§7.4a). Continua no
+censo, como expectativa a confirmar.
+
+O que mudou em 08/08 é que **as perguntas agora têm com o que ser feitas**, e o
+defeito que a §7.3 previu foi fechado antes de cobrar o preço. Ver
+[`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md).
