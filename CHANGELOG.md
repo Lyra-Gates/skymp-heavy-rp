@@ -41,6 +41,14 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
   **Não construído nesta rodada, e listado:** handoff automático do ticket, empacotamento e assinatura do executável, cancelamento de eco, remoção do WebRTC antigo, e o bloqueador de uso real — `voipClients` é indexado por `actorId`, então o helper e a UI do *mesmo* jogador ainda não coexistem (a bancada contornou usando dois atores). Lista inteira em `VOICE_NATIVE_HELPER.md` §9.
 
+- **[Guia da sessão de teste](docs/technical/GUIA_SESSAO_DE_TESTE.md) — como chegar até o roteiro.** O [`FASE_0_ROTEIRO.md`](docs/technical/FASE_0_ROTEIRO.md) descreve o que fazer **depois** que todo mundo entrou, e a entrada é justamente a etapa que nunca rodou. O que faltava estava espalhado por três documentos e sete scripts: ligar os quatro serviços na ordem, conferir as quatro portas, e o que mandar para quem vai jogar.
+
+  **A Parte 2 é escrita para quem nunca viu o repositório e existe para ser copiada e enviada.** Todo o resto da documentação do projeto assume acesso ao código — um testador convidado não tem, e não deveria precisar ter para reportar "não consegui entrar".
+
+  Dois fatos que o guia diz em voz alta porque ninguém que só leia o roteiro descobriria: **não existe instalador gerado** (`LAUNCHER_DISTRIBUTION.md` §6), então há dois caminhos reais e o guia manda escolher **um** — oferecer os dois a quem não é dev garante que a pessoa escolha errado; e as variáveis `VITE_*` são embutidas em tempo de build, então um IP errado ali não é corrigível do lado do testador, o instalador inteiro é refeito.
+
+  Traz também a seção **"o que não é bug"** — voz indisponível, aviso do SmartScreen e o nome "Desconhecido" são os três comportamentos corretos com mais cara de defeito. Sem isso, os três primeiros relatos da sessão seriam sobre coisas que já sabemos.
+
 - **[Ativação de mobs hostis](docs/technical/HOSTILE_MOB_ACTIVATION_DECISION.md) — análise de 15 pontos fechada, nada implementado.** Responde a terceira das seis perguntas que o [`NPC_POLICY_DECISION.md`](docs/technical/NPC_POLICY_DECISION.md) §5 deixou abertas — *criaturas selvagens ficam ativas para caçadores?* — e estende aquele documento sem substituí-lo.
 
   **A premissa do pedido caiu antes de qualquer desenho: não existe nada para "ativar".** O `npc-cleaner` é inerte por construção (`blockedBaseDescs` vazia, e lista vazia não remove nada) e ninguém nunca conectou. A consequência que nenhum documento do repositório tinha registrado: **o mundo provavelmente já está cheio de lobos, ursos e bandidos vanilla, ativos e hostis, agora** — nunca desligamos nada e nunca ninguém olhou. O primeiro passo técnico não é escrever um ativador, é contar o que já está lá, o que a Anexo A.1(b) da Constituição isenta do portão de 15 pontos por ser validação do que existe.
@@ -322,7 +330,9 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
 - **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
 
-Total de testes: **496** (362 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 07/08/2026 — a linha anterior dizia 301 e nenhuma das parcelas ainda batia. O roteiro da Fase 0 pedia "253 passando" no passo 0.1, que é o primeiro passo do teste: um testador pararia ali achando que quebrou alguma coisa.
+Total de testes: **540** (406 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 08/08/2026. A linha dizia **496** (362 no gamemode), desatualizada pelos testes que entraram com o `soul-service`, o log de moderação e o VOIP; antes dela dizia 301, e nenhuma das parcelas batia.
+
+É a terceira vez que este número envelhece em silêncio, e ele não é decorativo: o passo 0.1 do roteiro da Fase 0 manda conferir a contagem **antes** de ligar qualquer coisa. Quando pedia "253 passando", um testador pararia ali achando que tinha quebrado alguma coisa — que é o custo real de um número errado no primeiro passo do teste.
 
 - **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
 
