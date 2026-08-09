@@ -23,7 +23,7 @@ no calor da descoberta.
 
 > **Atualização de 09/08/2026 — dois dos quatro 🔴 foram consertados.** O
 > `death-service` (§6, os dois achados) e o `safe-zones` (§2) saíram em
-> [`09fbb12`](../../commit/09fbb12), numa rodada separada que fez **só** os dois
+> [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12), numa rodada separada que fez **só** os dois
 > consertos. Os vereditos abaixo foram atualizados no lugar, com a marca ✅
 > **corrigido** e o que mudou. **`hit-events` (§1) e `voip-service` (§5)
 > continuam 🔴** e continuam sem conserto — ver a priorização no fim, que explica
@@ -208,7 +208,7 @@ comparada por **igualdade de string** com o `cellId` escrito na config
 
 `"0x162e2" !== "162e2:Skyrim.esm"` — a comparação de string nunca casa.
 
-**Veredito: 🔴 Desalinhado — ✅ corrigido em [`09fbb12`](../../commit/09fbb12).**
+**Veredito: 🔴 Desalinhado — ✅ corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12).**
 
 **Impacto prático.** Hoje é **latente**, e por dois motivos independentes:
 `zones` nasce vazia com `enabled` em `false`, e — confirmado por leitura nesta
@@ -223,7 +223,7 @@ assim falha **aberta** — a proteção simplesmente não existe, sem erro em lu
 nenhum. É o modo de falha que o próprio cabeçalho do arquivo diz querer evitar:
 *"config ausente não pode virar comportamento surpresa"*.
 
-### ✅ Corrigido em [`09fbb12`](../../commit/09fbb12)
+### ✅ Corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12)
 
 Os itens 1 e 2 da proposta saíram; o 3 não, e o motivo está registrado abaixo.
 
@@ -499,7 +499,7 @@ central de Heavy RP do `SKYMP_RP_DEVELOPMENT_PLAN.md` §8.1. E é invisível em
 teste: o `mp` mockado não tem `DeathEvent`, não tem `spawnDelay` e nunca
 respawna ninguém.
 
-### ✅ Corrigido em [`09fbb12`](../../commit/09fbb12) — decisão: bloquear (opção 1)
+### ✅ Corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12) — decisão: bloquear (opção 1)
 
 A decisão estava registrada aqui como aberta, entre **bloquear sempre** e
 **bloquear e reprogramar `spawnDelay`**. Fechou na primeira, e **não por
@@ -588,7 +588,7 @@ Combinado com o Achado A, o comportamento real na Fase 0 seria: morrer → levan
 sozinho aos 25 s em outro lugar → e, se alguém chegasse a acionar o bleed-out,
 uma segunda ressurreição no lugar errado com o estado travado.
 
-### ✅ Corrigido em [`09fbb12`](../../commit/09fbb12)
+### ✅ Corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12)
 
 O payload virou `{ cellOrWorldDesc, pos, rot }`, e a célula é **derivada** com
 **`mp.getDescFromId`** **`[DOC]`** — a forma preferível que a proposta apontava —
@@ -808,7 +808,7 @@ Os outros dois 🔴 não bloqueavam, por motivos diferentes, e continuam abertos
 Prioridade entre os 🔴:
 
 1. **`death-service` Achado A (respawn automático em 25 s) — bloqueava.
-   ✅ Corrigido em [`09fbb12`](../../commit/09fbb12).** Não adiantava testar
+   ✅ Corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12).** Não adiantava testar
    morte, socorro e bleed-out com o servidor ressuscitando o jogador aos 25
    segundos por baixo: a etapa de morte do `FASE_0_ROTEIRO.md` mediria um
    comportamento que não é o desenhado, e o mais provável é que a sessão gastasse
@@ -834,7 +834,7 @@ Prioridade entre os 🔴:
    diferentes** e registrar o resultado. Não vale ir para a sessão sem escolher
    uma das duas.
 4. **`safe-zones` (formato do `cellId`) — não bloqueava.
-   ✅ Corrigido em [`09fbb12`](../../commit/09fbb12).** As zonas nascem vazias e
+   ✅ Corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12).** As zonas nascem vazias e
    desligadas, e nenhum chamador de `canPerform` informa `context.actorId`; nada
    na Fase 0 dependia delas. O conserto era barato e a janela para fazê-lo era
    **antes de alguém preencher a config** — que é quando o defeito passaria a
