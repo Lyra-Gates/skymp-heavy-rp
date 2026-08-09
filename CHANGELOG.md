@@ -35,6 +35,52 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
   24 testes. Os seis últimos leem o snippet de cliente **como texto** e reprovam padrão proibido — é a única forma de proteger uma decisão sobre código que roda numa máquina que o processo de teste nunca vê; um `callPapyrusFunction` no laço de tela reprova.
 
+- **Voz por proximidade sai do CEF: relay de áudio pelo servidor** (Fase 1, prova de conceito). O `voip-service.js` estava implementado e testado desde antes — sinalização WebRTC, ticket, volume por distância — e **nunca produziu áudio nenhum**, porque o navegador embutido do client recusa `getUserMedia`.
+
+  **O motivo real não era o que estava escrito.** Um comentário em `skymp/ui/index.html` e todo o [`VOICE_CLIENT_PATCH.md`](docs/technical/VOICE_CLIENT_PATCH.md) tratavam o bloqueio como omissão dos mantenedores — "falta um patch que nunca foi mergeado". O release notes da SkyrimPlatform 2.1 diz o contrário, com todas as letras: *"Removed Chromium flag that gives the ability to listen to recording devices via browser-side JavaScript"*. Foi **remoção deliberada**, e as três PRs auto-fechadas não estavam esperando atenção — estavam pedindo a reversão de uma decisão de segurança.
+
+  **E a decisão deles está certa.** O client SkyMP abre a URL que o servidor mandar. Com a flag ligada, qualquer JavaScript de *qualquer* servidor SkyMP captaria o microfone do jogador sem prompt e sem indicador. O escopo do risco não é este servidor: é o client inteiro, para sempre, em todo servidor que a pessoa conectar depois. O próprio diff descartado já concedia isso sem perceber — `use-fake-ui-for-media-stream` suprime o prompt e `enable-features` concede a permissão, que é exatamente "captura sem o usuário saber".
+
+  **Então a captura sai do navegador em vez de o navegador ser enfraquecido.** Um executável separado (`voice-helper/`) captura por WASAPI e manda os quadros pelo mesmo WebSocket e o mesmo handshake por ticket que a UI já usava; o servidor retransmite pra quem está em alcance, com o volume anexado; o navegador só **toca** — e tocar nunca foi bloqueado pela CEF, só a captura era.
+
+  De quebra resolve NAT/CGNAT: a malha P2P entre dois jogadores em redes residenciais distintas não fecharia sem um TURN, que é um relay com outro nome. Aqui tudo passa pelo servidor, que já é alcançável.
+
+  **A audiência é a transposta do que `tickProximity()` já jogava fora.** Proximidade é O(n²) de distância 3D e um quadro chega a 50/s por locutor — recalcular por quadro seria pagar esse O(n²) cinquenta vezes por segundo por pessoa falando. O volume que vai no `audio_frame` sai da *mesma* conta que alimenta o `proximity_update`, com teste travando a igualdade: fossem dois cálculos, a mesma pessoa soaria em dois volumes conforme o transporte que a entregou.
+
+  **PCM cru antes de Opus, de propósito.** Codec e transporte quebram de formas parecidas de quem escuta — sai silêncio ou sai ruído — e depurar os dois juntos foi como este VOIP chegou até aqui sem nunca ter emitido som. O preço está medido e registrado: ~1 Mbit/s de subida por locutor, aceitável em bancada e **não** em produção. Opus é Fase 2.
+
+  **O WebSocket deixou de ser fechado quando o microfone falha.** Era fechado com o argumento de que "sem microfone não faz sentido manter a sinalização aberta" — correto enquanto o socket só levasse sinalização. Agora ele leva áudio dos outros: fechar ali desligaria a *escuta* junto com a captura, garantindo que ninguém nunca ouça nada exatamente no client onde capturar sempre falha. As mensagens de erro e o `voiceFatal` continuam intactos; nasceu um chip âmbar `OUVINDO — SEM MICROFONE`, porque ler "VOZ INDISPONÍVEL" enquanto se ouve alguém falando é a tela contradizendo a caixa de som.
+
+  10 testes novos, verificados por mutação — seis defeitos plantados, seis reprovações. Um deles nasceu de um teste que passava pelo motivo errado: "descarta frame de conexão não autenticada" continuava verde com a guarda de auth removida, porque a tabela de audiência não tem chave `null`. O teste que faltava era o do ataque real — cliente **autenticado** mandando quadro carimbado com o `actorId` de outro.
+
+  ⚠️ **Provado até onde dava; o resto está dito.** O pipeline sonda→servidor→navegador foi medido com o `index.html` real num navegador que **bloqueou o microfone da página** — a mesma `NotAllowedError` do CEF, o que deu ao teste a condição exata do client oficial. Chegaram 960 amostras por buffer a 48kHz, pico 0.3000 (a amplitude exata do tom), energia em 440Hz 6300× acima do controle, e saída de 0.15 e 0.225 para ganhos de 0.5 e 0.75 — o volume da proximidade, conferido contra o valor teórico. Fora de alcance: zero buffers. Cada medida confere, no mesmo instante, que havia tráfego chegando — sem isso uma leitura de silêncio é ambígua, e por um momento a sonda já encerrada foi lida como defeito no pipeline.
+
+  Um achado que saiu daí e ficou registrado: a política de underrun do jitter buffer insere ~48ms de silêncio sempre que a fonte atrasa. Na bancada quem atrasava era a própria sonda (`setInterval` do Node entrega a cada 30,8ms, não 20ms) e o helper real é dirigido pelo relógio do WASAPI — mas numa rede com jitter isso vira picotamento em vez de degradação suave. Buffer adaptativo entrou na lista da Fase 2.
+
+  **O helper compilou e capturou áudio real** — 07/08/2026, [`VOICE_NATIVE_HELPER.md`](docs/technical/VOICE_NATIVE_HELPER.md) §8.3 e §8.4. Quando esta entrada foi escrita nada disso estava verificado: a máquina não tinha Visual Studio, CMake nem vcpkg, e por isso o `CMakeLists.txt`/`vcpkg.json` valiam como **não verificados**. O toolchain foi instalado (MSVC 19.44, CMake 4.4.2, vcpkg 2026-07-27), **as três ports resolveram** com os nomes que já estavam no `vcpkg.json` desde a Fase 1, e a captura WASAPI entregou 598 quadros em 11,94 s — 50,1 quadros/s contra 50 nominal, 574080 amostras (exatamente 598×960), zero descartes e zero clipping.
+
+  Isso também encerra o achado de re-bufferização acima como sendo **da sonda**, e não do desenho: ela entregava a cada 30,8 ms por limitação do `setInterval` do Node, e o helper entrega a 19,96 ms, que é o relógio do WASAPI. O buffer adaptativo segue na Fase 2 por causa do jitter de rede real, que continua sem teste.
+
+  **O que não foi provado, e agora é o único bloqueio de verdade: ninguém ouviu com o ouvido.** O que existe é medição — do sinal onde ele entra no `destination` do Web Audio e do que a captura entrega. Inteligibilidade não é uma medida, é um julgamento: um sinal pode bater todos os números e ainda sair irreconhecível. Continuam fora também os dois clientes Skyrim reais e qualquer coisa fora de `127.0.0.1`.
+
+  **Não construído nesta rodada, e listado:** handoff automático do ticket, empacotamento e assinatura do executável, cancelamento de eco, remoção do WebRTC antigo, e o bloqueador de uso real — `voipClients` é indexado por `actorId`, então o helper e a UI do *mesmo* jogador ainda não coexistem (a bancada contornou usando dois atores). Lista inteira em `VOICE_NATIVE_HELPER.md` §9.
+
+- **[Guia da sessão de teste](docs/technical/GUIA_SESSAO_DE_TESTE.md) — como chegar até o roteiro.** O [`FASE_0_ROTEIRO.md`](docs/technical/FASE_0_ROTEIRO.md) descreve o que fazer **depois** que todo mundo entrou, e a entrada é justamente a etapa que nunca rodou. O que faltava estava espalhado por três documentos e sete scripts: ligar os quatro serviços na ordem, conferir as quatro portas, e o que mandar para quem vai jogar.
+
+  **A Parte 2 é escrita para quem nunca viu o repositório e existe para ser copiada e enviada.** Todo o resto da documentação do projeto assume acesso ao código — um testador convidado não tem, e não deveria precisar ter para reportar "não consegui entrar".
+
+  Dois fatos que o guia diz em voz alta porque ninguém que só leia o roteiro descobriria: **não existe instalador gerado** (`LAUNCHER_DISTRIBUTION.md` §6), então há dois caminhos reais e o guia manda escolher **um** — oferecer os dois a quem não é dev garante que a pessoa escolha errado; e as variáveis `VITE_*` são embutidas em tempo de build, então um IP errado ali não é corrigível do lado do testador, o instalador inteiro é refeito.
+
+  Traz também a seção **"o que não é bug"** — voz indisponível, aviso do SmartScreen e o nome "Desconhecido" são os três comportamentos corretos com mais cara de defeito. Sem isso, os três primeiros relatos da sessão seriam sobre coisas que já sabemos.
+
+- **[Ativação de mobs hostis](docs/technical/HOSTILE_MOB_ACTIVATION_DECISION.md) — análise de 15 pontos fechada, nada implementado.** Responde a terceira das seis perguntas que o [`NPC_POLICY_DECISION.md`](docs/technical/NPC_POLICY_DECISION.md) §5 deixou abertas — *criaturas selvagens ficam ativas para caçadores?* — e estende aquele documento sem substituí-lo.
+
+  **A premissa do pedido caiu antes de qualquer desenho: não existe nada para "ativar".** O `npc-cleaner` é inerte por construção (`blockedBaseDescs` vazia, e lista vazia não remove nada) e ninguém nunca conectou. A consequência que nenhum documento do repositório tinha registrado: **o mundo provavelmente já está cheio de lobos, ursos e bandidos vanilla, ativos e hostis, agora** — nunca desligamos nada e nunca ninguém olhou. O primeiro passo técnico não é escrever um ativador, é contar o que já está lá, o que a Anexo A.1(b) da Constituição isenta do portão de 15 pontos por ser validação do que existe.
+
+  **O gargalo real é o cadáver, não o spawn.** Loot vanilla nasce dentro do corpo, do lado do cliente, fora do `transaction-service` — exatamente a fonte infinita que a Constituição proíbe. Se o servidor não conseguir controlar o inventário do cadáver, a feature não pode existir na forma pedida.
+
+  **Nada foi implementado, inclusive o campo de configuração que a rodada autorizava** — a §17 registra por que não fazer era a decisão certa.
+
 - **`soul-service.js` — a Afinidade da Alma passa a falar com o mundo.** `core/soul.js` (domínio puro, 28 testes) estava fechado desde antes; o que faltava era a camada que persiste a alma, entrega sinais, grava marcas, avança a árvore e audita rolagem. O desenho de [`SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) foi **implementado, não rediscutido**.
 
   Junto vieram as quatro tabelas que aquele documento especifica (migration v10): `character_soul`, `character_signs`, `character_marks`, `character_paths`. Registrado no `module-registry` atrás de `ENABLE_SOUL_SERVICE`, fase `lab`, **desligado por padrão**.
@@ -308,7 +354,9 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
 - **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
 
-Total de testes: **496** (362 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 07/08/2026 — a linha anterior dizia 301 e nenhuma das parcelas ainda batia. O roteiro da Fase 0 pedia "253 passando" no passo 0.1, que é o primeiro passo do teste: um testador pararia ali achando que quebrou alguma coisa.
+Total de testes: **540** (406 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 08/08/2026. A linha dizia **496** (362 no gamemode), desatualizada pelos testes que entraram com o `soul-service`, o log de moderação e o VOIP; antes dela dizia 301, e nenhuma das parcelas batia.
+
+É a terceira vez que este número envelhece em silêncio, e ele não é decorativo: o passo 0.1 do roteiro da Fase 0 manda conferir a contagem **antes** de ligar qualquer coisa. Quando pedia "253 passando", um testador pararia ali achando que tinha quebrado alguma coisa — que é o custo real de um número errado no primeiro passo do teste.
 
 - **Documentos de entrada em russo e espanhol** — `README`, `CONTRIBUTING` e `SECURITY` agora existem em quatro idiomas (`.md`, `.en.md`, `.ru.md`, `.es.md`), com linha de troca de idioma no topo de cada um. Russo porque é a língua nativa da comunidade SkyMP: o upstream e o Red House são russos, e até aqui um dev russo caía num repositório que não sabia ler. Espanhol pelo alcance na América Latina, onde a comunidade de Skyrim é grande e o português já é vizinho.
 

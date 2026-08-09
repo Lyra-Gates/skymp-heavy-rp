@@ -1,6 +1,6 @@
 # Fase 0 — Roteiro de teste in-game
 
-**O único bloqueio real do projeto.** 496 testes automatizados passam, e nada nunca rodou numa sessão com jogador. Enquanto este roteiro não for executado, tudo o mais é qualidade sobre código não validado.
+**O único bloqueio real do projeto.** 540 testes automatizados passam, e nada nunca rodou numa sessão com jogador. Enquanto este roteiro não for executado, tudo o mais é qualidade sobre código não validado.
 
 > Substitui o `GOVERNANCE_MARKET_STALLS_TEST_PLAN.md` (13/07/2026), que cobria governança e barracas. Desde então entraram `death-service`, `/painel`, VOIP, master API de sessão e a fila — e o gamemode passou de ~15 para **mais de 60 comandos**. Aquele plano descrevia camadas; este descreve **passos, o que observar, e o que significa falhar**.
 
@@ -26,7 +26,7 @@ Copie o [registro em branco](#registro) para um arquivo novo antes de começar e
 
 | # | Faça | Espere | Se falhar |
 |---|---|---|---|
-| 0.1 | `cd skymp/gamemode && npm test` | 362 passando | Não comece. Conserte antes. |
+| 0.1 | `cd skymp/gamemode && npm test` | 406 passando | Não comece. Conserte antes. |
 | 0.2 | `npm run test:systems` | 13/13 | Comando, permissão ou flag fora do lugar |
 | 0.3 | `npm run check:schema` | `[OK] banco e migrations estao alinhados` | **Aplique as migrations pendentes** (`v2`→`v10`, em ordem; são idempotentes). Banco meio-migrado não quebra o boot — quebra a query que toca a coluna faltante, no meio de uma cena. Foi assim que a v9 nasceu: `characters.gold` estava só no `schema.sql`, então banco antigo migrado em ordem nunca a recebia, e **toda** operação de ouro falharia na etapa 5.6 |
 | 0.4 | Confira `apps/game-api/mods.json` | Existe e tem `mods` e `loadOrder` | `/mods.json` responde 503 e **ninguém entra**. Gere com `node scripts/generate-mods-manifest.js` |
@@ -39,7 +39,7 @@ ENABLE_MARKET_STALLS_SERVICE=true
 ENABLE_DEATH_SERVICE=true
 ENABLE_PLAYER_PANEL_SERVICE=true
 ```
-Deixe `ENABLE_VOIP_SERVICE=false` — o VOIP depende de um patch de client que não existe (`VOICE_CLIENT_PATCH.md`). Ele é a etapa 8, opcional.
+Deixe `ENABLE_VOIP_SERVICE=false` — falar em jogo depende de um componente que ainda não é distribuído (o helper nativo de `VOICE_NATIVE_HELPER.md`; o patch de client de `VOICE_CLIENT_PATCH.md` foi descartado). Ele é a etapa 8, opcional.
 
 ⚠️ **`offlineMode: false` no `server-settings.json`.** Com `true` o cliente declara a própria identidade e o servidor acredita — a etapa 2 passaria sem provar nada.
 
@@ -142,7 +142,7 @@ A parte mais nova e menos verificada do gamemode.
 
 ## Etapa 8 — VOIP (opcional)
 
-A voz nativa é **opcional e Pós-Alfa** por decisão fechada em 07/08/2026 (§13 do `SKYMP_RP_DEVELOPMENT_PLAN.md`). Conectar de verdade só é possível se o patch de client de `VOICE_CLIENT_PATCH.md` tiver sido aplicado; sem ele `/voz` não conecta, e **isso é esperado, não é bug**.
+A voz nativa é **opcional e Pós-Alfa** por decisão fechada em 07/08/2026 (§13 do `SKYMP_RP_DEVELOPMENT_PLAN.md`). **Falar** em jogo exige o helper nativo de [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md), que ainda não é distribuído com o launcher; sem ele o microfone falha e **isso é esperado, não é bug**. O patch de client de `VOICE_CLIENT_PATCH.md` foi descartado e não deve ser aplicado.
 
 ### 8.1 O aviso de fallback aparece na tela? (1 pessoa, 1 client, 2 min)
 
@@ -151,10 +151,98 @@ Esta é a única verificação do roteiro que **não precisa de dois jogadores c
 Com `ENABLE_VOIP_SERVICE=true`, entre em jogo e rode `/voz`. O esperado:
 
 - o chip no topo termina em **`VOZ INDISPONÍVEL NESTE CLIENT — use o Discord`** e **fica nele** — se ele virar `VOZ DESCONECTADA`, o `state.voiceFatal` de `skymp/ui/index.html` não está segurando o `onclose` e o jogador está lendo o diagnóstico errado;
+- **exceção esperada:** se houver alguém em alcance usando o helper nativo, o chip vira âmbar com **`OUVINDO — SEM MICROFONE`**. Não é regressão: quem não captura ainda ouve, porque o WebSocket deixou de ser fechado na falha de microfone (`VOICE_NATIVE_HELPER.md` §6);
 - uma linha aparece no log de chat (canto inferior esquerdo) dizendo que é limitação do client, não do microfone nem do servidor, e apontando `/voz-criar` no Discord;
 - nada trava: dá para andar, abrir o `/painel` e continuar jogando com a mensagem na tela.
 
 Anote o que apareceu. **Isto nunca foi visto num CEF real** — `skymp/ui/` não tem suíte de teste, então o comportamento é conhecido por leitura de código apenas.
+
+### 8.2 Voz de verdade, com o helper nativo (1–2 pessoas, ~20 min)
+
+**Este passo não é a Fase 0.** É um teste focado só em voz, e pode rodar com bem
+menos gente — até com uma pessoa só, dois processos de helper e dois atores, como
+a bancada da Fase 1 já fez. O resto do roteiro não depende dele.
+
+**O binário existe.** `voice-helper.exe` compilou em 07/08/2026 e a captura foi
+medida: 50,1 quadros/s, enquadramento exato, zero descartes
+(`VOICE_NATIVE_HELPER.md` §8.3 e §8.4). Se você não tiver o binário na sua
+máquina, compile seguindo o `voice-helper/README.md`, ou ensaie os passos 3 em
+diante com `node voice-helper/tools/frame-probe.js`, que fala exatamente o mesmo
+protocolo (inclusive `role: 'sender'`) com um tom de 440Hz no lugar do microfone.
+
+**O que este passo acrescenta ao que já foi medido:** ninguém escutou. Que a
+captura entrega sinal em tempo real está provado; que a **voz sai inteligível**
+não. É por isso que este passo existe e por que ele precisa de você.
+
+⚠️ **`VOIP_DEBUG_EXPOSE_TICKET` grava um ticket de voz em texto puro no disco.**
+Ele vale 30 segundos e autentica como aquele jogador na cena de voz. É andaime de
+bancada, com um engenheiro olhando — **não deixe ligado**. O passo 7 existe pra
+isso.
+
+**1. Ligue as duas flags** no `.env` do gamemode:
+
+```bash
+ENABLE_VOIP_SERVICE=true
+```
+
+```bash
+VOIP_DEBUG_EXPOSE_TICKET=true
+```
+
+A segunda **não está em nenhum `.env.example` de propósito** — ligue à mão.
+Ela é lida a cada `/voz`, então não precisa reiniciar o servidor pra desligar.
+
+**2. Se o teste for entre duas máquinas**, ajuste `VOIP_PUBLIC_HOST` para o IP
+que a outra máquina alcança (o padrão `127.0.0.1` só serve na mesma máquina), e
+`VOIP_BIND_HOST=0.0.0.0` pro servidor aceitar de fora. Numa máquina só, pule.
+
+**3. Jogador A: `/voz` no jogo.** Duas coisas acontecem — a UI conecta sozinha
+como `listener` (chip no topo muda), e o ticket de `sender` aparece em dois
+lugares: no log do servidor, em `warn`, já montado como linha de comando; e em
+`skymp/gamemode/.voip-debug-ticket.json`. Pegue de onde for mais cômodo.
+
+**4. Jogador A: rode o helper** com esse ticket, dentro de 30 segundos:
+
+```bash
+voice-helper.exe --actor-id 0xFF000A12 --ticket <do arquivo> --host 127.0.0.1 --port 7778
+```
+
+Vencido, é só rodar `/voz` de novo — o ticket novo não derruba a UI, porque são
+tickets de papéis diferentes (`VOICE_NATIVE_HELPER.md` §10). O helper deve
+imprimir `Autenticado. Capturando`. Se disser `Auth recusada`, quase sempre é
+ticket vencido entre um passo e outro.
+
+**5. Jogador B: `/voz`**, e registre qual dos dois casos você testou:
+
+- **só UI** (sem helper): B ouve A, mas não fala. É o caso do client oficial hoje.
+- **com helper também**: os dois falam. Precisa de outro `/voz` + outro helper,
+  com o `actorId` de B.
+
+**6. O que observar** — e anote o que de fato aconteceu, não o que era pra acontecer:
+
+| Observação | Esperado |
+|---|---|
+| A fala, B escuta | voz **inteligível**, não só "tem sinal" |
+| A se aproxima de B | volume **sobe** conforme a distância cai |
+| B se afasta além de ~1200 unidades | áudio **para**; pode demorar até 2s (o tick é de 2s) |
+| B volta pro alcance | áudio **volta**, também em até 2s |
+| A e B com helper, os dois falando | voz nos **dois sentidos**, ao mesmo tempo |
+| A fala e escuta ao mesmo tempo | A **não ouve a própria voz** — se ouvir, é eco e é defeito |
+| A fecha o helper (Ctrl+C) | A **para de falar** e **continua ouvindo** B |
+| A muta pela UI | B **para de ouvir** A, mesmo com o helper transmitindo |
+
+Sem cancelamento de eco: **use fone**. Em caixa de som a voz do outro volta pro
+microfone e reentra na cena — isso é limitação conhecida (`VOICE_NATIVE_HELPER.md`
+§9.5), não achado novo.
+
+Se o áudio sair **robótico, cortado ou picotado**, registre o sintoma e em que
+condição apareceu — não conclua sozinho se é bloqueador. Há um achado de
+re-bufferização já medido (§7) que pode ser a mesma coisa vista de outro ângulo.
+
+**7. Desligue `VOIP_DEBUG_EXPOSE_TICKET`** e apague
+`skymp/gamemode/.voip-debug-ticket.json`. O arquivo é ignorado pelo git, então
+ninguém vai commitá-lo por acidente — mas ele continua sendo uma credencial em
+texto puro no disco de quem testou.
 
 ---
 

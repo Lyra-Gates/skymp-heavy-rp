@@ -109,7 +109,7 @@ Antes da beta publica:
 
 - Guardas vanilla ficam ativos ou guardas serao apenas jogadores?
 - Mercadores vanilla vendem itens ou apenas servem ambientacao?
-- Criaturas selvagens ficam ativas para cacadores?
+- ~~Criaturas selvagens ficam ativas para cacadores?~~ **Respondida em 07/08/2026: sim** — ver [`HOSTILE_MOB_ACTIVATION_DECISION.md`](HOSTILE_MOB_ACTIVATION_DECISION.md), que estende este documento sem substitui-lo. Analise fechada, nada implementado.
 - NPCs de quest vanilla ficam desativados?
 - Containers vanilla resetam ou ficam bloqueados?
 - Respawn de NPC deve ser global, por tipo ou por ID?

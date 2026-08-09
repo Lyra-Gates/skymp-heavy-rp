@@ -14,7 +14,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 | Component | Tests | Installable | Real state |
 |---|---|---|---|
-| `skymp/gamemode` | 362/362 ✅ + 11/11 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
+| `skymp/gamemode` | 406/406 ✅ + 13/13 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
 | `apps/bot-discord` | 40/40 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
 | `apps/launcher` | 24/24 ✅ (parity) | ✅ | **Was broken end to end** (see 2.1) and had no tests at all. The modpack parity logic was extracted into `electron/parity.mjs` and tested — it found the extra-plugin hole (2.15). The rest of `main.ts` needs Electron. |
@@ -310,7 +310,7 @@ Came out of the integration study with Chancelaria Real, a system running in pro
 ### Do not do
 
 - **Migrate the manifests to the Nexus Collections format.** See `LAUNCHER_DISTRIBUTION.md` §5 — Collections doesn't guarantee load order parity, which is the reason the manifests exist.
-- **Chase native VOIP before the rest.** It depends on a client patch that doesn't exist upstream (`VOICE_CLIENT_PATCH.md`) and there's already a working alternative via Discord voice channels.
+- **Chase native VOIP before the rest.** Still holds — **but the reason changed on 2026-08-07, and the old one no longer applies.** It no longer depends on a client patch: capture moved out of the browser into a native helper, which **compiled and captured real audio** (`VOICE_NATIVE_HELPER.md` §8.3 and §8.4). What remains is that nobody has listened to the audio with their ears (§8.2), that raw PCM costs ~1 Mbit/s upstream per speaker — bench, not production —, and that Phase 0 is still the real blocker. Discord voice channels remain the Alpha solution.
 - **Reactivate a PARKED module without going through `module-registry`.** The registry is what guarantees the flag, the dependencies and command cleanup; bypassing it returns the project to the state that produced a good share of the bugs already fixed.
 
 ---
