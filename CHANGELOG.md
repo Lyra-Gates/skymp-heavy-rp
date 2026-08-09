@@ -33,9 +33,21 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
   Um achado que saiu daí e ficou registrado: a política de underrun do jitter buffer insere ~48ms de silêncio sempre que a fonte atrasa. Na bancada quem atrasava era a própria sonda (`setInterval` do Node entrega a cada 30,8ms, não 20ms) e o helper real é dirigido pelo relógio do WASAPI — mas numa rede com jitter isso vira picotamento em vez de degradação suave. Buffer adaptativo entrou na lista da Fase 2.
 
-  **O que não foi provado:** o `voice-helper` em C++ **nunca foi compilado** — a máquina não tem Visual Studio, CMake nem vcpkg (evidência exata em [`VOICE_NATIVE_HELPER.md`](docs/technical/VOICE_NATIVE_HELPER.md) §8), então nenhuma port do vcpkg chegou a ser resolvida e o `CMakeLists.txt`/`vcpkg.json` são **não verificados**. E **ninguém ouviu com o ouvido**: o que existe é medição do sinal onde ele entra no `destination` do Web Audio, o que é forte e não é a mesma coisa.
+  **O helper compilou e capturou áudio real** — 07/08/2026, [`VOICE_NATIVE_HELPER.md`](docs/technical/VOICE_NATIVE_HELPER.md) §8.3 e §8.4. Quando esta entrada foi escrita nada disso estava verificado: a máquina não tinha Visual Studio, CMake nem vcpkg, e por isso o `CMakeLists.txt`/`vcpkg.json` valiam como **não verificados**. O toolchain foi instalado (MSVC 19.44, CMake 4.4.2, vcpkg 2026-07-27), **as três ports resolveram** com os nomes que já estavam no `vcpkg.json` desde a Fase 1, e a captura WASAPI entregou 598 quadros em 11,94 s — 50,1 quadros/s contra 50 nominal, 574080 amostras (exatamente 598×960), zero descartes e zero clipping.
+
+  Isso também encerra o achado de re-bufferização acima como sendo **da sonda**, e não do desenho: ela entregava a cada 30,8 ms por limitação do `setInterval` do Node, e o helper entrega a 19,96 ms, que é o relógio do WASAPI. O buffer adaptativo segue na Fase 2 por causa do jitter de rede real, que continua sem teste.
+
+  **O que não foi provado, e agora é o único bloqueio de verdade: ninguém ouviu com o ouvido.** O que existe é medição — do sinal onde ele entra no `destination` do Web Audio e do que a captura entrega. Inteligibilidade não é uma medida, é um julgamento: um sinal pode bater todos os números e ainda sair irreconhecível. Continuam fora também os dois clientes Skyrim reais e qualquer coisa fora de `127.0.0.1`.
 
   **Não construído nesta rodada, e listado:** handoff automático do ticket, empacotamento e assinatura do executável, cancelamento de eco, remoção do WebRTC antigo, e o bloqueador de uso real — `voipClients` é indexado por `actorId`, então o helper e a UI do *mesmo* jogador ainda não coexistem (a bancada contornou usando dois atores). Lista inteira em `VOICE_NATIVE_HELPER.md` §9.
+
+- **[Ativação de mobs hostis](docs/technical/HOSTILE_MOB_ACTIVATION_DECISION.md) — análise de 15 pontos fechada, nada implementado.** Responde a terceira das seis perguntas que o [`NPC_POLICY_DECISION.md`](docs/technical/NPC_POLICY_DECISION.md) §5 deixou abertas — *criaturas selvagens ficam ativas para caçadores?* — e estende aquele documento sem substituí-lo.
+
+  **A premissa do pedido caiu antes de qualquer desenho: não existe nada para "ativar".** O `npc-cleaner` é inerte por construção (`blockedBaseDescs` vazia, e lista vazia não remove nada) e ninguém nunca conectou. A consequência que nenhum documento do repositório tinha registrado: **o mundo provavelmente já está cheio de lobos, ursos e bandidos vanilla, ativos e hostis, agora** — nunca desligamos nada e nunca ninguém olhou. O primeiro passo técnico não é escrever um ativador, é contar o que já está lá, o que a Anexo A.1(b) da Constituição isenta do portão de 15 pontos por ser validação do que existe.
+
+  **O gargalo real é o cadáver, não o spawn.** Loot vanilla nasce dentro do corpo, do lado do cliente, fora do `transaction-service` — exatamente a fonte infinita que a Constituição proíbe. Se o servidor não conseguir controlar o inventário do cadáver, a feature não pode existir na forma pedida.
+
+  **Nada foi implementado, inclusive o campo de configuração que a rodada autorizava** — a §17 registra por que não fazer era a decisão certa.
 
 - **`soul-service.js` — a Afinidade da Alma passa a falar com o mundo.** `core/soul.js` (domínio puro, 28 testes) estava fechado desde antes; o que faltava era a camada que persiste a alma, entrega sinais, grava marcas, avança a árvore e audita rolagem. O desenho de [`SOUL_AFFINITY.md`](docs/design/SOUL_AFFINITY.md) foi **implementado, não rediscutido**.
 
