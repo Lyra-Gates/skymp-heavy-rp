@@ -21,6 +21,11 @@ voice-helper/vcpkg_installed/
 # Ver docs/technical/VOICE_NATIVE_HELPER.md §11.
 skymp/gamemode/.voip-debug-ticket.json
 
+# Saida de ferramenta de agente, nao conteudo do projeto. Fica vazia no disco, e
+# diretorio vazio o git nao mostra — entra sem aviso no primeiro `git add -A`
+# depois que um arquivo cair ali. O que e do projeto mora em `.agents/`.
+generated-images/
+
 skymp/server/
 skymp/artifacts/
 skymp/client-backups/

@@ -779,16 +779,11 @@ Rodar o projeto de forma sustentavel.
 
 Nada deste projeto foi validado numa sessão real. O servidor subiu pela primeira vez em 06/08/2026 e o gamemode carregou, mas **ninguém entrou**. Os testes usam `mp` mockado, e mock aceita qualquer coisa — foi assim que 22 chamadas Papyrus com argumento errado passaram meses com a suíte verde.
 
-Hoje há **quatro sistemas** com o mesmo aviso — *confirmado por teste automatizado, não confirmado em sessão real*:
+Hoje há **oito sistemas** com o mesmo aviso — *confirmado por teste automatizado, não confirmado em sessão real*. Eram quatro quando esta seção foi escrita em 07/08; a voz (fallback e nativa), a persistência de identidade e a nametag com `/revelaridentidade` entraram depois.
 
-| Sistema | O que só o cliente prova | Etapa |
-|---|---|---|
-| `core/hit-events.js` | o snippet injetado roda e o evento chega | 9.1 |
-| `core/espm.js` | `lookupEspmRecordById` responde como a sonda mostrou | 9.2 |
-| `core/safe-zones.js` | a config carrega (o bloqueio ainda não tem chamador) | 9.3 |
-| `soul-service.js` | o primeiro sinal aparece na tela do jogador | 9.4 |
+A lista está no índice único do [`docs/technical/FASE_0_ROTEIRO.md`](docs/technical/FASE_0_ROTEIRO.md), que a consolidou porque os mesmos sistemas estavam espalhados por três documentos. **Esta seção não repete a lista**: enquanto repetia, ela envelheceu em silêncio — que é exatamente o defeito que o índice existe para não ter.
 
-O roteiro está em [`docs/technical/FASE_0_ROTEIRO.md`](docs/technical/FASE_0_ROTEIRO.md), pronto e **não executado**. Ele precisa de três pessoas, dois clientes e um servidor — nada que agente de código consiga fazer sozinho.
+O roteiro está pronto e **não executado**. Ele precisa de três pessoas, dois clientes e um servidor — nada que agente de código consiga fazer sozinho.
 
 **O que a Fase 0 desbloqueia**, e por isso ela vem antes de qualquer feature nova:
 
