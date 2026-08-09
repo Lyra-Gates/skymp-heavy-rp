@@ -284,9 +284,160 @@ El punto 4 vale hacerlo antes de la prueba en el juego de la Fase 1 (`QA_REPORT_
 
 ---
 
+## 8. Cómo resuelve SkyMP el estado compartido
+
+Relevamiento del 09/08/2026, hecho para dar base a
+[`REVISAO_REALIDADE_COMPARTILHADA.md`](REVISAO_REALIDADE_COMPARTILHADA.md) (solo
+en portugués). Hasta aquí este documento cubría la *API* del gamemode; esta
+sección cubre el **mecanismo por debajo** — quién decide qué ve cada jugador, y
+en qué formato el servidor representa lugar e identidad de form.
+
+### Disciplina de procedencia
+
+- **`[DOC]`** — leído en el código fuente primario del upstream
+  (`gh api repos/skyrim-multiplayer/skymp/contents/<ruta>`). Es hecho sobre el
+  código en `main`.
+- **`[DEEPWIKI]`** — viene del wiki generado en `deepwiki.com`, **no** contrastado
+  con el código. Es evidencia, no veredicto cerrado: el wiki se equivoca por
+  omisión (ver 8.2).
+
+### 8.1 El núcleo: `WorldState`, grid y vecindad
+
+**[DEEPWIKI]** ([2.5 World State Management](https://deepwiki.com/skyrim-multiplayer/skymp/2.5-world-state-management))
+`WorldState` guarda todo form en un `unordered_map<uint32_t, shared_ptr<MpForm>>`
+(`LookupFormById`, `AddForm`, `DestroyForm`, en
+`skymp5-server/cpp/server_guest_lib/WorldState.h`). El particionado espacial es
+un grid (`GridInfo` / `GridImpl<MpObjectReference*>`) consultado por
+`GetNeighborsByPosition`. Los FormID `< 0xff000000` son de ESPM; `>= 0xff000000`
+los genera el servidor.
+
+**[DEEPWIKI]** ([2.4.1](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.1-mpactor-and-mpobjectreference),
+[2.4.2](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.2-actionlistener-and-event-handling))
+«Vecino» (*neighbour*) no es «quien está cerca» en línea recta: es **quien está
+suscrito a las actualizaciones de ese form**. `SendToNeighbours`
+(`ActionListener.cpp:39-96`) primero valida que el remitente sea dueño del actor
+(o el *hoster* registrado en `worldState.hosters`) y solo entonces retransmite.
+Entrar y salir de grids genera suscripción/desuscripción —
+`PartOne::SetUserActor` (`PartOne.cpp:175-221`) desuscribe al actor de sus
+vecinos y lo saca del grid para poner la visibilidad a cero.
+
+**Consecuencia para nosotros:** el servidor **ya mantiene** la respuesta de
+«quién ve a quién». `mp.getNeighborsByPosition` está expuesto al gamemode
+**[DOC]** — ver 8.3.
+
+### 8.2 El wiki es incompleto: verificá los PropertyBindings en el código
+
+**[DEEPWIKI]** ([5.3](https://deepwiki.com/skyrim-multiplayer/skymp/5.3-properties-system))
+lista los bindings estándar y **no menciona `locationalData`**. Eso levantaría
+una falsa sospecha sobre tres servicios nuestros. El código primario lo desmiente:
+
+**[DOC]** `skymp5-server/cpp/addon/property_bindings/PropertyBindingFactory.cpp`
+— el mapa real de `CreateStandardPropertyBindings()`:
+
+```
+actorNeighbors  angle       appearance   baseDesc     equipment
+inventory       isDead      isDisabled   isOnline     isOpen
+locationalData  neighbors   onlinePlayers percentages pos
+profileId       spawnPoint  type         worldOrCellDesc  idx
+consoleCommandsAllowed  spawnDelay  templateChain  lastAnimEvent
+respawnPercentages
+```
+
+`neighbors`, `actorNeighbors` y `onlinePlayers` son **built-in** — la lista de
+vecinos viene lista desde el servidor.
+
+### 8.3 La superficie real de la API `mp`
+
+**[DOC]** `skymp5-server/cpp/addon/ScampServer.cpp:84-143` — los `InstanceMethod`
+registrados. Confirman lo que ya usamos (`get`, `set`, `makeProperty`,
+`makeEventSource`, `callPapyrusFunction`, `lookupEspmRecordById`,
+`getActorsByProfileId`, `kick`, `place`) y revelan tres que no usamos:
+
+| Método | Para qué serviría aquí |
+|---|---|
+| `getNeighborsByPosition` | Vecindad desde el grid del servidor, en vez de nuestro O(n²) |
+| `getDescFromId` / `getIdFromDesc` | Convierte FormID ↔ `FormDesc` **sin adivinar el formato** (ver 8.5) |
+| `findFormsByPropertyValue` | Búsqueda por valor de property |
+
+### 8.4 `locationalData`: la forma exacta, de ida y de vuelta
+
+**[DOC]** `property_bindings/LocationalDataBinding.cpp`.
+
+**Lectura** (`mp.get`) devuelve exactamente tres campos:
+
+```js
+{ cellOrWorldDesc: "1a26f:Skyrim.esm",  // string, FormDesc::ToString()
+  pos: [x, y, z],                        // array de 3 números
+  rot: [x, y, z] }                       // array de 3 números — se llama `rot`
+```
+
+**Escritura** (`mp.set`) exige los **tres** campos, con esos nombres exactos, y
+llama a `MpActor::Teleport`. Un campo ausente o de tipo equivocado **lanza**:
+`NapiHelper::ExtractString` lanza si el valor no es string, `ExtractNiPoint3`
+lanza si no es array (`skymp5-server/cpp/addon/NapiHelper.h:96,218`). Y solo vale
+para actores: *"mp.set can only change 'locationalData' for actors, not for
+refrs"*.
+
+### 8.5 `FormDesc`: lugar y base son **string**, no hexadecimal
+
+**[DOC]** `skymp5-server/cpp/server_guest_lib/FormDesc.cpp`. `ToString()` usa el
+formato `"%0x%c%s"` → `shortFormId` en hex **sin prefijo `0x`**, delimitador `:`,
+nombre del archivo:
+
+```
+"1a26f:Skyrim.esm"        ← forma canónica
+"162e2"                    ← sin archivo: pasa a 0xff000000 + id en ToFormId()
+```
+
+`FromString` sin delimitador **no falla** — cae en la rama sin archivo y resuelve
+hacia el rango de forms generados por el servidor. **Por eso un `"0x162e2"`
+escrito a mano no da error: apunta silenciosamente a otro lugar.**
+
+`baseDesc` usa la misma representación: **[DOC]** `BaseDescBinding.cpp` devuelve
+`FormDesc::FromFormId(refr.GetBaseId(), espmFiles).ToString()`.
+
+### 8.6 `mp.onDeath`: existe, y **hace respawn solo** si no lo bloqueás
+
+**[DOC]** `server_guest_lib/gamemode_events/DeathEvent.cpp`:
+
+- El hook se llama literalmente `"onDeath"`; los argumentos son
+  `[actorId, killerId]`, con `killerId = 0` cuando no hay autor.
+- `OnFireSuccess` llama a **`actor->RespawnWithDelay()`**.
+
+**[DOC]** `gamemode_events/GameModeEvent.cpp` — `Fire()` solo llama a
+`OnFireSuccess` si **ningún** listener devolvió `false`; en caso contrario llama
+a `OnFireBlocked` (que `DeathEvent` no sobrescribe, o sea: sin respawn).
+
+**[DOC]** `skymp5-server/cpp/addon/ScampServerListener.cpp:41-129` — el contrato
+del valor de retorno del handler JS:
+
+| El handler `mp.onDeath` devuelve | Efecto |
+|---|---|
+| `undefined` | **no bloquea** → el respawn automático ocurre |
+| `false` | **bloquea** → el servidor no hace respawn |
+| lanza excepción | error logueado, **no bloquea** → el respawn ocurre |
+
+**[DOC]** `server_guest_lib/MpChangeForms.h:109` — `float spawnDelay = 25.0f`. El
+retardo por defecto es de **25 segundos**, y existe la property `spawnDelay` para
+cambiarlo.
+
+### 8.7 Validación de entrada del cliente que el servidor ya hace
+
+**[DEEPWIKI]** ([2.4.2](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.2-actionlistener-and-event-handling))
+`ActionListener` valida antes de aceptar: `OnUpdateMovement` corre
+`MovementValidation::Validate` contra teletransporte imposible; `OnHit` verifica
+alcance del arma (`GetReach`, `fCombatDistance`), cadencia (`CanHit`) y actor
+muerto; `OnChangeValues` recorta regeneración imposible (`CropRegeneration`) y
+reenvía una corrección. Los eventos custom llegan por `OnCustomEvent` con
+`actorId`, `eventName` y `argsJson`.
+
+---
+
 ## Fuentes
 
 - [skyrim-multiplayer/skymp](https://github.com/skyrim-multiplayer/skymp) — repositorio oficial, carpeta `docs/`
 - [Game Mode Framework — DeepWiki](https://deepwiki.com/skyrim-multiplayer/skymp/5.1-game-mode-framework)
+- **DeepWiki, páginas de arquitectura usadas en la sección 8** — [1.2 System Architecture](https://deepwiki.com/skyrim-multiplayer/skymp/1.2-system-architecture-overview) · [2.3 PartOne y game loop](https://deepwiki.com/skyrim-multiplayer/skymp/2.3-partone-and-game-loop) · [2.4.1 MpActor/MpObjectReference](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.1-mpactor-and-mpobjectreference) · [2.4.2 ActionListener](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.2-actionlistener-and-event-handling) · [2.5 World State](https://deepwiki.com/skyrim-multiplayer/skymp/2.5-world-state-management) · [2.6 Networking](https://deepwiki.com/skyrim-multiplayer/skymp/2.6-networking-and-message-processing) · [5.3 Properties](https://deepwiki.com/skyrim-multiplayer/skymp/5.3-properties-system)
+- **Código primario citado como `[DOC]` en la sección 8** — `PropertyBindingFactory.cpp`, `LocationalDataBinding.cpp`, `BaseDescBinding.cpp`, `NeighborsBinding.cpp`, `WorldOrCellDescBinding.cpp`, `FormDesc.cpp`/`.h`, `ScampServer.cpp`, `ScampServerListener.cpp`, `NapiHelper.h`, `MpChangeForms.h`, `MpActor.cpp`, `gamemode_events/DeathEvent.cpp`, `gamemode_events/GameModeEvent.cpp`
 - [docs/docs_skyrim_platform.md](https://github.com/skyrim-multiplayer/skymp/blob/main/docs/docs_skyrim_platform.md)
 - [Issue #1338 — onHit para el gamemode](https://github.com/skyrim-multiplayer/skymp/issues/1338) (cerrada como won't fix)
