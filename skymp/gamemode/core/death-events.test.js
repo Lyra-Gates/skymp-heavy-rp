@@ -24,6 +24,14 @@
  *        → reprova "assinante que lanca nao impede os demais".
  *   4. Trocar o `throw` de nome duplicado por um `return` silencioso
  *        → reprova "inscricao duplicada lanca".
+ *   5. Tirar o `return nossa ? false : undefined` do assinante do
+ *      `death-service.js` (era o estado até 09/08/2026)
+ *        → reprova "o death-service bloqueia o respawn nativo da morte que e dele".
+ *   6. Fazer `_dispatch` devolver `false` sempre, em vez de agregar
+ *        → reprova "morte que ninguem reivindica nao bloqueia" — que é o caso
+ *          do mob, e a razão de a política ser agregada e não global.
+ *   7. Fazer o `catch` de `_dispatch` marcar bloqueio
+ *        → reprova "assinante que lanca nao bloqueia o respawn".
  *
  * Executa com: node --test core/death-events.test.js
  */
@@ -174,6 +182,90 @@ describe('death-events — o hook tem dono unico e varios assinantes', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// O retorno: quem bloqueia o respawn nativo, e quem não
+//
+// **[DOC]** `DeathEvent::OnFireSuccess` chama `RespawnWithDelay()` a menos que
+// algum listener devolva `false`. Enquanto `_dispatch` era um `for` sem
+// `return`, o servidor ressuscitava o jogador aos 25 s no meio dos 4 minutos de
+// bleed-out — o bloqueador de Fase 0 da REVISAO_REALIDADE_COMPARTILHADA.md §6.2.
+//
+// A política é agregada, não global, e o motivo está na mesma §6.2: o
+// `hunting-service` vai assinar este hook, e bloquear tudo mataria o respawn
+// dos mobs junto.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('death-events — o retorno bloqueia o respawn nativo, e e agregado', () => {
+  beforeEach(limparAssinantes);
+  afterEach(limparAssinantes);
+
+  it('morte que ninguem reivindica nao bloqueia', () => {
+    deathEvents.subscribe('desinteressado', () => {});
+
+    assert.strictEqual(
+      global.mp.onDeath(0xff000001, 0), undefined,
+      'devolver `false` por padrao mataria o respawn de todo ator morto do mundo, mob inclusive'
+    );
+  });
+
+  it('um assinante que pede bloqueio basta', () => {
+    deathEvents.subscribe('nao-e-meu', () => undefined);
+    deathEvents.subscribe('e-meu', () => false);
+
+    assert.strictEqual(global.mp.onDeath(0xff000001, 0), false);
+  });
+
+  it('a ordem de inscricao nao muda o resultado', () => {
+    deathEvents.subscribe('e-meu', () => false);
+    deathEvents.subscribe('nao-e-meu', () => undefined);
+
+    assert.strictEqual(
+      global.mp.onDeath(0xff000001, 0), false,
+      'um `undefined` que chega depois nao pode desfazer o bloqueio de quem reivindicou'
+    );
+  });
+
+  it('quem pede bloqueio nao cala quem vem depois', () => {
+    const rodou = [];
+    deathEvents.subscribe('bloqueia', () => { rodou.push('bloqueia'); return false; });
+    deathEvents.subscribe('depois', () => { rodou.push('depois'); });
+
+    global.mp.onDeath(0xff000001, 0);
+
+    assert.deepStrictEqual(
+      rodou, ['bloqueia', 'depois'],
+      'bloquear e decisao agregada no fim, nao um atalho que sai do laco cedo'
+    );
+  });
+
+  it('so o booleano `false` bloqueia — valores falsy por descuido nao', () => {
+    for (const valorFalsy of [0, '', null, NaN]) {
+      limparAssinantes();
+      deathEvents.subscribe('descuidado', () => valorFalsy);
+      assert.strictEqual(
+        global.mp.onDeath(0xff000001, 0), undefined,
+        `devolver ${JSON.stringify(valorFalsy)} nao pode desligar o respawn do servidor sem ter pedido`
+      );
+    }
+  });
+
+  it('assinante que lanca nao bloqueia o respawn', () => {
+    deathEvents.subscribe('quebrado', () => { throw new Error('boom'); });
+
+    const realError = console.error;
+    console.error = () => {};
+    try {
+      assert.strictEqual(
+        global.mp.onDeath(0xff000001, 0), undefined,
+        'mesma regra do upstream: excecao e erro logado que NAO bloqueia — falha de um ' +
+        'consumidor nao pode virar decisao de mundo'
+      );
+    } finally {
+      console.error = realError;
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Integração — o teste que a §16 do HOSTILE_MOB_ACTIVATION_DECISION pede
 // primeiro, antes de qualquer linha de hunting-service
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,6 +344,30 @@ describe('death-events — um segundo consumidor nao silencia o death-service', 
     assert.strictEqual(
       deathService.isDowned(VITIMA_CHARACTER), true,
       'e o killerId precisa ter chegado junto: e ele que fecha o alibi de RDM da §4.3'
+    );
+  });
+
+  it('o death-service bloqueia o respawn nativo da morte que e dele', async () => {
+    deathService._downedPlayers.clear();
+    characterState.set(VITIMA_CHARACTER, STATES.NORMAL, {});
+
+    assert.strictEqual(
+      global.mp.onDeath(VITIMA_ACTOR, 0x000a0001), false,
+      'sem isto o servidor chama RespawnWithDelay() e o jogador levanta aos 25 s no meio ' +
+      'dos 4 minutos de bleed-out — duas autoridades sobre o mesmo estado'
+    );
+
+    await new Promise(resolve => setImmediate(resolve));
+  });
+
+  it('nao reivindica a morte de quem nao e personagem ativo — o mob respawna', () => {
+    // Um lobo: nenhum `registerActiveCharacter`, portanto sem characterData.
+    const LOBO = 0xff00f001;
+
+    assert.strictEqual(
+      global.mp.onDeath(LOBO, 0), undefined,
+      'reivindicar tudo mataria o respawn da fauna junto — e a razao de o barramento ' +
+      'agregar retorno em vez de bloquear global (§6.2 da revisao)'
     );
   });
 });

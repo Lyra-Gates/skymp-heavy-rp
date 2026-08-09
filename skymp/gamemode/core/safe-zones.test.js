@@ -9,6 +9,22 @@
  * A regra dos dois lados (§4.1 do estudo do Red House) tem teste próprio: é o
  * detalhe que separa proteção de exploit.
  *
+ * ─── Mutações verificadas (CONTRIBUTING.md §6) ───────────────────────────────
+ *
+ *   1. Remover a chamada a `motivoDeCellIdInvalido` do `parseZones`
+ *        → reprova "cellId com prefixo 0x e recusado" e os outros três casos
+ *          malformados: a zona volta a entrar na lista, inerte e silenciosa.
+ *   2. Trocar o `continue` da recusa por um `console.error` sem `continue`
+ *        → reprova os mesmos, e é a mutação que importa: logar sem remover é
+ *          exatamente o estado que o achado descreve (parece ativa, não é).
+ *   3. Afrouxar o regex de hex para aceitar qualquer coisa antes do `:`
+ *        → reprova "hex invalido antes do ':' e recusado".
+ *
+ * As células dos fixtures estão no formato `FormDesc` real
+ * (`"162e2:Skyrim.esm"`), não em hex com `0x`. Isso importa mesmo onde o teste
+ * compara mock contra mock: o fixture é a documentação executável do formato, e
+ * era ele que dava cobertura à ilusão de que `"0x162e2"` servia.
+ *
  * Executa com: node --test core/safe-zones.test.js
  */
 
@@ -19,8 +35,10 @@ const NA_ZONA = 0xff000001;
 const FORA = 0xff000002;
 const LONGE_NA_MESMA_CELULA = 0xff000003;
 
-const CELULA_SEGURA = '0x162e2';
-const OUTRA_CELULA = '0x1a2b3';
+// Formato `FormDesc`: hex SEM `0x`, `:`, arquivo. É o que
+// `locationalData.cellOrWorldDesc` devolve — ver SKYMP_UPSTREAM_REFERENCE.md §8.5.
+const CELULA_SEGURA = '162e2:Skyrim.esm';
+const OUTRA_CELULA = '1a2b3:Skyrim.esm';
 
 const posicoes = new Map();
 const originalMp = global.mp;
@@ -106,6 +124,102 @@ describe('safe-zones — raio', () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// cellId malformado: o achado da REVISAO_REALIDADE_COMPARTILHADA.md §2 e §10
+//
+// `FormDesc::FromString` não valida, então um cellId no formato errado não dá
+// erro em lugar nenhum: só nunca casa. A zona carrega, aparece nos logs como
+// ativa e não protege ninguém — falha ABERTA. O que estes testes fixam é que
+// isso agora é barulhento e a zona sai da lista.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('safe-zones — cellId fora do formato FormDesc é recusado, alto', () => {
+  const erros = [];
+  const originalError = console.error;
+
+  beforeEach(() => {
+    erros.length = 0;
+    console.error = (...args) => erros.push(args.join(' '));
+  });
+
+  const restaurar = () => { console.error = originalError; };
+  after(restaurar);
+
+  /** @returns {{zonas: object[], erros: string[]}} */
+  function carregar(cellId) {
+    const zonas = safeZones.parseZones({
+      enabled: true,
+      zones: [{ id: 'templo', label: 'Templo', cellId, blocks: ['combat'] }]
+    });
+    return { zonas, erros: [...erros] };
+  }
+
+  it('cellId bem formado carrega normalmente', () => {
+    const { zonas, erros: logs } = carregar('162e2:Skyrim.esm');
+    restaurar();
+    assert.strictEqual(zonas.length, 1);
+    assert.strictEqual(zonas[0].cellId, '162e2:Skyrim.esm');
+    assert.deepStrictEqual(logs, [], 'zona valida nao deve gerar erro no log');
+  });
+
+  it('cellId com prefixo 0x é recusado — era o valor do exemplo', () => {
+    const { zonas, erros: logs } = carregar('0x162e2');
+    restaurar();
+    assert.deepStrictEqual(zonas, [], 'a zona nao pode entrar na lista ativa');
+    assert.strictEqual(logs.length, 1);
+    assert.match(logs[0], /\[safe-zones\]/);
+    assert.match(logs[0], /cellId invalido/);
+    assert.match(logs[0], /IGNORADA/);
+    // O aviso precisa dizer o que fazer, não só que está errado.
+    assert.match(logs[0], /162e2:Skyrim\.esm/, 'o log deve sugerir a forma certa');
+  });
+
+  it('cellId sem o ":" é recusado — é o que resolve para outra faixa em silêncio', () => {
+    const { zonas, erros: logs } = carregar('162e2');
+    restaurar();
+    assert.deepStrictEqual(zonas, []);
+    assert.match(logs[0], /cellId invalido/);
+  });
+
+  it('hex inválido antes do ":" é recusado', () => {
+    const { zonas, erros: logs } = carregar('templo:Skyrim.esm');
+    restaurar();
+    assert.deepStrictEqual(zonas, []);
+    assert.match(logs[0], /nao e hexadecimal/);
+  });
+
+  it('arquivo vazio depois do ":" é recusado', () => {
+    const { zonas } = carregar('162e2:');
+    restaurar();
+    assert.deepStrictEqual(zonas, []);
+  });
+
+  it('uma zona malformada não derruba as válidas da mesma config', () => {
+    const zonas = safeZones.parseZones({
+      enabled: true,
+      zones: [
+        { id: 'quebrada', cellId: '0x162e2', blocks: ['combat'] },
+        { id: 'boa', cellId: '1a26f:Skyrim.esm', blocks: ['combat'] }
+      ]
+    });
+    restaurar();
+    assert.strictEqual(zonas.length, 1);
+    assert.strictEqual(zonas[0].id, 'boa');
+  });
+
+  it('a zona recusada não protege ninguém — é o efeito, não só o log', () => {
+    const zonas = safeZones.parseZones({
+      enabled: true,
+      zones: [{ id: 'templo', cellId: '0x162e2', blocks: ['combat'] }]
+    });
+    restaurar();
+    safeZones._setZones(zonas);
+    // O ator está exatamente na célula que a config queria proteger.
+    posicoes.set(NA_ZONA, { pos: [0, 0, 0], cellOrWorldDesc: '162e2:Skyrim.esm' });
+    assert.strictEqual(safeZones.zoneOf(NA_ZONA), null);
+  });
+});
+
 describe('safe-zones — a regra dos dois lados', () => {
   it('agressor protegido não pode agir sobre quem está fora', () => {
     // O abuso óbvio: ficar dentro da zona atirando pra fora.
@@ -134,6 +248,23 @@ describe('safe-zones — configuração inválida não vira comportamento surpre
   it('locationalData sem célula não casa com zona', () => {
     posicoes.set(0xff00000a, { pos: [0, 0, 0] });
     assert.strictEqual(safeZones.zoneOf(0xff00000a), null);
+  });
+
+  it('o exemplo em disco usa o formato FormDesc', () => {
+    // Este é o caminho pelo qual o defeito entraria: alguém copia o exemplo.
+    // Enquanto ele trouxe `"0x162e2"`, copiar o exemplo produzia uma zona que
+    // carregava, aparecia como ativa e nunca disparava.
+    const fs = require('fs');
+    const path = require('path');
+    const exemplo = JSON.parse(fs.readFileSync(
+      path.resolve(__dirname, '..', '..', 'config', 'safe-zones.example.json'), 'utf8'
+    ));
+    for (const z of exemplo.zones) {
+      assert.strictEqual(
+        safeZones.motivoDeCellIdInvalido(z.cellId), null,
+        `zona '${z.id}' do exemplo tem cellId invalido: ${z.cellId}`
+      );
+    }
   });
 
   it('as categorias válidas são as da action-policy', () => {

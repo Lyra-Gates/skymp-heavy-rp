@@ -66,9 +66,52 @@ Module._load = function (request, parent, isMain) {
 
 // Mock mínimo do runtime `mp` — só o suficiente pra executeRespawn/rescueTarget rodarem.
 const mpState = { values: new Map() };
+
+/**
+ * Emula `LocationalDataBinding::Set` do addon nativo.
+ *
+ * **[DOC]** (`SKYMP_UPSTREAM_REFERENCE.md` §8.4) a escrita exige os três campos
+ * `cellOrWorldDesc` (string), `pos` (array) e `rot` (array), lidos por
+ * `NapiHelper::ExtractString` / `ExtractNiPoint3` — que **lançam** quando o tipo
+ * não bate (`NapiHelper.h:96,218`).
+ *
+ * ─── Por que o mock precisa ser rigoroso aqui ────────────────────────────────
+ *
+ * Enquanto ele apenas guardava o que recebesse, o `executeRespawn` podia mandar
+ * `{ pos, worldOrCell, angleZ }` — que o servidor real rejeita — e todo teste
+ * deste arquivo continuava verde. É literalmente o ponto de abertura da
+ * `REVISAO_REALIDADE_COMPARTILHADA.md`: *"um mock aceita qualquer payload; o
+ * addon nativo não"*. Um mock permissivo não é neutro, é cobertura falsa.
+ *
+ * Com esta checagem, reverter o payload do `executeRespawn` para a forma antiga
+ * (mutação aplicada e executada) reprova **dois** testes — e o que importa é o
+ * segundo deles, "volta o personagem pra NORMAL", que não é sobre posição
+ * nenhuma. Ele reprova porque o `mp.set` lança antes e derruba as linhas
+ * seguintes junto, que é exatamente o efeito real do defeito em produção.
+ */
+function assertLocationalData(value) {
+  if (!value || typeof value !== 'object') {
+    throw new Error('ExtractObject: locationalData nao e objeto');
+  }
+  if (typeof value.cellOrWorldDesc !== 'string') {
+    throw new Error(
+      `ExtractString: 'cellOrWorldDesc' esperava string, veio ${typeof value.cellOrWorldDesc}. ` +
+      `Campos recebidos: ${Object.keys(value).join(', ')}`
+    );
+  }
+  for (const campo of ['pos', 'rot']) {
+    if (!Array.isArray(value[campo]) || value[campo].length !== 3) {
+      throw new Error(`ExtractNiPoint3: '${campo}' esperava array de 3 numeros`);
+    }
+  }
+}
+
 global.mp = {
   get: (actorId, prop) => mpState.values.get(`${actorId}:${prop}`) ?? null,
-  set: (actorId, prop, value) => mpState.values.set(`${actorId}:${prop}`, value),
+  set: (actorId, prop, value) => {
+    if (prop === 'locationalData') assertLocationalData(value);
+    mpState.values.set(`${actorId}:${prop}`, value);
+  },
   getDescFromId: (actorId) => `desc-${actorId}`,
   callPapyrusFunction: () => null
 };
@@ -193,6 +236,70 @@ describe('death-service', () => {
       characterState.set(VICTIM_CHARACTER_ID, STATES.DEAD, {});
       await deathService.executeRespawn(VICTIM_ACTOR_ID, VICTIM_CHARACTER_ID, 50);
       assert.strictEqual(characterState.get(VICTIM_CHARACTER_ID), STATES.NORMAL);
+    });
+
+    // ── O achado B da REVISAO_REALIDADE_COMPARTILHADA.md §6.3 ────────────────
+    //
+    // O payload era `{ pos, worldOrCell, angleZ }`. Nenhum desses três nomes
+    // existe no binding nativo: `cellOrWorldDesc` vinha `undefined`, que não é
+    // string, e o `mp.set` lançava — derrubando `_wasDead`, `characterState`,
+    // a notificação e o refresh do painel junto, tudo engolido pelo `catch`
+    // como um "Failed to respawn actor" genérico.
+
+    it('escreve locationalData na forma que o addon nativo aceita', async () => {
+      mpState.values.delete(`${VICTIM_ACTOR_ID}:locationalData`);
+      await deathService.executeRespawn(VICTIM_ACTOR_ID, VICTIM_CHARACTER_ID, 0);
+
+      const loc = mpState.values.get(`${VICTIM_ACTOR_ID}:locationalData`);
+      assert.ok(loc, 'o respawn precisa ter escrito locationalData — se lancou, nao escreveu');
+      assert.deepStrictEqual(
+        Object.keys(loc).sort(), ['cellOrWorldDesc', 'pos', 'rot'],
+        'os tres nomes sao exigencia do LocationalDataBinding, nao convencao nossa'
+      );
+      assert.strictEqual(typeof loc.cellOrWorldDesc, 'string');
+      assert.strictEqual(loc.rot.length, 3);
+      assert.strictEqual(loc.pos.length, 3);
+    });
+
+    it('a celula de respawn e um FormDesc, nao hexadecimal com 0x', () => {
+      const desc = deathService._respawnCellDesc();
+      assert.strictEqual(typeof desc, 'string');
+      assert.ok(
+        !/^0x/i.test(desc),
+        `'${desc}' comeca com 0x — FormDesc::FromString nao valida isso, so resolve para ` +
+        `outra faixa de FormID em silencio (§8.5)`
+      );
+    });
+
+    it('o fallback da celula esta no formato FormDesc', () => {
+      // O caminho derivado depende de `mp.getDescFromId`; o literal é a rede,
+      // e uma rede no formato errado não é rede.
+      const safeZones = require('./core/safe-zones');
+      assert.strictEqual(
+        safeZones.motivoDeCellIdInvalido(deathService.RESPAWN_CELL_FALLBACK), null,
+        `RESPAWN_CELL_FALLBACK invalido: ${deathService.RESPAWN_CELL_FALLBACK}`
+      );
+    });
+
+    it('deriva a celula por mp.getDescFromId quando disponivel', () => {
+      // Derivar sobrevive a mudança de load order; o literal não.
+      assert.strictEqual(
+        deathService._respawnCellDesc(), 'desc-90850',
+        'o mock devolve `desc-<id>`; se vier o literal, a derivacao nao esta acontecendo'
+      );
+    });
+
+    it('cai no literal quando mp.getDescFromId nao existe', () => {
+      const real = global.mp.getDescFromId;
+      delete global.mp.getDescFromId;
+      try {
+        assert.strictEqual(
+          deathService._respawnCellDesc(), deathService.RESPAWN_CELL_FALLBACK,
+          'o market-stalls-service ja trata getDescFromId como possivelmente ausente'
+        );
+      } finally {
+        global.mp.getDescFromId = real;
+      }
     });
   });
 
