@@ -25,6 +25,7 @@ const transactionService = require('./core/transaction-service');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 const rangeUtils = require('./core/range-utils');
 const hitEvents = require('./core/hit-events');
+const deathEvents = require('./core/death-events');
 // Este arquivo ja usava a forma de objeto antes do achado 2.13 (era um dos
 // dois que estavam certos). Passou a usar o helper pra que exista um lugar
 // so onde a forma do `self` e decidida — enquanto a construcao estava
@@ -126,7 +127,22 @@ function initDeathService() {
   //      por proximidade que o `logDeathContext` faz.
   //
   // `killerId` é `0` quando não há autor: queda, veneno, afogamento.
-  mp.onDeath = (actorId, killerId) => {
+  //
+  // ⚠️ Isto era `mp.onDeath = (...) => {...}` — atribuição direta, e portanto
+  // posse exclusiva do hook. Passou a ser uma assinatura em
+  // `core/death-events.js` em 08/08/2026, antes de existir um segundo
+  // consumidor, porque o segundo consumidor já está previsto: o
+  // `hunting-service` do `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.3 precisa do
+  // mesmo hook para um pipeline separado (§11.4). Com a atribuição direta, ele
+  // teria apagado esta linha em silêncio, e a morte de jogador pararia de ser
+  // detectada pelo caminho primário sem erro nenhum — o polling de 2 s abaixo
+  // disfarçaria com dois segundos de atraso.
+  //
+  // `handlePlayerDowned` já sai em O(1) quando o ator não é um personagem ativo
+  // (`getActiveCharacterData` devolve undefined), que é o requisito da §7.2:
+  // com fauna ativa este hook dispara constantemente, e o caminho de morte não
+  // pode tocar o banco antes de decidir que o assunto é dele.
+  deathEvents.subscribe('death-service', (actorId, killerId) => {
     try {
       handlePlayerDowned(actorId, killerId).catch(err =>
         console.error('[death-service] Falha ao processar queda (onDeath):', err.message)
@@ -134,7 +150,7 @@ function initDeathService() {
     } catch (err) {
       console.error('[death-service] Erro no hook onDeath:', err.message);
     }
-  };
+  });
 
   // ── Rede de segurança: o polling que existia antes ─────────────────────────
   //

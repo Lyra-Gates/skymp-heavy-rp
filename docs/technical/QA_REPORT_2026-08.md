@@ -24,7 +24,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 ### O que efetivamente roda hoje
 
-**Oito** módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
+**Dez** módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag`, `fauna-census`, `corpse-probe` (lab). Os dois últimos não são mecânica: são instrumentos de observação da Fase 0 para a questão de mobs hostis — ver [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md).
 
 > ⚠️ **Até 06/08/2026 as flags não ligavam nada** — o gamemode nunca carregou o próprio `.env` (2.16). O primeiro boot real do servidor aconteceu em 06/08/2026, com quatro módulos ativos e 33 comandos registrados.
 

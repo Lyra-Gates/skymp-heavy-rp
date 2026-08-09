@@ -42,7 +42,7 @@ Oito sistemas carregam hoje a mesma etiqueta: **confirmado por teste automatizad
 ### Fora desta lista, e por quê
 
 - **Marcas e árvore da Afinidade da Alma** existem e têm teste, mas nenhum caminho de jogo chega até elas — ver a nota ao fim de [9.4](#94-soul-service--a-alma-existe-mas-ninguém-a-viu-chegar).
-- **`npc-cleaner`** está inerte por construção (`blockedBaseDescs` vazia = não remove nada), então não há o que observar. A consequência disso — a fauna vanilla provavelmente já está solta e ativa — é o assunto do [`HOSTILE_MOB_ACTIVATION_DECISION.md`](HOSTILE_MOB_ACTIVATION_DECISION.md), e o censo que ela pede **não é esta Fase 0**.
+- **`npc-cleaner`** está inerte por construção (`blockedBaseDescs` vazia = não remove nada, e `skymp/config/npc-policy.json` sequer existe), então não há o que observar. A consequência disso — a fauna vanilla provavelmente já está solta e ativa — é o assunto do [`HOSTILE_MOB_ACTIVATION_DECISION.md`](HOSTILE_MOB_ACTIVATION_DECISION.md), e o censo que ela pede **não é esta Fase 0**: os instrumentos existem desde 08/08 (`/censofauna` e `/sondacadaver`, desligados por padrão) e têm sessão e registro próprios em [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md). Podem sair na mesma janela; a conclusão é de outra natureza — lá não há "passou" nem "falhou", só o que existe no mundo.
 
 ---
 

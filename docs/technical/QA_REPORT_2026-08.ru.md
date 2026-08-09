@@ -26,7 +26,7 @@
 
 > ⚠️ **До 06.08.2026 флаги ничего не включали** — гейммод никогда не загружал собственный `.env` (2.16). Первый реальный запуск сервера состоялся 06.08.2026: четыре активных модуля и 33 зарегистрированные команды.
 
-**Восемь** модулей зарегистрировано в `core/module-registry.js`, все за флагом `ENABLE_*` и **все выключены по умолчанию**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
+**Десять** модулей зарегистрировано в `core/module-registry.js`, все за флагом `ENABLE_*` и **все выключены по умолчанию**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag`, `fauna-census`, `corpse-probe` (lab). Последние два — не механика, а инструменты наблюдения Фазы 0 для вопроса о враждебных мобах: см. [`FAUNA_CENSUS_PROTOCOL.md`](FAUNA_CENSUS_PROTOCOL.md).
 
 Семь сервисов лежат на диске и **никогда не регистрируются** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Ещё четыре удалены 06.08.2026 (`economy-service`, `justice`, `faction`, `survival`) за дублирование активной системы или небезопасность — см. `PARKED_SERVICES_DECISION.md`. Те, что остались и трогали золото, переведены на `core/transaction-service`.
 

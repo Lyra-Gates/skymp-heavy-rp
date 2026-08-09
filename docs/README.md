@@ -46,7 +46,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 |---|---|
 | [PARKED_SERVICES_DECISION.md](technical/PARKED_SERVICES_DECISION.md) | Quais serviços estacionados foram apagados e por quê — duas rodadas de avaliação, e o critério que a primeira deixou escapar (§7). |
 | [NPC_POLICY_DECISION.md](technical/NPC_POLICY_DECISION.md) | Como lidar com NPCs vanilla num servidor Heavy RP. Deixou seis perguntas abertas na §5. |
-| [HOSTILE_MOB_ACTIVATION_DECISION.md](technical/HOSTILE_MOB_ACTIVATION_DECISION.md) | Responde a terceira delas — criaturas hostis ficam ativas —, e derruba a premissa de que havia algo a "ativar": o `npc-cleaner` é inerte, então o mundo provavelmente já está cheio de lobos e ursos. Análise de 15 pontos, **nada implementado**. |
+| [HOSTILE_MOB_ACTIVATION_DECISION.md](technical/HOSTILE_MOB_ACTIVATION_DECISION.md) | Responde a terceira delas — criaturas hostis ficam ativas —, e derruba a premissa de que havia algo a "ativar": o `npc-cleaner` é inerte, então o mundo provavelmente já está cheio de lobos e ursos. Análise de 15 pontos. **A mecânica continua sem uma linha de código**; os dois instrumentos que a decidem existem desde 08/08 — ver [FAUNA_CENSUS_PROTOCOL.md](technical/FAUNA_CENSUS_PROTOCOL.md). |
 | [NAMETAG_IDENTITY_SYSTEM.md](technical/NAMETAG_IDENTITY_SYSTEM.md) | Por que o nome exibido depende de quem está olhando. |
 | [MARKET_STALL_VISUAL_ASSET_PLAN.md](technical/MARKET_STALL_VISUAL_ASSET_PLAN.md) | Assets visuais das barracas, com análise de licença mod a mod. |
 
@@ -69,6 +69,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md](technical/HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md) | Backlog de sistemas de gameplay. |
 | [GUIA_SESSAO_DE_TESTE.md](technical/GUIA_SESSAO_DE_TESTE.md) | **Como chegar até o roteiro:** ligar os quatro serviços, conferir as portas, e o guia copiável para mandar aos testadores. A Parte 2 é escrita para quem nunca viu o repositório. |
 | [FASE_0_ROTEIRO.md](technical/FASE_0_ROTEIRO.md) | **O roteiro do teste in-game — o único bloqueio real do projeto.** Passo a passo, o que observar, o que significa falhar, e o registro pra preencher enquanto testa. Comece pelo guia acima. |
+| [FAUNA_CENSUS_PROTOCOL.md](technical/FAUNA_CENSUS_PROTOCOL.md) | Sessão separada do roteiro, e de outra natureza: **não há "passou" nem "falhou", só o que existe no mundo.** Como rodar o censo de fauna e a prova do cadáver — as duas perguntas que decidem se a mecânica de caça existe. |
 | [GOVERNANCE_MARKET_STALLS_TEST_PLAN.md](technical/GOVERNANCE_MARKET_STALLS_TEST_PLAN.md) | Plano em camadas de 13/07, restrito a governança e barracas. Superado pelo roteiro acima. |
 
 ---

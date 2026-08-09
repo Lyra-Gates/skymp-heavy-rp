@@ -56,6 +56,8 @@ const deathService  = require(path.join(gamemodeDir, 'death-service'));
 const voipService   = require(path.join(gamemodeDir, 'voip-service'));
 const soulService   = require(path.join(gamemodeDir, 'soul-service'));
 const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
+const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
+const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -194,6 +196,43 @@ moduleRegistry.register({
   },
   shutdown: async () => {
     nametagService.shutdownNametagService();
+  }
+});
+
+// LAB: Instrumentos de observação da Fase 0 para a questão de mobs hostis.
+//
+// Não são mecânica e não viram mecânica. São as Peças 1 e 2 da §16 do
+// `docs/technical/HOSTILE_MOB_ACTIVATION_DECISION.md`, cuja ordem é
+// deliberadamente anti-intuitiva: **as duas primeiras peças não são a feature**,
+// são as perguntas cuja resposta decide se a feature existe. Protocolo de uso em
+// `docs/technical/FAUNA_CENSUS_PROTOCOL.md`.
+//
+// Ficam desligados por padrão como todo lab, e devem voltar a `false` ao fim da
+// sessão de observação — não há motivo para um servidor em operação carregar um
+// comando que escreve no inventário de um ator.
+moduleRegistry.register({
+  id: 'fauna-census',
+  enabledBy: 'ENABLE_FAUNA_CENSUS',
+  phase: 'lab',
+  dependencies: [],
+  commands: faunaCensus.commandDefs(),
+  initialize: async () => {
+    faunaCensus.initFaunaCensus();
+  }
+});
+
+// ⚠️ Este ESCREVE: esvazia o inventário do ator sondado para provar que a
+// escrita funciona, e restaura em seguida. Recusa qualquer ator de jogador, por
+// duas checagens independentes. Flag própria, separada do censo de propósito —
+// ligar a observação inofensiva não pode ligar a que mexe em inventário.
+moduleRegistry.register({
+  id: 'corpse-probe',
+  enabledBy: 'ENABLE_CORPSE_PROBE',
+  phase: 'lab',
+  dependencies: [],
+  commands: corpseProbe.commandDefs(),
+  initialize: async () => {
+    corpseProbe.initCorpseProbe();
   }
 });
 
