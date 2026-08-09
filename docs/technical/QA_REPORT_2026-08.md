@@ -14,7 +14,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 362/362 ✅ + 13/13 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
+| `skymp/gamemode` | 406/406 ✅ + 13/13 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
 | `apps/bot-discord` | 40/40 ✅ | ✅ | **Funcional.** Sync de cargo, canais de voz temporários e, desde 07/08/2026, o log de moderação que a `ARCHITECTURE.md` 1.3 registrava como intenção nunca implementada. |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | 24/24 ✅ (paridade) | ✅ | **Estava quebrado ponta a ponta** (ver 2.1) e sem teste nenhum. A lógica de paridade de modpack foi extraída pra `electron/parity.mjs` e testada — achou o buraco do plugin extra (2.15). O resto do `main.ts` depende de Electron. |

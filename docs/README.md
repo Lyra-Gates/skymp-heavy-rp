@@ -67,7 +67,8 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | Documento | Sobre |
 |---|---|
 | [HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md](technical/HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md) | Backlog de sistemas de gameplay. |
-| [FASE_0_ROTEIRO.md](technical/FASE_0_ROTEIRO.md) | **O roteiro do teste in-game — o único bloqueio real do projeto.** Passo a passo, o que observar, o que significa falhar, e o registro pra preencher enquanto testa. |
+| [GUIA_SESSAO_DE_TESTE.md](technical/GUIA_SESSAO_DE_TESTE.md) | **Como chegar até o roteiro:** ligar os quatro serviços, conferir as portas, e o guia copiável para mandar aos testadores. A Parte 2 é escrita para quem nunca viu o repositório. |
+| [FASE_0_ROTEIRO.md](technical/FASE_0_ROTEIRO.md) | **O roteiro do teste in-game — o único bloqueio real do projeto.** Passo a passo, o que observar, o que significa falhar, e o registro pra preencher enquanto testa. Comece pelo guia acima. |
 | [GOVERNANCE_MARKET_STALLS_TEST_PLAN.md](technical/GOVERNANCE_MARKET_STALLS_TEST_PLAN.md) | Plano em camadas de 13/07, restrito a governança e barracas. Superado pelo roteiro acima. |
 
 ---
