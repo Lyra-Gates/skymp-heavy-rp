@@ -14,7 +14,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 | Componente | Pruebas | Instalable | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 362/362 ✅ + 11/11 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
+| `skymp/gamemode` | 406/406 ✅ + 13/13 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
 | `apps/bot-discord` | 40/40 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
 | `apps/launcher` | 24/24 ✅ (paridad) | ✅ | **Estaba roto de punta a punta** (ver 2.1) y sin ninguna prueba. La lógica de paridad del modpack se extrajo a `electron/parity.mjs` y se probó — encontró el agujero del plugin extra (2.15). El resto de `main.ts` necesita Electron. |
@@ -310,7 +310,7 @@ Salió del estudio de integración con Chancelaria Real, un sistema en producci�
 ### Qué no hacer
 
 - **Migrar los manifiestos al formato Nexus Collections.** Ver `LAUNCHER_DISTRIBUTION.md` §5 — Collections no garantiza la paridad de load order, que es el motivo por el que los manifiestos existen.
-- **Perseguir el VOIP nativo antes que el resto.** Depende de un parche de cliente que no existe en upstream (`VOICE_CLIENT_PATCH.md`) y ya hay una alternativa funcionando vía canales de voz de Discord.
+- **Perseguir el VOIP nativo antes que el resto.** Sigue valiendo — **pero el motivo cambió el 07/08/2026 y el anterior ya no vale.** Ya no depende de un parche de cliente: la captura salió del navegador hacia un helper nativo, que **compiló y capturó audio real** (`VOICE_NATIVE_HELPER.md` §8.3 y §8.4). Lo que queda es que nadie escuchó el audio con el oído (§8.2), que el PCM crudo cuesta ~1 Mbit/s de subida por hablante — banco de pruebas, no producción —, y que la Fase 0 sigue siendo el bloqueo real. Los canales de voz de Discord siguen siendo la solución de la Alfa.
 - **Reactivar un módulo PARKED sin pasar por `module-registry`.** El registro es lo que garantiza la flag, las dependencias y la limpieza de comandos; saltárselo devuelve el proyecto al estado que generó buena parte de los bugs ya corregidos.
 
 ---
