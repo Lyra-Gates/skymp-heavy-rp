@@ -237,6 +237,12 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Corrigido
 
+- **As três traduções do `SKYMP_UPSTREAM_REFERENCE` afirmavam o contrário do que o código diz — e a §9 inteira nunca chegou nelas.** A base cresceu 489 linhas no commit anterior desta mesma branch; `.en`, `.es` e `.ru` ficaram paradas na §8. O resultado não era só documento curto: **a §4 das três dizia que o dado de OnHit "está no C++, não na nossa camada"**, exatamente a frase que a §9.1 derrubou lendo a cadeia inteira no upstream. Quem lesse o projeto em inglês, espanhol ou russo tomaria a decisão errada sobre coleta de golpe, com a fonte parecendo atual.
+
+  **É a mesma classe de defeito que este documento existe para evitar** — informação que envelhece em silêncio, sem erro, sem aviso, e continua parecendo verdade. Ela reaparece aqui num arquivo cujo cabeçalho fala de disciplina de procedência, o que torna o caso mais instrutivo, não menos.
+
+  As três agora têm a §4 corrigida com a mesma ressalva `⚠️` da base (incluindo a âncora para a §9.1 no idioma certo), a §9 completa — 9.1 a 9.8, com as tabelas de cadeia, as relevâncias e os limites — e o rodapé de Fontes com os arquivos primários e as páginas do DeepWiki. Fica em 942 (`.en`), 944 (`.es`) e 946 (`.ru`) linhas contra as 926 da base, diferença que é só quebra de linha. **Nenhum número, caminho de arquivo, linha citada ou marcação `[DOC]`/`[DEEPWIKI]` foi traduzido ou reinterpretado** — procedência não sobrevive a paráfrase.
+
 - **O aviso de voz indisponível existia e era apagado meio segundo depois.** `initMicrophone()` já tratava `NotAllowedError` com a mensagem certa — `VOZ INDISPONÍVEL NESTE CLIENT — use o Discord` — e em seguida fechava o WebSocket de sinalização, porque sem microfone não faz sentido manter a conexão pela metade. Só que `ws.onclose` chamava `setStatus('error', 'VOZ DESCONECTADA')` sem condição alguma, e o evento `close` chega no tick seguinte: o chip acabava sempre no texto genérico. O jogador lia "desconectada", que é a consequência, e concluía instabilidade de servidor — o diagnóstico exatamente oposto ao real, que é uma limitação conhecida do client (`docs/technical/VOICE_CLIENT_PATCH.md`).
 
   Mesmo defeito no `auth_failed`, que também fecha o socket depois de escrever o motivo. Um `state.voiceFatal` marca que já existe um motivo terminal na tela e o `onclose`/`onerror` param de sobrescrevê-lo; `connectVoip` limpa a marca, porque um `/voz` novo é uma tentativa nova.

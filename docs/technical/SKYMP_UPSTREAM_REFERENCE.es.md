@@ -222,7 +222,16 @@ bool isPowerAttack;   bool isSneakAttack;  uint32_t projectile;
 uint32_t source;      uint32_t target;
 ```
 
-Lo que **no** existe es su exposición al gamemode JS — la issue #1338 lo pidió y fue cerrada como won't fix. El dato está en el C++, no en nuestra capa.
+Lo que **no** existe es un hook dedicado `mp.onHit` — la issue #1338 lo pidió y
+fue cerrada como won't fix.
+
+> ⚠️ **Corregido el 09/08/2026, y la corrección importa.** «No existe
+> `mp.onHit`» es verdad; **«el dato no llega al gamemode JS» es falso.** Llega,
+> con el agresor ya resuelto por el servidor, vía `mp["onPapyrusEvent:OnHit"]`.
+> La cadena entera fue leída en el código primario — ver
+> **[§9.1](#91-el-hallazgo-que-cambia-una-decisión-el-onhit-nativo-sí-llega-al-gamemode)**.
+> Las dos salidas listadas abajo siguen siendo válidas, pero **dejaron de ser las
+> dos únicas**, y la tercera es más barata que ambas.
 
 Dos salidas, ambas viables:
 1. **`makeEventSource` en el cliente**, escuchando el evento de impacto de Skyrim Platform y mandando `{aggressor, target}` al servidor. Barato, y mejor que la proximidad que usamos hoy — pero sigue siendo el cliente hablando.
@@ -433,6 +442,481 @@ reenvía una corrección. Los eventos custom llegan por `OnCustomEvent` con
 
 ---
 
+## 9. Barrido sistemático del DeepWiki (09/08/2026)
+
+Hasta aquí, cada vez que una decisión de este proyecto chocó con «cómo lo hace
+SkyMP por debajo», la respuesta vino de una búsqueda ad-hoc — a veces
+encontrando, a veces no, siempre gastando una ronda. Esta sección existe para que
+la próxima pregunta ya tenga respuesta escrita.
+
+La [wiki técnica del DeepWiki](https://deepwiki.com/skyrim-multiplayer/skymp)
+tiene ~40 páginas generadas a partir del código fuente real. **Nadie de este
+proyecto la había leído entera.** Este barrido leyó las páginas donde vive la
+decisión de proyecto, descartó lo que trata de compilar el upstream, y registró
+solo lo que toca algo que ya existe o está abierto aquí.
+
+### Decisión de forma: extiende, no reorganiza
+
+**Registrado por escrito porque la alternativa fue considerada y rechazada.** El
+volumen nuevo cabría mejor en una reorganización por tema del documento entero —
+pero las secciones 1 a 8 son **citadas por número desde fuera de aquí**: el Anexo
+A.5 de `CONSTITUICAO.md` apunta a §4, `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.5
+apunta a §2.5, y el §15 de aquel documento también. Renumerar rompería esas
+referencias en silencio, que es exactamente la clase de error que este documento
+existe para evitar. Entonces: **§9 crece por dentro, organizada por tema, con
+índice propio.** No hay un segundo documento competidor.
+
+### Disciplina de procedencia (la misma de §8, reforzada)
+
+- **`[DOC]`** — abrí el archivo primario en el upstream y lo leí. Es hecho sobre
+  `main`.
+- **`[DEEPWIKI]`** — viene solo de la wiki, **no verificado contra el código**. La
+  wiki es generada por IA a partir del código real: es mejor que un foro y mejor
+  que una suposición, pero **simplifica y a veces se contradice** — este barrido
+  pilló a la wiki contradiciéndose sobre renderizado de texto (§9.6) y
+  discrepando de lo que ya teníamos registrado sobre properties privadas (§9.5).
+  Cuando la wiki cita `archivo:línea`, la ruta va incluida: es el atajo para quien
+  vaya a verificar.
+
+**No verifiqué las ~40 páginas contra el código fuente** — eso haría inviable la
+tarea. Verifiqué línea a línea **un** hallazgo: el de §9.1, porque cambia una
+decisión que ya está tomada y escrita.
+
+### Índice de la §9
+
+| | Tema |
+|---|---|
+| [9.1](#91-el-hallazgo-que-cambia-una-decisión-el-onhit-nativo-sí-llega-al-gamemode) | 🔴 **El `OnHit` nativo llega al gamemode** — `[DOC]`, alta relevancia |
+| [9.2](#92-arquitectura-de-servidor-loop-arranque-y-configuración) | Arquitectura de servidor: loop, arranque y configuración |
+| [9.3](#93-persistencia-mpchangeform-y-el-cadáver) | Persistencia, `MpChangeForm` y el cadáver |
+| [9.4](#94-sincronización-qué-manda-el-cliente-cuándo-y-con-qué-garantía) | Sincronización: qué manda el cliente, cuándo y con qué garantía |
+| [9.5](#95-sistemas-de-juego-properties-comandos-y-qué-se-puede-robar-del-sweetpie) | Sistemas de juego: properties, comandos, SweetPie |
+| [9.6](#96-cliente-renderizado-de-entidad-y-de-texto-el-caso-de-la-nametag) | Cliente: renderizado de entidad y de texto (nametag) |
+| [9.7](#97-glosario-de-términos-del-upstream) | Glosario de términos del upstream |
+| [9.8](#98-lo-que-esto-no-cubre) | **Lo que esto no cubre** |
+
+---
+
+### 9.1 El hallazgo que cambia una decisión: el `OnHit` nativo **sí** llega al gamemode
+
+**`[DOC]`** — cadena entera leída en el código primario del upstream, `main`, el
+09/08/2026. Es el único hallazgo de este barrido verificado línea a línea, y fue
+verificado porque contradice algo que este repositorio ya había escrito.
+
+**Lo que este proyecto creía** (§4 de este documento, y la cabecera de
+`core/hit-events.js`): el paquete OnHit existe en el C++, pero **no se expone al
+gamemode JS**; la issue #1338 lo pidió y fue cerrada como won't fix; luego las
+únicas salidas son `makeEventSource` en el cliente (lo que hacemos) o
+`IDamageFormula` en C++.
+
+**Lo que dice el código:** no existe `mp.onHit`. **Pero el evento llega igual**,
+por otro nombre, con el agresor **ya resuelto y validado por el servidor**:
+
+```js
+mp["onPapyrusEvent:OnHit"] = (
+  targetFormId,   // number — FormID de quien recibió el golpe
+  akAggressor,    // { type: 'form', desc: '...' }  ← quién golpeó, resuelto por el servidor
+  akSource,       // { type: 'espm', desc: '...' }  ← arma/hechizo
+  akProjectile,   // null cuando no hay proyectil
+  abPowerAttack, abSneakAttack, abBashAttack, abHitBlocked  // booleanos
+) => { /* ... */ };
+```
+
+**La cadena, archivo por archivo:**
+
+| # | Dónde | Qué pasa |
+|---|---|---|
+| 1 | `ActionListener.cpp:1006` | `ActionListener::OnHit` recibe el `HitMessage` del cliente |
+| 2 | ídem, ≈L1019-1037 | **El servidor traduce `0x14` solo** — ver abajo |
+| 3 | ídem, ≈L1043-1080 | Valida: el agresor es del usuario (o el *hoster* registrado), misma celda/worldspace, distancia ≤ 4096 unidades (dispensada en disparo de arco/ballesta) |
+| 4 | ídem, ≈L1080+ | Un agresor muerto no puede atacar; alcance de arma y cadencia (`CanHit`) |
+| 5 | `ActionListener.cpp:1215` y `:1256` | `OnWeaponHit` y `OnSpellHit` llaman a `SendPapyrusOnHitEvent` |
+| 6 | `ActionListener.cpp:1410-1425` | Monta 7 `VarValue` y llama a `target->SendPapyrusEvent("OnHit", …)` |
+| 7 | `MpForm.cpp:34-40` | `SendPapyrusEvent` construye un `PapyrusEventEvent` y llama `.Fire(parent)` |
+| 8 | `gamemode_events/PapyrusEventEvent.cpp:18-19` | El nombre del evento pasa a ser `"onPapyrusEvent:" + "OnHit"` |
+| 9 | `gamemode_events/GameModeEvent.cpp` | `Fire()` recorre los listeners llamando `OnMpApiEvent` |
+| 10 | `addon/ScampServerListener.cpp` (≈L41-129) | Busca `mp["onPapyrusEvent:OnHit"]`; si es función, la llama con los args JSON **+** los 7 args Papyrus convertidos |
+| 11 | `addon/PapyrusUtils.h:14-49` | Objeto Papyrus → `{ type: 'form' \| 'espm', desc: '<FormDesc>' }` |
+
+**Tres consecuencias directas para `core/hit-events.js`:**
+
+1. **El `0x14` es problema del servidor, no nuestro.** `ActionListener.cpp` hace
+   literalmente `if (hitData.aggressor == 0x14) { aggressor = myActor;
+   hitData.aggressor = aggressor->GetFormId(); }`, y lo mismo para `target`.
+   Nuestro `hit-events.js` mantiene `const JOGADOR_LOCAL = 0x14` y traduce por su
+   cuenta porque el snippet de cliente reporta en crudo — por este camino la
+   traducción ya viene hecha y correcta.
+2. **El agresor llega en el formato que ya usamos.**
+   `{ type: 'form', desc: … }` es exactamente el `FormDesc` de `core/papyrus.js`
+   (`actorRef`/`baseRef`) y de §8.5. Nada nuevo que aprender, nada de hexadecimal
+   que adivinar.
+3. **Es evidencia *validada por el servidor*, no relato crudo del cliente.** Esto
+   no borra la regla de `MODS_AND_GAMEMODE_CONTRACT.md` — el origen sigue siendo
+   un mensaje `MsgType::OnHit` que el cliente decidió mandar —, pero **es un
+   escalón por encima** de lo que tenemos: hoy aceptamos lo que diga el snippet;
+   por allí, el servidor ya descartó golpe de actor muerto, de celda distinta,
+   fuera de alcance y fuera de cadencia **antes** de contárnoslo.
+
+**Los límites, dichos antes de que alguien se entusiasme:**
+
+- **Bloquear no impide el daño.** Devolver `false` solo impide el
+  `OnFireSuccess` — es decir, el despacho a la VM Papyrus.
+  `SendPapyrusOnHitEvent` **descarta** el retorno de `Fire()`, y el cálculo de
+  daño corre justo después, dentro de `OnWeaponHit`/`OnSpellHit`. **Esto es
+  observación, no enforcement.**
+- **El evento es del objetivo.** Dispara en el form que *recibió* el golpe. Si el
+  objetivo no es actor, el daño se salta pero el evento dispara igual.
+- **Sigue siendo `[DOC]` de upstream, no ejercitado aquí.** Nada de esto corrió
+  en este servidor — como todo el resto, depende de alguien conectado (Fase 0).
+
+> **Encaminamiento — no es para implementar ahora.** Esto es hallazgo, y el lugar
+> de decidir es la revisión de realidad compartida
+> (`PROMPT_REVISAR_REALIDADE_COMPARTILHADA.md`). Lo que queda registrado es que
+> **existe un camino de recolección de golpe que hoy no estamos usando**, más
+> barato que el `IDamageFormula` en C++ y más confiable que el `makeEventSource`
+> actual — y que la §4 de este documento estaba parcialmente equivocada sobre
+> esto desde que fue escrita.
+
+---
+
+### 9.2 Arquitectura de servidor: loop, arranque y configuración
+
+**[DEEPWIKI]** ([2.3 PartOne y game loop](https://deepwiki.com/skyrim-multiplayer/skymp/2.3-partone-and-game-loop))
+`PartOne::Tick()` (`PartOne.cpp:146-151`) hace tres cosas en orden:
+`TickPacketHistoryPlaybacks()`, `TickDeferredMessages()` (mensajes encolados en
+lote) y `WorldState::Tick()` (timers, promises, ciclo de vida de entidad).
+
+**[DEEPWIKI]** ([2.1 TypeScript Orchestration](https://deepwiki.com/skyrim-multiplayer/skymp/2.1-typescript-server-orchestration))
+Quien llama a ese tick es la capa TS: un bucle infinito llamando `server.tick()`
+**cada 1 ms** (`skymp5-server/ts/index.ts:222-235`).
+
+> **Relevancia.** El Anexo A.5 de la Constitución presupuesta el frame del
+> servidor contra «tres servicios con polling de 2 s». Este es el número que
+> faltaba del otro lado de la cuenta: el bucle base es de 1 ms, y **todo
+> `setInterval` nuestro comparte el mismo proceso Node con él.** Refuerza — no
+> debilita — la regla que `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.1 ya había
+> escrito: *activar mobs hostiles no puede añadir ningún timer nuevo.*
+
+**[DEEPWIKI]** (misma página) `PartOne::SetUserActor` (`PartOne.cpp:175-221`)
+desinscribe al actor de los vecinos, lo saca del grid, lo graba en
+`serverState.actorsMap` y **llama a `RespawnWithDelay()` si el actor está
+muerto**. Confirma por otro camino lo que §8.6 ya registró como `[DOC]`: el
+respawn automático es el default, y quien no lo quiera tiene que bloquear.
+
+**[DEEPWIKI]** ([2.1](https://deepwiki.com/skyrim-multiplayer/skymp/2.1-typescript-server-orchestration))
+Arranque y hot-reload: el gamemode se **copia a un archivo temporal** antes de
+cargar, para escapar de la caché de módulos de Node (`ts/index.ts:38-61`);
+`globalThis.mp = server` es lo que hace que `mp` exista (`ts/index.ts:82`); y
+`server.clear()` limpia el estado del gamemode antes de recargar
+(`ts/index.ts:126`).
+
+> **Relevancia.** `server.clear()` en un hot-reload significa que **todo estado
+> que nuestros servicios guardan en memoria desaparece sin aviso**. Es argumento
+> a favor de la disciplina que ya practicamos (techo de rendimiento por consulta
+> al ledger, nunca por contador en memoria —
+> `HOSTILE_MOB_ACTIVATION_DECISION.md` §4.2) y vale como aviso para quien escriba
+> el próximo servicio.
+
+**[DEEPWIKI]** (misma página) `Settings` funde `server-settings.json` con **JSON
+traído de repositorios de GitHub** vía `additionalServerSettings` (campos `type`,
+`repo`, `ref`, `pathRegex`, `token`), con caché en `server-settings-dump.json` y
+verificación SHA512 (`ts/settings.ts:134-311`).
+
+> **Relevancia.** Es un camino por el cual **configuración de producción puede
+> venir de un repositorio de terceros**. No lo usamos, y vale saber que existe
+> antes de que alguien copie un `server-settings.json` de ejemplo que lo traiga
+> encendido.
+
+---
+
+### 9.3 Persistencia, `MpChangeForm` y el cadáver
+
+**[DEEPWIKI]** ([2.5.1 Database and Persistence](https://deepwiki.com/skyrim-multiplayer/skymp/2.5.1-database-and-persistence))
+Cuatro drivers, y uno de ellos no estaba en nuestra §3:
+
+| Driver | Qué hace | Fuente citada por la wiki |
+|---|---|---|
+| `MongoDatabase` | Colección `changeForms`, bulk write, claves restringidas se vuelven hash SHA-256 | `database_drivers/MongoDatabase.cpp:33,72-75,87-107,143-228` |
+| `FileDatabase` | Un JSON por `MpChangeForm`, escritura atómica vía `rename` | `database_drivers/FileDatabase.cpp:37-55` |
+| `ZipDatabase` | Lo mismo dentro de un `.zip` | `database_drivers/ZipDatabase.cpp:40-63` |
+| **`MigrationDatabase`** | **Migra entre drivers**, en lotes de 1000 | `database_drivers/MigrationDatabase.cpp:94-117` |
+
+**[DEEPWIKI]** La escritura es asíncrona en hilo propio (`SaverThreadMain`),
+juntando varios `MpChangeForm` en un `UpsertTask` por lote
+(`viet/include/save_storages/AsyncSaveStorage.h:25-61,230-234,248-250`).
+
+> **Relevancia 1 — el `MigrationDatabase` responde una pregunta que aún no
+> habíamos hecho.** La §3 registró que `file` es el driver de prueba y `mongodb`
+> el de producción, sin decir cómo se va de uno al otro. Existe camino hecho.
+>
+> **Relevancia 2 — la persistencia es asíncrona y en lote.** Ninguna escritura de
+> estado de mundo es síncrona. Para nosotros eso es bueno (no bloquea el frame) y
+> es aviso (lo que el `mp.set` acaba de cambiar **aún no está en disco**; un
+> crash entre el `set` y el flush pierde el cambio). El ledger en MySQL, que es
+> nuestro y síncrono, sigue siendo la fuente de la verdad para patrimonio — que
+> es exactamente la razón de que exista la regla «patrimonio por el
+> `transaction-service`».
+
+**[DEEPWIKI]** ([2.4.1 MpActor y MpObjectReference](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.1-mpactor-and-mpobjectreference))
+Campos de `MpChangeForm` con línea citada — todos en
+`server_guest_lib/MpChangeForms.h`:
+
+| Campo | Línea | Qué guarda |
+|---|---|---|
+| `isOpen` | 76 | contenedor/puerta abierto |
+| `isDisabled` | 79 | «escondido del mundo» |
+| `isDead` | 85 | estado de muerte |
+| `equipment` | 94 | ítems y magias equipados |
+| `actorValues` | 98 | porcentajes de Health/Magicka/Stamina |
+| `templateChain` | 105 | (ya usado en `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.4b) |
+| `spawnDelay` | 109 | (ya `[DOC]` en §8.6: default 25 s) |
+
+**[DEEPWIKI]** (misma página) Inventario y contenedor: `AddItem()`,
+`RemoveItem()`, `PutItem()` (contenedor→actor) y `TakeItem()`
+(actor→contenedor) están en `MpObjectReference.cpp:815-952`. `Activate()` — que
+dispara el `ActivateEvent` del gamemode y el `OnActivate` del Papyrus — en
+`MpObjectReference.cpp:438-503`. `Delete()` en `:954-959`.
+
+> **Relevancia — es la pregunta del cadáver, y la wiki no la cierra.**
+> `HOSTILE_MOB_ACTIVATION_DECISION.md` §10 y §16 dicen que la feature entera
+> depende de que el servidor consiga controlar el inventario de un cadáver. Lo
+> que esta lectura añade: **el inventario es campo de `MpChangeForm`**, o sea
+> estado *del servidor*, persistido, con `PutItem`/`TakeItem` pasando por el
+> `ActionListener` — lo que apunta a «sí, se puede». Lo que **no** da es el
+> comportamiento del saqueo de cadáver vanilla, que es el caso específico. La
+> página `2.4.1` menciona `DeathStateContainerMessage` pero **no detalla la
+> resolución de death item**, y no abrí el código. **La Pieza 2
+> (`corpse-probe.js`) sigue siendo lo que responde.** Esto es indicio a favor, no
+> veredicto.
+
+---
+
+### 9.4 Sincronización: qué manda el cliente, cuándo y con qué garantía
+
+**[DEEPWIKI]** ([3.2.3 Input Capture and State Synchronization](https://deepwiki.com/skyrim-multiplayer/skymp/3.2.3-input-capture-and-state-synchronization))
+Los números que nadie aquí tenía:
+
+| Qué | Cadencia | Fiabilidad | Fuente citada |
+|---|---|---|---|
+| `UpdateMovement` | **~130 ms por actor** | UNRELIABLE | `sendInputsService.ts:120-135` |
+| `ChangeValues` (HP/MP/SP) | **solo si cambió**; sin cambio, 2000 ms | UNRELIABLE | `sendInputsService.ts:137-196` |
+| `OnHit` | por evento | **RELIABLE** | `hitService.ts:15-69` |
+| `SpellCast` | por evento | **RELIABLE** | — |
+
+Detalle del `ChangeValues`: retrasa 500 ms durante el conjuro (**excepto cuando
+`health = 0`**) y se suprime mientras el servicio de muerte del cliente está
+ocupado.
+
+> **Relevancia 1 — explica el techo de precisión del `death-service`.** El HP que
+> el servidor lee llega, en el mejor caso, cuando el cliente decide que cambió;
+> en ausencia de cambio, de 2 en 2 segundos. **Nuestro polling de 2 s estaba
+> leyendo un valor que también se actualiza cada ~2 s** — o sea, el retraso real
+> era el doble de lo que suponíamos. Es un argumento más para el camino de evento
+> (`mp.onDeath`, ya adoptado vía `core/death-events.js`) contra el de polling.
+>
+> **Relevancia 2 — la excepción del `health = 0` es diseño a favor.** El upstream
+> trató la muerte como el caso que no puede retrasarse. Nuestra arquitectura fue
+> hacia el mismo lado por cuenta propia.
+
+**[DEEPWIKI]** (misma página) El `HitService` del cliente **ya filtra**: descarta
+golpe en objeto estático y solo acepta atacante que sea el jugador local o un NPC
+*hospedado* por él.
+
+> **Relevancia — nuestro `hit-events.js` reimplementa parte de esto.** El snippet
+> que inyectamos por `makeEventSource` hace su propia captura de `hit`. El
+> cliente nativo ya captura, filtra y manda como RELIABLE — y lo que manda es
+> exactamente lo que la §9.1 muestra llegando al gamemode. **Estamos recolectando
+> en paralelo a un canal que ya existe, ya está filtrado y ya está validado en el
+> servidor.**
+
+**[DEEPWIKI]** ([3.2 Client Synchronization](https://deepwiki.com/skyrim-multiplayer/skymp/3.2-client-synchronization))
+*Hosting*: el cliente mantiene `storage['hosted']` con los IDs remotos que
+controla localmente — así es como un jugador «hospeda» el movimiento de un NPC
+(`remoteServer.ts:133-155`). Del lado del servidor es el `worldState.hosters` que
+la §8.1 ya registró.
+
+> **Relevancia.** Es el mecanismo por el cual **la IA de un mob corre en la
+> máquina de algún jugador**. Confirma, por debajo, la premisa de
+> `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.1 (IA y daño de criatura cuestan cero
+> en nuestro frame) y la de §3.3/§4.1 (el servidor no tiene verbo para impedir
+> que un oso camine hasta la zona segura — quien decide su camino es un cliente).
+
+---
+
+### 9.5 Sistemas de juego: properties, comandos, y qué se puede robar del SweetPie
+
+**[DEEPWIKI]** ([5.3 Properties System](https://deepwiki.com/skyrim-multiplayer/skymp/5.3-properties-system))
+Las properties personalizadas las guarda `DynamicFields` como **strings JSON en
+un `unordered_map<string,string>`** (`server_guest_lib/DynamicFields.h:30`).
+
+⚠️ **Divergencia que vale verificar antes de confiar.** La wiki dice que los
+prefijos de privacidad son **`__p_`** (privado) y **`__pi_`** (privado indexado),
+citando `addon/property_bindings/CustomPropertyBinding.cpp:27-31`. La **§2.6 de
+este documento** registra el prefijo como **`private.`**. Los dos no pueden estar
+correctos. Ninguno fue leído en el código en esta ronda — **quien vaya a usar
+property privada verifica primero**, porque equivocarse aquí se filtra al cliente
+en silencio, que es el peor modo de falla posible.
+
+**[DEEPWIKI]** ([5.4 Command System](https://deepwiki.com/skyrim-multiplayer/skymp/5.4-command-system))
+Un comando de consola del cliente se vuelve `MsgType::ConsoleCommand`, cae en
+`ActionListener::OnConsoleCommand` y lo ejecuta `ConsoleCommands::Execute`. El
+permiso es el `EnsureAdmin`, que verifica la flag `ConsoleCommandsAllowedFlag`
+del `MpActor` — o si el servidor lo liberó para todos
+(`ConsoleCommands.cpp:58-72`, ejecución en `:74-193`;
+`consoleCommandsService.ts:18-34,81-83,93-102`).
+
+> **Relevancia.** Casa con la property `consoleCommandsAllowed` que la §8.2 ya
+> lista como binding estándar. Es **permiso nativo, por actor, del lado del
+> servidor** — una capa que nuestro `admin-service` hoy no usa. Vale verificar
+> que no esté encendida por error antes de la primera prueba con gente de fuera.
+
+**[DEEPWIKI]** ([5.2 SweetPie PvP](https://deepwiki.com/skyrim-multiplayer/skymp/5.2-sweetpie-pvp-game-mode))
+**Verificado antes de descartar, como mandaba el plan.** Es un modo PvP en arena
+(Markarth, Riften, Whiterun, Windhelm) — en casi todo, lo opuesto al Heavy RP.
+**Dos piezas sobreviven al descarte:**
+
+1. **`IDamageFormula` es punto de extensión real**, con más de una implementación
+   conviviendo (vanilla, SweetPie, variantes de magia) —
+   `formulas/SweetPieDamageFormula.cpp:68-113`,
+   `formulas/TES5DamageFormula.cpp:127-240`. Es la «salida 2» de la §4 de este
+   documento, y ahora tiene ejemplo de uso.
+2. **El registro de puntos por nombre (`pointsByName`)** es independiente del PvP
+   — es un registro de `locationalData` nombrado, que es la forma que nuestro
+   `RESPAWN_CELL`/spawn points tendría si un día deja de ser constante en el
+   código.
+
+Implementación principal en `skymp5-functions-lib/index.ts:1-598` (exposición a
+Papyrus en `:262-335`) — que es, por cierto, **el único gamemode completo
+publicado** que existe para leer.
+
+---
+
+### 9.6 Cliente: renderizado de entidad y de texto (el caso de la nametag)
+
+**[DEEPWIKI]** ([3.1.1 JavaScript API and Plugin System](https://deepwiki.com/skyrim-multiplayer/skymp/3.1.1-javascript-api-and-plugin-system))
+La `TextApi` del SkyrimPlatform, vía un singleton `TextsCollection`
+(`skyrim-platform/src/platform_se/skyrim_platform/TextApi.cpp:8-181`):
+
+| Función | Qué hace |
+|---|---|
+| `CreateText()` | crea la entrada de texto |
+| **`SetTextRefr()`** | **prende el texto a una referencia del juego, por FormId** |
+| `SetTextPos()` | lo posiciona en coordenada de pantalla |
+| `GetTextsToDraw()` | entrega al renderizador lo que está visible |
+
+**[DEEPWIKI]** ([3.1.2 Event System and Text Rendering](https://deepwiki.com/skyrim-multiplayer/skymp/3.1.2-event-system-and-text-rendering))
+El dibujo es overlay DirectX (`tilted/ui/DX11RenderHandler.cpp:72-97`), con
+fuentes `.spritefont` cargadas de `Data/Platform/Fonts/` (`:176-194`).
+Propiedades: posición, color RGBA 0–1, rotación en radianes, escala.
+
+⚠️ **La wiki se contradice aquí, y eso es información sobre la wiki.** La página
+`3.1.2` afirma que las coordenadas son **solo de pantalla** y que el world-space
+«no está especificado»; la página `3.1.1` documenta `SetTextRefr()`, que prende
+texto a una referencia del mundo. **La segunda es más específica y probablemente
+la correcta**, pero ninguna fue verificada en el código.
+
+> **Relevancia — es exactamente la pregunta de la nametag.** El
+> `NAMETAG_IDENTITY_SYSTEM.md` y el `nametag-service.js` (módulo `lab`, apagado)
+> necesitan saber si el texto acompaña al actor solo o si alguien tiene que
+> proyectar mundo→pantalla en cada frame. **`SetTextRefr()` apunta a «acompaña
+> solo»**, lo que sería bastante más barato que proyectar. Queda registrado como
+> `[DEEPWIKI]` con el archivo para verificar (`TextApi.cpp:8-181`) — es la
+> primera cosa a abrir cuando la nametag vuelva a la mesa.
+
+**[DEEPWIKI]** ([3.2.2 WorldView and Entity Rendering](https://deepwiki.com/skyrim-multiplayer/skymp/3.2.2-worldview-and-entity-rendering))
+Una entidad remota se crea en el cliente con
+`player.placeAtMe(baseForm, 1, true, true)` (`view/formView.ts:169-186`). **Todos
+los `FormView` se destruyen cuando el jugador cambia de worldspace/celda**
+(`view/worldView.ts:71-85`), y cada uno se autodestruye si el `worldOrCell` del
+modelo diverge (`view/formView.ts:40-55`).
+
+> **Relevancia.** Cualquier cosa nuestra prendida a una entidad renderizada — la
+> nametag a la cabeza — **muere en el cambio de celda y necesita ser recreada.**
+> No es bug, es el ciclo de vida. Mejor saberlo antes de depurar «la etiqueta
+> desapareció cuando entré en la taberna».
+
+**[DEEPWIKI]** ([3.1.1](https://deepwiki.com/skyrim-multiplayer/skymp/3.1.1-javascript-api-and-plugin-system))
+Menudencias útiles: los plugins de cliente salen de `Data/Platform/Plugins/`
+(`.js` + `-settings.txt` como JSON); `skyrimPlatform.storage` **sobrevive al
+hot-reload pero no al reinicio del juego**; el JS corre en hilo propio, con cola
+para lo que necesita el hilo del juego.
+
+> **Relevancia.** «Sobrevive al reload, no al reinicio» es la misma clase de
+> aviso que la §9.2 sobre `server.clear()`: **el estado en memoria, de los dos
+> lados, es descartable por construcción.**
+
+---
+
+### 9.7 Glosario de términos del upstream
+
+**[DEEPWIKI]** ([7 Glossary](https://deepwiki.com/skyrim-multiplayer/skymp/7-glossary)).
+Registrado como referencia de vocabulario — es lo que ahorra la próxima
+relectura:
+
+| Término | Definición del upstream |
+|---|---|
+| **Hoster** | el cliente con autoridad sobre el movimiento de un NPC (§9.4) |
+| **Neighbour** | objetos cercanos dentro de la partición del grid — pero ver §8.1: en la práctica es *quien está inscrito en las actualizaciones del form* |
+| **ChangeForm** | concepto de Bethesda para el delta de un record; aquí es `MpChangeForm` |
+| **FormDesc** | FormID + nombre del archivo ESP/ESM, para sobrevivir a cambios de load order (§8.5) |
+| **ESPM / libespm** | biblioteca que lee `.esm`/`.esp`/`.esl` — es como el servidor entiende el juego base |
+| **SpSnippet** | fragmento de Papyrus ejecutado dinámicamente, servidor o cliente (§2.7 de la wiki) |
+| **PartOne** | la clase coordinadora del servidor nativo |
+| **ScampServer** | el addon N-API que envuelve el C++ para Node |
+| **WorldState** | el gestor central de todas las entidades cargadas (§8.1) |
+| **VarValue** | el tipo variante de la VM Papyrus (string, int, float o referencia) |
+
+---
+
+### 9.8 Lo que esto **no** cubre
+
+Registrado para que nadie relea pensando que aún no se hizo.
+
+**Abierto y sin nada relevante nuevo** — lectura hecha, resultado magro:
+
+| Página | Veredicto |
+|---|---|
+| [1.2 System Architecture Overview](https://deepwiki.com/skyrim-multiplayer/skymp/1.2-system-architecture-overview) | Confirma el modelo autoritativo que la §8 ya cubre. Nada nuevo. No dice lo que el servidor **no** controla — que es justamente lo que nos interesa |
+| [1.3 Repository Structure](https://deepwiki.com/skyrim-multiplayer/skymp/1.3-repository-structure) | Lista directorios (`libespm`, `viet`, `papyrus-vm`, `savefile`…). **Ni menciona `misc/tests` ni `docs/`** — las dos fuentes que más nos sirvieron (§2.5, §1). Aquí nuestra §1 es mejor que la wiki |
+| [2.2 ScampServer Native Addon](https://deepwiki.com/skyrim-multiplayer/skymp/2.2-scampserver-native-addon) | La §8.3 ya tiene la lista real, leída en `ScampServer.cpp`. La wiki es más pobre — y afirma que solo `connect`/`disconnect`/`packet` llegan al JS, **lo que la §9.1 desmiente** |
+| [3.2.2 WorldView and Entity Rendering](https://deepwiki.com/skyrim-multiplayer/skymp/3.2.2-worldview-and-entity-rendering) | Rindió solo el ciclo de vida de la §9.6. No habla de nametag y **no habla del costo de spawn de muchos actores** — la incógnita nº 1 de `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.2 **sigue sin respuesta en la wiki** |
+| [5.2 SweetPie PvP](https://deepwiki.com/skyrim-multiplayer/skymp/5.2-sweetpie-pvp-game-mode) | Verificado antes de descartar. Es PvP de arena. Sobraron las dos piezas de la §9.5 |
+
+**No abierto a propósito** — trata de compilar y contribuir con el upstream, no
+de cómo se comporta el juego en producción:
+
+- `1.1` Getting Started
+- `4` Build System and Deployment **entero** — `4.1` CMake, `4.2` vcpkg,
+  `4.3` CI/CD, `4.4` Deployment, `4.5` Distribution and Artifacts
+- `6` Development Guide **entero** — `6.1` Environment Setup,
+  `6.2` Contribution Workflow, `6.3` Testing, `6.4` Server Operations
+
+> Salvedad honesta sobre dos de ellas: **`6.3` Testing** y **`6.4` Server
+> Operations** son las que tienen chance real de volverse útiles — la primera si
+> vamos a escribir test de integración contra servidor de verdad (el camino que
+> abrió la §2.5), la segunda cuando la Fase 0 finalmente levante un servidor.
+> Quedaron fuera de esta ronda por prioridad, no por irrelevancia.
+
+**Preguntas de este proyecto que la wiki entera no respondió:**
+
+1. **Costo de sincronización por actor activo × jugadores.** Ninguna página da
+   número. Sigue siendo lo que solo el censo (`fauna-census.js`) mide.
+2. **Comportamiento del saqueo de cadáver vanilla.** La §9.3 da indicio a favor y
+   nada más. Sigue siendo la Pieza 2 (`corpse-probe.js`).
+3. **Si la estadística de NPC escala por nivel del jugador en el cliente.**
+   `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.4(c)(2) ya registraba ese límite; la
+   wiki no lo toca. Sigue abierto.
+
+**Lista nivelada — no rehacer.** La pista de la wiki sobre `espm::Loader` y
+resolución de lista nivelada (§8.1) **ya fue verificada contra el código
+primario** el 09/08/2026 y subió a `[DOC]`: está en
+[`HOSTILE_MOB_ACTIVATION_DECISION.md`](HOSTILE_MOB_ACTIVATION_DECISION.md) §7.4(b)
+(en portugués), con archivos, funciones y la tabla de quién pasa qué `pcLevel`.
+**Dos rondas no deberían rehacer la misma verificación** — quien llegue aquí por
+el `PROMPT_FECHAR_PERGUNTA_ESCALA_MOB.md` debe leer allá, no reabrir.
+
+---
+
 ## Fuentes
 
 - [skyrim-multiplayer/skymp](https://github.com/skyrim-multiplayer/skymp) — repositorio oficial, carpeta `docs/`
@@ -440,4 +924,20 @@ reenvía una corrección. Los eventos custom llegan por `OnCustomEvent` con
 - **DeepWiki, páginas de arquitectura usadas en la sección 8** — [1.2 System Architecture](https://deepwiki.com/skyrim-multiplayer/skymp/1.2-system-architecture-overview) · [2.3 PartOne y game loop](https://deepwiki.com/skyrim-multiplayer/skymp/2.3-partone-and-game-loop) · [2.4.1 MpActor/MpObjectReference](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.1-mpactor-and-mpobjectreference) · [2.4.2 ActionListener](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.2-actionlistener-and-event-handling) · [2.5 World State](https://deepwiki.com/skyrim-multiplayer/skymp/2.5-world-state-management) · [2.6 Networking](https://deepwiki.com/skyrim-multiplayer/skymp/2.6-networking-and-message-processing) · [5.3 Properties](https://deepwiki.com/skyrim-multiplayer/skymp/5.3-properties-system)
 - **Código primario citado como `[DOC]` en la sección 8** — `PropertyBindingFactory.cpp`, `LocationalDataBinding.cpp`, `BaseDescBinding.cpp`, `NeighborsBinding.cpp`, `WorldOrCellDescBinding.cpp`, `FormDesc.cpp`/`.h`, `ScampServer.cpp`, `ScampServerListener.cpp`, `NapiHelper.h`, `MpChangeForms.h`, `MpActor.cpp`, `gamemode_events/DeathEvent.cpp`, `gamemode_events/GameModeEvent.cpp`
 - [docs/docs_skyrim_platform.md](https://github.com/skyrim-multiplayer/skymp/blob/main/docs/docs_skyrim_platform.md)
-- [Issue #1338 — onHit para el gamemode](https://github.com/skyrim-multiplayer/skymp/issues/1338) (cerrada como won't fix)
+- [Issue #1338 — onHit para el gamemode](https://github.com/skyrim-multiplayer/skymp/issues/1338) (cerrada como won't fix — pero ver §9.1: el evento llega por `onPapyrusEvent:OnHit`)
+
+### Sección 9 — barrido del DeepWiki (09/08/2026)
+
+**Código primario citado como `[DOC]` en la §9.1** (leído vía
+`gh api repos/skyrim-multiplayer/skymp/contents/<ruta>`, rama `main`):
+
+- `skymp5-server/cpp/server_guest_lib/ActionListener.cpp` — `OnHit` (L1006+),
+  `OnSpellHit`/`OnWeaponHit` (L1215, L1256), `SendPapyrusOnHitEvent` (L1410-1425)
+- `skymp5-server/cpp/server_guest_lib/MpForm.cpp:34-40` — `SendPapyrusEvent`
+- `skymp5-server/cpp/server_guest_lib/gamemode_events/PapyrusEventEvent.{h,cpp}`
+- `skymp5-server/cpp/server_guest_lib/gamemode_events/GameModeEvent.cpp` — `Fire`
+- `skymp5-server/cpp/addon/ScampServerListener.cpp` — `OnMpApiEvent`
+- `skymp5-server/cpp/addon/PapyrusUtils.h:14-49` — conversión Papyrus → JS
+- Listado de `gamemode_events/` — **no existe `HitEvent`**; el camino es el Papyrus
+
+**Páginas del DeepWiki leídas en la §9** — [1.2 System Architecture](https://deepwiki.com/skyrim-multiplayer/skymp/1.2-system-architecture-overview) · [1.3 Repository Structure](https://deepwiki.com/skyrim-multiplayer/skymp/1.3-repository-structure) · [2.1 TypeScript Orchestration](https://deepwiki.com/skyrim-multiplayer/skymp/2.1-typescript-server-orchestration) · [2.2 ScampServer Addon](https://deepwiki.com/skyrim-multiplayer/skymp/2.2-scampserver-native-addon) · [2.3 PartOne y game loop](https://deepwiki.com/skyrim-multiplayer/skymp/2.3-partone-and-game-loop) · [2.4.1 MpActor/MpObjectReference](https://deepwiki.com/skyrim-multiplayer/skymp/2.4.1-mpactor-and-mpobjectreference) · [2.5.1 Database and Persistence](https://deepwiki.com/skyrim-multiplayer/skymp/2.5.1-database-and-persistence) · [3.1.1 JS API y Plugins](https://deepwiki.com/skyrim-multiplayer/skymp/3.1.1-javascript-api-and-plugin-system) · [3.1.2 Event System y Text Rendering](https://deepwiki.com/skyrim-multiplayer/skymp/3.1.2-event-system-and-text-rendering) · [3.2 Client Synchronization](https://deepwiki.com/skyrim-multiplayer/skymp/3.2-client-synchronization) · [3.2.2 WorldView y Entity Rendering](https://deepwiki.com/skyrim-multiplayer/skymp/3.2.2-worldview-and-entity-rendering) · [3.2.3 Input Capture y State Sync](https://deepwiki.com/skyrim-multiplayer/skymp/3.2.3-input-capture-and-state-synchronization) · [5 Gameplay Systems](https://deepwiki.com/skyrim-multiplayer/skymp/5-gameplay-systems) · [5.2 SweetPie PvP](https://deepwiki.com/skyrim-multiplayer/skymp/5.2-sweetpie-pvp-game-mode) · [5.3 Properties System](https://deepwiki.com/skyrim-multiplayer/skymp/5.3-properties-system) · [5.4 Command System](https://deepwiki.com/skyrim-multiplayer/skymp/5.4-command-system) · [7 Glossary](https://deepwiki.com/skyrim-multiplayer/skymp/7-glossary)
