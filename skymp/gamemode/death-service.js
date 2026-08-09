@@ -33,7 +33,42 @@ const deathEvents = require('./core/death-events');
 const { actorRef } = require('./core/papyrus');
 
 const RESPAWN_POS = [-150, -100, -200]; // Coordenadas ficticias do Templo de Kynareth
-const RESPAWN_CELL = '0x162e2'; // ID do Templo
+
+// FormID da celula de respawn (Templo de Kynareth).
+//
+// ⚠️ Era `RESPAWN_CELL = '0x162e2'`, e o `0x` nao e detalhe cosmetico.
+// **[DOC]** `FormDesc.cpp` (`SKYMP_UPSTREAM_REFERENCE.md` §8.5): a forma
+// canonica e hex **sem prefixo**, `:`, nome do arquivo — `"162e2:Skyrim.esm"`.
+// E `FormDesc::FromString` **nao valida**: uma string sem `:` cai no ramo sem
+// arquivo e resolve para `0xff000000 + id`, a faixa de forms gerados pelo
+// servidor. Nao da erro, nao loga, e aponta para outro lugar. Ver §10 da
+// `REVISAO_REALIDADE_COMPARTILHADA.md`.
+//
+// O numero em si continua **nao verificado in-game** — veio herdado e ninguem
+// abriu o ESM para conferir que 0x162e2 e o Templo. O que esta rodada conserta e
+// o formato, que era um defeito certo; o valor e observacao da Fase 0.
+const RESPAWN_CELL_FORM_ID = 0x162e2;
+const RESPAWN_CELL_FALLBACK = '162e2:Skyrim.esm';
+
+/**
+ * A celula de respawn como `FormDesc`.
+ *
+ * Derivada por `mp.getDescFromId` **[DOC]** (§8.3) quando disponivel, em vez de
+ * escrita a mao: o servidor sabe de qual arquivo aquele FormID veio, e derivar
+ * sobrevive a mudanca de load order. O literal fica so como rede — o
+ * `market-stalls-service` ja trata `getDescFromId` como possivelmente ausente.
+ */
+function respawnCellDesc() {
+  if (typeof mp !== 'undefined' && typeof mp.getDescFromId === 'function') {
+    try {
+      const desc = mp.getDescFromId(RESPAWN_CELL_FORM_ID);
+      if (typeof desc === 'string' && desc) return desc;
+    } catch (err) {
+      console.error('[death-service] getDescFromId falhou para a celula de respawn:', err.message);
+    }
+  }
+  return RESPAWN_CELL_FALLBACK;
+}
 const DEATH_PENALTY_COINS = 50;
 const DEATH_PENALTY_PERCENTAGE = 0.1; // 10% do ouro atual, o que for maior
 
@@ -142,13 +177,42 @@ function initDeathService() {
   // (`getActiveCharacterData` devolve undefined), que é o requisito da §7.2:
   // com fauna ativa este hook dispara constantemente, e o caminho de morte não
   // pode tocar o banco antes de decidir que o assunto é dele.
+  //
+  // ⚠️ O retorno deste handler decide se o SERVIDOR respawna o ator sozinho.
+  // Ver o contrato em `core/death-events.js`. Devolver `false` é o que impede
+  // `DeathEvent::OnFireSuccess` de chamar `RespawnWithDelay()` — sem isso, o
+  // jogador levanta aos 25 s (o `spawnDelay` padrao do upstream) no meio dos 4
+  // minutos de bleed-out, e passam a existir duas autoridades sobre o mesmo
+  // estado. Era o bloqueador de Fase 0 da `REVISAO_REALIDADE_COMPARTILHADA.md`
+  // §6.2.
+  //
+  // A reivindicacao e SINCRONA e O(1) de proposito: o motor le o retorno no
+  // mesmo frame, entao ela nao pode esperar `handlePlayerDowned` (que e async e
+  // toca o banco). `getActiveCharacterData` responde do cache em memoria, que e
+  // exatamente a mesma checagem que `handlePlayerDowned` faz primeiro.
+  //
+  // So reivindica personagem ativo. Um lobo morto nao tem `characterData`, o
+  // retorno fica `undefined`, e o servidor respawna a fauna normalmente — que e
+  // o requisito da §7.2 do `HOSTILE_MOB_ACTIVATION_DECISION.md` e a razao de o
+  // barramento agregar retorno em vez de bloquear tudo.
   deathEvents.subscribe('death-service', (actorId, killerId) => {
     try {
+      const nossa = Boolean(commands.getActiveCharacterData(actorId));
+
       handlePlayerDowned(actorId, killerId).catch(err =>
         console.error('[death-service] Falha ao processar queda (onDeath):', err.message)
       );
+
+      // Assumimos o ciclo inteiro: `/socorrer` devolve ao jogo, e o bleed-out
+      // chama `executeRespawn`, que e o unico caminho com penalidade, transicao
+      // de estado e refresh de painel. O respawn nativo nao faz nada disso —
+      // por isso ele e bloqueado, e nao apenas reagendado.
+      return nossa ? false : undefined;
     } catch (err) {
       console.error('[death-service] Erro no hook onDeath:', err.message);
+      // Erro nosso nao pode virar decisao de mundo: sem reivindicacao, o
+      // servidor faz o que faria sem este modulo.
+      return undefined;
     }
   });
 
@@ -366,10 +430,24 @@ async function executeRespawn(actorId, characterId, penalty = 0) {
   try {
     mp.callPapyrusFunction('method', 'Actor', 'Resurrect', actorRef(actorId), []);
 
+    // ⚠️ As tres chaves e os tres tipos sao exigencia do addon nativo, nao
+    // convencao nossa. **[DOC]** `LocationalDataBinding::Set` (§8.4) le
+    // `cellOrWorldDesc` (string), `pos` (array) e `rot` (array) via
+    // `NapiHelper::ExtractString` / `ExtractNiPoint3`, que **lancam** quando o
+    // tipo nao bate. Este objeto era `{ pos, worldOrCell, angleZ }`: sem
+    // `cellOrWorldDesc`, `Get()` devolvia `undefined`, que nao e string, e o
+    // `mp.set` lancava — derrubando as linhas seguintes junto (`_wasDead`,
+    // `characterState`, notificacao, painel). O `catch` abaixo engolia como
+    // "Failed to respawn actor" e o personagem ficava ressuscitado onde caiu,
+    // com o estado travado em DEAD.
+    //
+    // A forma certa ja estava declarada em `types/mp.d.ts` e ja era usada pelo
+    // `governance-service` ao prender alguem. O `typecheck` e informativo
+    // (`ARCHITECTURE.md` §1.4), entao nunca reclamou da divergencia.
     mp.set(actorId, 'locationalData', {
+      cellOrWorldDesc: respawnCellDesc(),
       pos: RESPAWN_POS,
-      worldOrCell: RESPAWN_CELL,
-      angleZ: 0
+      rot: [0, 0, 0]
     });
     mp.set(actorId, '_wasDead', false);
 
@@ -613,6 +691,8 @@ module.exports = {
   isDowned: (characterId) => _downedPlayers.has(characterId),
   // Exposto só pra testes: evita depender de setTimeout real pra exercitar o fluxo.
   _handlePlayerDowned: handlePlayerDowned,
+  _respawnCellDesc: respawnCellDesc,
+  RESPAWN_CELL_FALLBACK,
   _downedPlayers,
   _lastHealth,
   _killers

@@ -81,6 +81,52 @@ const CATEGORIAS_VALIDAS = new Set([
 let _zonas = null;
 
 /**
+ * `cellId` precisa ser um `FormDesc`, não um hexadecimal.
+ *
+ * **[DOC]** `FormDesc.cpp` (`SKYMP_UPSTREAM_REFERENCE.md` §8.5): `ToString()` é
+ * `shortFormId` em hex **sem prefixo `0x`**, `:`, nome do arquivo —
+ * `"162e2:Skyrim.esm"`. É essa string que `locationalData.cellOrWorldDesc`
+ * devolve, e é contra ela que `zoneOf` compara por igualdade.
+ *
+ * ─── Por que isto precisa ser barulhento ────────────────────────────────────
+ *
+ * `FormDesc::FromString` **não valida**: sem `:` ela não falha, apenas cai no
+ * ramo sem arquivo e resolve para a faixa de forms gerados pelo servidor. Do
+ * lado de cá o efeito é ainda mais quieto — `"0x162e2" !== "162e2:Skyrim.esm"`
+ * é só uma comparação de string que nunca casa. A zona carrega, aparece nos
+ * logs como ativa, e **nunca dispara**.
+ *
+ * Uma zona segura que falha assim falha **aberta**: a proteção não existe e não
+ * há erro em lugar nenhum. É o mesmo modo de falha do `safeRadius` fantasma já
+ * catalogado no `npc-cleaner`, e o oposto do que o cabeçalho deste arquivo diz
+ * querer — *"config ausente não pode virar comportamento surpresa"*. Config
+ * **presente e errada** é pior, porque quem escreveu acha que criou uma regra.
+ *
+ * O exemplo em `safe-zones.example.json` trazia `"0x162e2"` até 09/08/2026, ou
+ * seja: quem copiasse o exemplo — o caminho esperado — cairia exatamente aqui.
+ *
+ * @param {string} cellId
+ * @returns {string|null} o motivo da recusa, ou `null` se estiver bem formado
+ */
+function motivoDeCellIdInvalido(cellId) {
+  if (/^0x/i.test(cellId)) {
+    return `comeca com '0x' — FormDesc e hex SEM prefixo (use '${cellId.replace(/^0x/i, '')}:Skyrim.esm')`;
+  }
+  const partes = cellId.split(':');
+  if (partes.length !== 2) {
+    return `nao tem a forma '<hex>:<arquivo.esm>' — sem o ':' o servidor resolve para outra faixa de FormID, em silencio`;
+  }
+  const [hex, arquivo] = partes;
+  if (!/^[0-9a-f]+$/i.test(hex)) {
+    return `'${hex}' antes do ':' nao e hexadecimal`;
+  }
+  if (!arquivo.trim()) {
+    return `falta o nome do arquivo depois do ':'`;
+  }
+  return null;
+}
+
+/**
  * Lê a configuração. Ausência de arquivo não é erro — a lista vazia é o
  * estado correto até alguém desenhar as zonas.
  *
@@ -100,13 +146,45 @@ function loadZones() {
     return [];
   }
 
-  if (bruto.enabled !== true) return [];
+  return parseZones(bruto);
+}
+
+/**
+ * A validação em si, separada da leitura de disco.
+ *
+ * Existe separada pelo mesmo motivo do `sweepOnce(policy = loadPolicy())` do
+ * `npc-cleaner`: dá para exercitar config malformada sem escrever em
+ * `skymp/config/safe-zones.json`, que é o caminho real do servidor. Um teste que
+ * precisasse criar aquele arquivo deixaria, se falhasse no meio, uma config de
+ * zona segura ativa para trás — que é justamente a classe de surpresa que este
+ * módulo existe para não causar.
+ *
+ * @param {object} bruto  o conteúdo já desserializado de `safe-zones.json`
+ * @returns {{id: string, cellId: string, pos: number[]|null, radius: number|null, blocks: string[], label: string}[]}
+ */
+function parseZones(bruto) {
+  if (!bruto || bruto.enabled !== true) return [];
   if (!Array.isArray(bruto.zones)) return [];
 
   const zonas = [];
   for (const z of bruto.zones) {
     if (!z || typeof z.cellId !== 'string' || !z.cellId.trim()) {
       console.error('[safe-zones] Zona sem cellId ignorada:', JSON.stringify(z));
+      continue;
+    }
+
+    const cellId = z.cellId.trim();
+    const motivo = motivoDeCellIdInvalido(cellId);
+    if (motivo) {
+      // Mesma disciplina da categoria desconhecida logo abaixo: a zona sai da
+      // lista em vez de entrar inerte. As duas coisas protegem tanto quanto
+      // (nenhuma), mas so uma delas aparece.
+      console.error(
+        `[safe-zones] Zona '${z.id || cellId}' tem cellId invalido: '${cellId}' — ${motivo}. ` +
+        `Esperado o formato FormDesc '<hex sem 0x>:<arquivo.esm>', como '162e2:Skyrim.esm'. ` +
+        `Zona IGNORADA: um cellId que nao casa nunca dispara, e uma zona segura que ` +
+        `falha em silencio falha ABERTA.`
+      );
       continue;
     }
 
@@ -129,9 +207,9 @@ function loadZones() {
     const temRaio = Array.isArray(z.pos) && z.pos.length === 3 && Number.isFinite(raio) && raio > 0;
 
     zonas.push({
-      id: String(z.id || z.cellId),
-      label: String(z.label || z.id || z.cellId),
-      cellId: z.cellId.trim(),
+      id: String(z.id || cellId),
+      label: String(z.label || z.id || cellId),
+      cellId,
       // Sem pos/radius validos, a zona e a CELULA INTEIRA. E grosseiro de
       // proposito: "a taverna toda" e uma decisao mais facil de acertar que um
       // raio em unidades do Skyrim, e nao exige medir nada in-game.
@@ -235,6 +313,8 @@ function blocksBetween(actorId, targetActorId, categoria) {
 
 module.exports = {
   CATEGORIAS_VALIDAS,
+  motivoDeCellIdInvalido,
+  parseZones,
   loadZones,
   reload,
   zones,

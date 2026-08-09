@@ -53,6 +53,42 @@
  * mobs: com fauna ativa este hook passa a disparar constantemente, e **o caminho
  * de morte não pode tocar o banco antes de decidir que interessa**.
  *
+ * ─── O retorno bloqueia o respawn nativo, e por isso é agregado ──────────────
+ *
+ * **`[DOC]`** `gamemode_events/DeathEvent.cpp`: `OnFireSuccess` chama
+ * `actor->RespawnWithDelay()`. **`[DOC]`** `GameModeEvent::Fire` só chama
+ * `OnFireSuccess` se **nenhum** listener devolveu `false`. **`[DOC]`**
+ * `ScampServerListener.cpp:41-129` fixa o contrato do handler JS:
+ *
+ *   | devolve      | efeito                                         |
+ *   |--------------|------------------------------------------------|
+ *   | `undefined`  | não bloqueia → **respawn automático em 25 s**   |
+ *   | `false`      | bloqueia → o servidor não respawna             |
+ *   | lança        | erro logado, **não bloqueia**                  |
+ *
+ * Até 09/08/2026 o `_dispatch` era um laço `for` sem `return` — devolvia
+ * `undefined`, e portanto **o servidor ressuscitava o jogador aos 25 segundos**
+ * enquanto o `death-service` ainda o considerava `DOWNED` esperando os 4 minutos
+ * de bleed-out. Duas autoridades sobre o mesmo estado, que é o defeito que a
+ * `REVISAO_REALIDADE_COMPARTILHADA.md` §6.2 registrou como bloqueador da Fase 0.
+ *
+ * **A política é "bloqueia se algum assinante pedir", e ela é deliberada.** A
+ * §6.2 daquele documento aponta o risco de um `return false` global: o
+ * `hunting-service` vai assinar este mesmo hook, e `RespawnWithDelay` é como o
+ * servidor devolve **qualquer** ator morto ao mundo — bloquear tudo mataria o
+ * respawn dos mobs junto. Com agregação, cada assinante responde só pelo que é
+ * dele: quem não reconhece o ator devolve `undefined` e não interfere; quem
+ * assume o ciclo de vida daquela morte devolve `false`. Um assinante que **lança**
+ * não bloqueia — mesma regra do upstream, e pela mesma razão: falha de um
+ * consumidor não pode virar decisão de mundo.
+ *
+ * **O que isto não alcança.** **`[DEEPWIKI]`** (referência §9.2,
+ * `PartOne.cpp:175-221`) `PartOne::SetUserActor` chama `RespawnWithDelay()` se o
+ * ator estiver morto no handshake. Um jogador que caia e **reconecte** é
+ * respawnado por aquele caminho, que não passa por aqui. Bloquear o evento
+ * resolve o caminho principal, não todos — e isso é observação da Fase 0, não
+ * conserto desta rodada.
+ *
  * ─── Procedência ─────────────────────────────────────────────────────────────
  *
  * `mp.onDeath(actorId, killerId)` é **[TESTE OFICIAL]** — `misc/tests/test_isdead.js`
@@ -67,25 +103,41 @@ const _subscribers = new Map();
 let _hookInstalled = false;
 
 /**
- * Entrega o evento a cada assinante, isolando falhas.
+ * Entrega o evento a cada assinante, isolando falhas, e agrega o retorno.
  *
  * Um assinante que lança **não pode** impedir os outros de rodar: se o
  * `hunting-service` quebrar concedendo loot, a queda do jogador ainda precisa
  * virar DOWNED. É a mesma razão pela qual o `_dispatch` não usa `for...of` com
  * `await` — não há nada assíncrono aqui de propósito; quem precisa de banco
  * dispara a própria promise e trata o próprio erro.
+ *
+ * O laço **não** sai cedo quando alguém devolve `false`: todos os assinantes
+ * precisam ver toda morte. Bloquear é a decisão agregada no fim, não um atalho
+ * que cala quem vem depois na ordem de inscrição.
+ *
+ * @returns {false|undefined} `false` se algum assinante pediu para bloquear o
+ *   respawn nativo; `undefined` caso contrário (que é o que não bloqueia).
  */
 function _dispatch(actorId, killerId) {
+  let bloquearRespawn = false;
+
   for (const [name, handler] of _subscribers) {
     try {
-      handler(actorId, killerId);
+      // `=== false` de propósito: só o booleano exato pede bloqueio. Um
+      // assinante que devolva `0`, `''` ou `null` por descuido não pode
+      // desligar o respawn do servidor sem ter pedido.
+      if (handler(actorId, killerId) === false) bloquearRespawn = true;
     } catch (err) {
       console.error(
         `[death-events] Assinante '${name}' lancou em onDeath: ${err.message}. ` +
-        `Os demais assinantes continuam.`
+        `Os demais assinantes continuam, e a excecao NAO bloqueia o respawn nativo.`
       );
     }
   }
+
+  // `undefined` explícito, não `false`: devolver `false` por padrão bloquearia o
+  // respawn de todo ator morto do mundo, mobs inclusive.
+  return bloquearRespawn ? false : undefined;
 }
 
 /**

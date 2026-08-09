@@ -12,6 +12,8 @@
 
   "_sobre_blocks": "Categorias da action-policy. Validas: gameplay, combat, trade, craft, gather, move, move_world, use_item, speak_rp, sell. Categoria desconhecida e ignorada com erro no log — regra que voce acha que criou e nao criou e pior que regra ausente.",
 
+  "_sobre_cellid": "O 'cellId' e um FormDesc, NAO um hexadecimal: '<hex sem 0x>:<arquivo.esm>', por exemplo '162e2:Skyrim.esm'. E a string exata que o servidor devolve em locationalData.cellOrWorldDesc, e a zona casa por igualdade de string. Escrever '0x162e2' nao da erro em lugar nenhum — simplesmente nunca casa, e a zona fica inerte parecendo ativa. Por isso o loader agora RECUSA cellId fora do formato e grita no log: zona segura que falha em silencio falha ABERTA. Mesmo formato do 'baseDesc' em npc-policy.json. Ver core/safe-zones.js e docs/technical/SKYMP_UPSTREAM_REFERENCE.md secao 8.5.",
+
   "_sobre_area": "Sem 'pos' e 'radius' validos, a zona e a CELULA INTEIRA. E grosseiro de proposito: 'a taverna toda' e mais facil de acertar que um raio em unidades do Skyrim, e nao exige medir nada in-game. Use raio so quando a celula for grande demais.",
 
   "_sobre_os_dois_lados": "A checagem vale pro agressor E pro alvo. Proteger so o alvo deixaria alguem atirar de dentro da zona pra fora dela.",
@@ -20,11 +22,11 @@
     {
       "id": "exemplo-templo",
       "label": "Templo de Kynareth",
-      "cellId": "0x162e2",
+      "cellId": "162e2:Skyrim.esm",
       "pos": null,
       "radius": null,
       "blocks": ["combat"],
-      "_comentario": "EXEMPLO, nao ativo (enabled=false). O 0x162e2 e o ponto de spawn e respawn atual (ver whitelist.js e death-service.js) — e o candidato obvio a primeira zona, mas a decisao nao foi tomada."
+      "_comentario": "EXEMPLO, nao ativo (enabled=false). Esta celula e o ponto de spawn e respawn atual (ver whitelist.js e death-service.js) — e o candidato obvio a primeira zona, mas a decisao nao foi tomada. ATENCAO: o numero 162e2 foi herdado e NUNCA foi conferido contra o ESM; o formato desta linha esta certo, o valor e que continua por verificar in-game."
     }
   ]
 }
