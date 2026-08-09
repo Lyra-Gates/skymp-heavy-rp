@@ -149,6 +149,17 @@ A `core/action-policy.js` passa a bloquear **por lugar**, não só por estado do
 - **Custo**: `locationalData` é leitura de property servida do cache do servidor, não ida ao Papyrus — não paga os 13–35 ms medidos pelo Red House. Por isso dá para consultar a cada ação sem orçamento especial.
 - **Nenhum chamador atual mudou de comportamento**, e isso tem teste: a checagem de lugar só acontece quando quem chama informa `context.actorId`, e nenhum dos quatro chamadores existentes informa. Uma regressão aí ligaria zona segura no servidor inteiro sem ninguém pedir.
 
+#### 1.4.8 Etiqueta de Identidade (`nametag-service.js`) e revelação por staff
+Módulo `nametag` (`ENABLE_NAMETAG_SERVICE`), fase `lab`, **desligado por padrão**. Prova de conceito da etiqueta acima da cabeça — o degrau que faltava do [`technical/NAMETAG_IDENTITY_SYSTEM.md`](technical/NAMETAG_IDENTITY_SYSTEM.md).
+
+- **A projeção mundo→tela roda no cliente, não no servidor.** `worldPointToScreenPoint` é função nativa do processo do jogo, chamada pelo snippet que o servidor injeta via `mp.makeProperty`/`updateOwner`. O bloqueio histórico — "nametag por quadro inviabiliza o servidor" — vinha das medições do Red House (13–35 ms por chamada Papyrus), que são **ida e volta pela rede** entre servidor e cliente. Este caminho não paga isso, então o argumento que bloqueava a feature não se aplica a ele.
+- **Duas frequências, porque são duas grandezas.** Nome e alvo a cada 2 s (o mesmo tick da voz — nome só muda quando alguém se apresenta); posição na tela até 20 Hz no cliente, porque a 2 s a etiqueta não parece atrasada, parece quebrada. Não é por quadro: o custo não é a projeção, é o `executeJavaScript` atravessando para a CEF — **não medido**, então o padrão é conservador.
+- **Uma etiqueta, a do mais próximo.** Dez provariam o mesmo e multiplicariam por dez um custo de CEF que ninguém mediu.
+- **Não chama `getDisplayName()` por dentro** — é requisito, não conveniência. Quando o disfarce virar degrau daquela função, a etiqueta passa a mostrar o nome disfarçado sem uma linha de mudança.
+- **`/revelaridentidade`** (permissão `reveal_identity`, `admin` e `owner`) é **comando explícito, não estado passivo**: "staff sempre vê o nome real" não tem evento para auditar, e a regra da escada de exibição pede auditoria. Fora do moderador porque revelar é a única ação de staff que **não desfaz** — kick acaba na reconexão, ouro volta por outro `/setgold`, `/permakill` é soft-delete; identidade revelada mora na cabeça de quem leu. Não escreve em `character_known_identities`: aquilo é conhecimento IC, e gravá-lo faria a staff chamar o alvo pelo nome real no chat para sempre.
+
+⚠️ **A projeção nunca foi executada.** `worldPointToScreenPoint` nunca foi chamada — que seja alcançável por este caminho é **inferência**, não observação. A convenção dos eixos não foi verificada, ponto atrás da câmera é buraco conhecido, o custo a 20 Hz não foi medido, e ninguém validou com dois clientes. Tem o mesmo peso que *"ninguém ouviu ainda"* tem na voz nativa (1.4.4).
+
 ### 1.5 Launcher do Cliente (`apps/launcher`)
 Desenvolvido em **Electron / React**. Detalhes completos em `docs/technical/LAUNCHER_DISTRIBUTION.md`.
 - **Atualização** de cliente e modpack vem de **GitHub Releases** (`VITE_GITHUB_DIST_REPO`), com SHA-256 obrigatório — manifesto sem hash aborta a instalação em vez de instalar sem verificar. Não vem do `apps/web`: o `GET /api/launcher/manifest` que existia lá era um stub com hash falso que ninguém consumia, e foi removido.

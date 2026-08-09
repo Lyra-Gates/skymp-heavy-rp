@@ -44,7 +44,7 @@ Rode nesta ordem. Cada um responde uma pergunta diferente, e o terceiro é o que
 cd skymp/gamemode && npm test
 ```
 
-Espere **406 passando**. Se não passar, não continue — você estaria testando em jogo um código que já sabe estar quebrado.
+Espere **444 passando**. Se não passar, não continue — você estaria testando em jogo um código que já sabe estar quebrado.
 
 ```bash
 cd skymp/gamemode && npm run test:systems

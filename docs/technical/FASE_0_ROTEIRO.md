@@ -1,6 +1,6 @@
 # Fase 0 — Roteiro de teste in-game
 
-**O único bloqueio real do projeto.** 540 testes automatizados passam, e nada nunca rodou numa sessão com jogador. Enquanto este roteiro não for executado, tudo o mais é qualidade sobre código não validado.
+**O único bloqueio real do projeto.** 578 testes automatizados passam, e nada nunca rodou numa sessão com jogador. Enquanto este roteiro não for executado, tudo o mais é qualidade sobre código não validado.
 
 > Substitui o `GOVERNANCE_MARKET_STALLS_TEST_PLAN.md` (13/07/2026), que cobria governança e barracas. Desde então entraram `death-service`, `/painel`, VOIP, master API de sessão e a fila — e o gamemode passou de ~15 para **mais de 60 comandos**. Aquele plano descrevia camadas; este descreve **passos, o que observar, e o que significa falhar**.
 
@@ -24,7 +24,7 @@ Copie o [registro em branco](#registro) para um arquivo novo antes de começar e
 
 ## O que nunca rodou com jogador — índice único
 
-Sete sistemas carregam hoje a mesma etiqueta: **confirmado por teste automatizado, nunca confirmado em sessão real.** Eles estavam espalhados por três documentos, e quem preparava uma sessão precisava abrir os três para montar a lista. Esta tabela é a lista.
+Oito sistemas carregam hoje a mesma etiqueta: **confirmado por teste automatizado, nunca confirmado em sessão real.** Eles estavam espalhados por três documentos, e quem preparava uma sessão precisava abrir os três para montar a lista. Esta tabela é a lista.
 
 **Não duplica critério.** Cada linha aponta para o passo detalhado, e é lá que está o que significa passar ou falhar.
 
@@ -37,10 +37,10 @@ Sete sistemas carregam hoje a mesma etiqueta: **confirmado por teste automatizad
 | **Voz — fallback** | `/voz` com `ENABLE_VOIP_SERVICE=true`, sozinho | O chip para em `VOZ INDISPONÍVEL NESTE CLIENT` e **fica nele** | [8.1](#81-o-aviso-de-fallback-aparece-na-tela-1-pessoa-1-client-2-min) |
 | **Voz — nativa** | Helper com ticket, A fala e B escuta | Voz **inteligível** (não só "tem sinal"), volume por distância, sem eco | [8.2](#82-voz-de-verdade-com-o-helper-nativo-12-pessoas-20-min) · [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md) §11 |
 | **Identidade — persistência** | Reconectar e reiniciar o servidor depois de `/apresentar` e `/apelido` | Conhecidos e apelidos **sobrevivem aos dois** | [3.5 e 3.6](#etapa-3--identidade-disfarce-e-persistência-8-min-a-e-b) · [`NAMETAG_IDENTITY_SYSTEM.md`](NAMETAG_IDENTITY_SYSTEM.md) |
+| **Nametag + `/revelaridentidade`** | `ENABLE_NAMETAG_SERVICE=true`, A olha B; depois um admin usa `/revelaridentidade` em B | A etiqueta **aparece e acompanha** B ao andar, mostra `Desconhecido` antes de `/apresentar`, e a revelação vira linha em `audit_logs` | [3.7](#etapa-3--identidade-disfarce-e-persistência-8-min-a-e-b) · [`NAMETAG_IDENTITY_SYSTEM.md`](NAMETAG_IDENTITY_SYSTEM.md) |
 
 ### Fora desta lista, e por quê
 
-- **Nametag (a etiqueta acima da cabeça) e `/revelaridentidade`** não estão no roteiro porque **não estão na `main`** — vivem na PR #13, que não mesclou. Quando ela entrar, a etapa nova é a projeção mundo-tela (`worldPointToScreenPoint`, que nunca foi chamada) e a revelação por staff, e os critérios já estão nos "Requisitos Para Alfa" do [`NAMETAG_IDENTITY_SYSTEM.md`](NAMETAG_IDENTITY_SYSTEM.md). **Não teste o que não está no seu build.**
 - **Marcas e árvore da Afinidade da Alma** existem e têm teste, mas nenhum caminho de jogo chega até elas — ver a nota ao fim de [9.4](#94-soul-service--a-alma-existe-mas-ninguém-a-viu-chegar).
 - **`npc-cleaner`** está inerte por construção (`blockedBaseDescs` vazia = não remove nada), então não há o que observar. A consequência disso — a fauna vanilla provavelmente já está solta e ativa — é o assunto do [`HOSTILE_MOB_ACTIVATION_DECISION.md`](HOSTILE_MOB_ACTIVATION_DECISION.md), e o censo que ela pede **não é esta Fase 0**.
 
@@ -61,6 +61,7 @@ Todas vão no `skymp/gamemode/.env`. A coluna diz **para qual etapa** cada uma e
 | `VOIP_PUBLIC_HOST` / `VOIP_BIND_HOST` | — | só entre máquinas | — | Padrão `127.0.0.1` só serve na mesma máquina |
 | `ENABLE_SOUL_SERVICE` | `false` | — | `true` só em 9.4 | Voltar para `false` ao fim da etapa |
 | `SOUL_SECRET` | — | — | **obrigatório em 9.4** | Escolha uma vez; trocar depois quebra quem já foi derivado |
+| `ENABLE_NAMETAG_SERVICE` | `true` só em 3.7 | — | — | Desligado por padrão. A projeção mundo→tela **nunca foi executada** — 3.7 é a primeira vez |
 | `ENABLE_NPC_CLEANER` | tanto faz | — | — | Inerte com a lista de bloqueio vazia |
 
 ### As três ressalvas — verificadas, não presumidas
@@ -79,7 +80,7 @@ Todas vão no `skymp/gamemode/.env`. A coluna diz **para qual etapa** cada uma e
 
 | # | Faça | Espere | Se falhar |
 |---|---|---|---|
-| 0.1 | `cd skymp/gamemode && npm test` | 406 passando | Não comece. Conserte antes. |
+| 0.1 | `cd skymp/gamemode && npm test` | 444 passando | Não comece. Conserte antes. |
 | 0.2 | `npm run test:systems` | 13/13 | Comando, permissão ou flag fora do lugar |
 | 0.3 | `npm run check:schema` | `[OK] banco e migrations estao alinhados` | **Aplique as migrations pendentes** (`v2`→`v10`, em ordem; são idempotentes). Banco meio-migrado não quebra o boot — quebra a query que toca a coluna faltante, no meio de uma cena. Foi assim que a v9 nasceu: `characters.gold` estava só no `schema.sql`, então banco antigo migrado em ordem nunca a recebia, e **toda** operação de ouro falharia na etapa 5.6 |
 | 0.4 | Confira `apps/game-api/mods.json` | Existe e tem `mods` e `loadOrder` | `/mods.json` responde 503 e **ninguém entra**. Gere com `node scripts/generate-mods-manifest.js` |
@@ -141,7 +142,24 @@ Os quatro primeiros passos já existiam. Os dois últimos vêm dos **"Requisitos
 | 3.5 | **A desconecta e reconecta** | A continua vendo o nome de B (3.2) e o apelido (3.4) | Requisito de alfa *"reconexao deve preservar conhecidos e apelidos"*. Se sumiu, o conhecimento só existia em memória — confira `character_known_identities` no banco |
 | 3.6 | **Reinicie o servidor** e A e B voltam | Os dois continuam valendo | Requisito de alfa *"restart do servidor deve preservar conhecidos e apelidos"*. É o teste que separa cache de persistência, e 3.5 pode passar sozinho com o cache quente |
 
-> **Dois requisitos de alfa daquele documento não são testáveis neste build, e não é falha:** *"disfarce ativo deve poder sobrescrever nome publico"* — o `disguise-service` foi apagado em 06/08 ([`PARKED_SERVICES_DECISION.md`](PARKED_SERVICES_DECISION.md) §7.1) e ainda não voltou; e *"staff deve ter comando auditado para revelar identidade"* — o `/revelaridentidade` está na PR #13, não mesclada. Registre os dois como **não aplicável neste build**, não como reprovado.
+### 3.7 — Nametag e revelação por staff (🔴 nunca executado)
+
+Ligue `ENABLE_NAMETAG_SERVICE=true` e reinicie. **Esta é a primeira vez que a projeção mundo→tela roda** — `worldPointToScreenPoint` nunca foi chamada, então que ela seja alcançável por este caminho é inferência, não observação. Falhar aqui é resultado esperado o bastante para não assustar ninguém.
+
+| # | Faça | Espere | Se falhar |
+|---|---|---|---|
+| 3.7.1 | A olha B, antes de qualquer `/apresentar` | Etiqueta acima de B dizendo **Desconhecido** | Se aparecer o nome civil, a etiqueta não passa pela escada de identidade — **pare e registre**, é vazamento de identidade |
+| 3.7.2 | B anda, corre, sobe uma escada | A etiqueta **acompanha a cabeça** sem tremer nem deslizar | Se ficar presa ou saltar, anote em que movimento: é a convenção de eixos, que nunca foi verificada |
+| 3.7.3 | B fica atrás da câmera de A (A gira 180°) | A etiqueta **some**, não aparece espelhada na frente | Ponto atrás da câmera é buraco conhecido — registre o que apareceu |
+| 3.7.4 | B se afasta bem, depois volta | Uma etiqueta só, sempre a do mais próximo | — |
+| 3.7.5 | Um **admin** usa `/revelaridentidade` em B | Devolve o nome real **de B**, não o de quem digitou | Nome do executor é o bug exato que o `disguise-service` tinha antes de ser apagado |
+| 3.7.6 | Um **moderador** tenta o mesmo | **Negado** | `reveal_identity` é `admin`/`owner`. Moderador passando é escalação de privilégio |
+| 3.7.7 | `SELECT * FROM audit_logs WHERE action LIKE 'identity:reveal%' ORDER BY id DESC LIMIT 1` | Linha com **quem revelou** e **quem foi revelado** | Revelação sem rastro derruba a justificativa inteira do comando ser explícito |
+| 3.7.8 | `SELECT * FROM character_known_identities WHERE ...` (o par staff→B) | **Nenhuma linha nova** | Se gravou, a staff passa a chamar B pelo nome real no chat para sempre — metagaming com aparência legítima |
+
+**Anote o custo.** Se o jogo engasgar com a etiqueta ligada, é o `executeJavaScript` atravessando para a CEF — custo que nunca foi medido, e o motivo de o padrão ser 20 Hz e não por quadro. Desligue a flag ao fim da etapa.
+
+> **Um requisito de alfa daquele documento continua não testável neste build, e não é falha:** *"disfarce ativo deve poder sobrescrever nome publico"* — o `disguise-service` foi apagado em 06/08 ([`PARKED_SERVICES_DECISION.md`](PARKED_SERVICES_DECISION.md) §7.1) e ainda não voltou. Registre como **não aplicável neste build**, não como reprovado.
 
 ---
 
@@ -415,6 +433,8 @@ offlineMode: false ☐    Flags ENABLE_* ligadas: ___
 | 3 Identidade      | ☐ |  |
 | 3.5 sobrevive à reconexão | ☐ | nome ☐ · apelido ☐ |
 | 3.6 sobrevive ao restart  | ☐ | nome ☐ · apelido ☐ |
+| 3.7 nametag projeta       | ☐ | Desconhecido ☐ · acompanha ☐ · atrás da câmera ☐ |
+| 3.7 revelação por staff   | ☐ | alvo certo ☐ · moderador negado ☐ · audit ☐ |
 | 4 Chat            | ☐ |  |
 | 5 Morte           | ☐ | tempo até DOWNED: ___ s |
 | 5.2 death:killer  | ☐ | killerId: ___ |

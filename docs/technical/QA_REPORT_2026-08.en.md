@@ -14,7 +14,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 | Component | Tests | Installable | Real state |
 |---|---|---|---|
-| `skymp/gamemode` | 406/406 ✅ + 13/13 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
+| `skymp/gamemode` | 444/444 ✅ + 13/13 system checks | ✅ | **Mature, and now with a real boot behind it.** Atomic transactions, a state machine, a module registry, real test coverage. The second pass (2.16–2.26) found ten defects the suite could not catch — nine of them configuration or lifecycle. |
 | `apps/bot-discord` | 40/40 ✅ | ✅ | **Working**, small scope (role sync + temporary voice channels). |
 | `apps/web` | 40/40 ✅ | ✅ | **Working.** Gained smoke tests this round. |
 | `apps/launcher` | 24/24 ✅ (parity) | ✅ | **Was broken end to end** (see 2.1) and had no tests at all. The modpack parity logic was extracted into `electron/parity.mjs` and tested — it found the extra-plugin hole (2.15). The rest of `main.ts` needs Electron. |
@@ -26,7 +26,7 @@ A full sweep of the monorepo: gamemode, web panel, Discord bot, launcher, schema
 
 > ⚠️ **Until 2026-08-06 the flags turned nothing on** — the gamemode never loaded its own `.env` (2.16). The server's first real boot happened on 2026-08-06, with four active modules and 33 registered commands.
 
-Six modules registered in `core/module-registry.js`, all behind an `ENABLE_*` flag and **all off by default**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
+**Eight** modules registered in `core/module-registry.js`, all behind an `ENABLE_*` flag and **all off by default**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
 
 Seven services exist on disk and are **never registered** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Four others were deleted on 2026-08-06 (`economy-service`, `justice`, `faction`, `survival`) for duplicating an active system or being unsafe — see `PARKED_SERVICES_DECISION.md`. Those that stayed and touched gold were migrated to `core/transaction-service`.
 
