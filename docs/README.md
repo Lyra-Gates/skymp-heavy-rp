@@ -2,7 +2,7 @@
 
 Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
-> **Última conferência contra o código: 07/08/2026.** Os documentos foram lidos contra o estado real do repositório e as afirmações checadas uma a uma. O que estava desatualizado foi corrigido no mesmo commit. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
+> **Última conferência contra o código: 08/08/2026.** Os documentos foram lidos contra o estado real do repositório e as afirmações checadas uma a uma. O que estava desatualizado foi corrigido no mesmo commit. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
 
 ---
 
@@ -37,14 +37,16 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | Como cliente e modpack chegam ao jogador, como a paridade é verificada, e a assinatura do instalador (§6). |
 | [PUBLIC_BUILD_GUIDE.md](technical/PUBLIC_BUILD_GUIDE.md) | O que precisa estar verdadeiro antes de publicar a build pra comunidade. |
 | [LICENSE_AND_AFFILIATION_POLICY.md](technical/LICENSE_AND_AFFILIATION_POLICY.md) | Licenças do SkyMP por subprojeto, o que cada situação obriga, e não-afiliação. |
-| [VOICE_CLIENT_PATCH.md](technical/VOICE_CLIENT_PATCH.md) | Runbook do patch de client que o VOIP nativo precisa e que não existe upstream. |
+| [VOICE_CLIENT_PATCH.md](technical/VOICE_CLIENT_PATCH.md) | Runbook do patch de client que o VOIP nativo precisava e que não existe upstream — **superado** pelo helper nativo, e mantido porque explica por que a captura saiu do navegador. |
+| [VOICE_NATIVE_HELPER.md](technical/VOICE_NATIVE_HELPER.md) | **O caminho de voz que vale.** Captura fora do CEF por WASAPI, relay pelo servidor, e o registro do primeiro build e da primeira captura medida (§8.3, §8.4). A §8.2 diz o que continua sem prova: ninguém ouviu. |
 
 ### Decisões tomadas
 
 | Documento | Decisão |
 |---|---|
 | [PARKED_SERVICES_DECISION.md](technical/PARKED_SERVICES_DECISION.md) | Quais serviços estacionados foram apagados e por quê — duas rodadas de avaliação, e o critério que a primeira deixou escapar (§7). |
-| [NPC_POLICY_DECISION.md](technical/NPC_POLICY_DECISION.md) | Como lidar com NPCs vanilla num servidor Heavy RP. |
+| [NPC_POLICY_DECISION.md](technical/NPC_POLICY_DECISION.md) | Como lidar com NPCs vanilla num servidor Heavy RP. Deixou seis perguntas abertas na §5. |
+| [HOSTILE_MOB_ACTIVATION_DECISION.md](technical/HOSTILE_MOB_ACTIVATION_DECISION.md) | Responde a terceira delas — criaturas hostis ficam ativas —, e derruba a premissa de que havia algo a "ativar": o `npc-cleaner` é inerte, então o mundo provavelmente já está cheio de lobos e ursos. Análise de 15 pontos, **nada implementado**. |
 | [NAMETAG_IDENTITY_SYSTEM.md](technical/NAMETAG_IDENTITY_SYSTEM.md) | Por que o nome exibido depende de quem está olhando. |
 | [MARKET_STALL_VISUAL_ASSET_PLAN.md](technical/MARKET_STALL_VISUAL_ASSET_PLAN.md) | Assets visuais das barracas, com análise de licença mod a mod. |
 

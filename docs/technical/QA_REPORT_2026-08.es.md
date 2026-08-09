@@ -310,7 +310,7 @@ Salió del estudio de integración con Chancelaria Real, un sistema en producci�
 ### Qué no hacer
 
 - **Migrar los manifiestos al formato Nexus Collections.** Ver `LAUNCHER_DISTRIBUTION.md` §5 — Collections no garantiza la paridad de load order, que es el motivo por el que los manifiestos existen.
-- **Perseguir el VOIP nativo antes que el resto.** Depende de un parche de cliente que no existe en upstream (`VOICE_CLIENT_PATCH.md`) y ya hay una alternativa funcionando vía canales de voz de Discord.
+- **Perseguir el VOIP nativo antes que el resto.** Sigue valiendo — **pero el motivo cambió el 07/08/2026 y el anterior ya no vale.** Ya no depende de un parche de cliente: la captura salió del navegador hacia un helper nativo, que **compiló y capturó audio real** (`VOICE_NATIVE_HELPER.md` §8.3 y §8.4). Lo que queda es que nadie escuchó el audio con el oído (§8.2), que el PCM crudo cuesta ~1 Mbit/s de subida por hablante — banco de pruebas, no producción —, y que la Fase 0 sigue siendo el bloqueo real. Los canales de voz de Discord siguen siendo la solución de la Alfa.
 - **Reactivar un módulo PARKED sin pasar por `module-registry`.** El registro es lo que garantiza la flag, las dependencias y la limpieza de comandos; saltárselo devuelve el proyecto al estado que generó buena parte de los bugs ya corregidos.
 
 ---
