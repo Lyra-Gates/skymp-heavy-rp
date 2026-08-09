@@ -865,6 +865,161 @@ describe('voip-service — helper e UI do mesmo ator convivendo', () => {
   });
 });
 
+/**
+ * Proximidade por CÉLULA, não só por coordenada.
+ *
+ * `locationalData` devolve `cellOrWorldDesc` junto com `pos` porque posição
+ * sozinha não identifica lugar: cada interior do Skyrim é construído em torno da
+ * própria origem, então duas tavernas distintas — ou uma taverna e uma masmorra —
+ * têm coordenadas na mesma vizinhança numérica. Comparar só `pos` faz a voz
+ * atravessar de um interior pra outro sem existir caminho entre eles.
+ *
+ * O mock daqui devolve os dois campos (os outros blocos deste arquivo devolvem
+ * só `pos`, de propósito: célula desconhecida não deve descartar ninguém).
+ *
+ * Se a checagem de célula sumir do `tickProximity`, o segundo caso reprova; se
+ * for invertida, o primeiro reprova junto.
+ */
+describe('voip-service — proximidade respeita a célula', () => {
+  const IN_TAVERN = 0xff00f001;
+  const IN_TAVERN_2 = 0xff00f002;
+  const IN_DUNGEON = 0xff00f003;
+
+  const TAVERN = '162e2:Skyrim.esm';
+  const DUNGEON = '1a26f:Skyrim.esm';
+
+  const RANGE = VOICE_RANGES.normal;
+  const FRAME = 'A'.repeat(2560);
+  const locs = new Map();
+
+  let cellPort;
+  const openSockets = [];
+
+  before(async () => {
+    global.mp = {
+      get: (actorId, prop) => {
+        if (prop !== 'locationalData') return null;
+        return locs.get(actorId) || null;
+      }
+    };
+    voip.startVoipServer(0, '127.0.0.1');
+    for (let i = 0; i < 50 && !voip.getListeningPort(); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    cellPort = voip.getListeningPort();
+    assert.ok(cellPort > 0);
+  });
+
+  after(() => {
+    voip.stopVoipServer();
+    delete global.mp;
+  });
+
+  beforeEach(() => {
+    locs.clear();
+    voip._pendingTickets.clear();
+    voip._audienceByActor.clear();
+    voip._voipClients.clear();
+  });
+
+  afterEach(async () => {
+    await Promise.all(openSockets.splice(0).map((ws) => new Promise((resolve) => {
+      if (ws.readyState === WebSocket.CLOSED) return resolve();
+      ws.once('close', resolve);
+      ws.close();
+    })));
+  });
+
+  async function connectAs(actorId, role) {
+    const ticket = voip.issueTicket(actorId, role || 'listener');
+    const ws = new WebSocket(`ws://127.0.0.1:${cellPort}`);
+    openSockets.push(ws);
+    ws.received = [];
+    ws.on('message', (raw) => ws.received.push(JSON.parse(raw.toString())));
+    await new Promise((resolve) => ws.once('open', resolve));
+    const auth = { type: 'auth', actorId, ticket };
+    if (role !== undefined) auth.role = role;
+    ws.send(JSON.stringify(auth));
+    await waitForType(ws, 'auth_ok');
+    return ws;
+  }
+
+  function waitForType(ws, type, timeoutMs = 1000) {
+    const already = ws.received.find((m) => m.type === type);
+    if (already) return Promise.resolve(already);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timeout esperando '${type}'`)), timeoutMs);
+      const onMessage = (raw) => {
+        const msg = JSON.parse(raw.toString());
+        if (msg.type !== type) return;
+        clearTimeout(timer);
+        ws.off('message', onMessage);
+        resolve(msg);
+      };
+      ws.on('message', onMessage);
+    });
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
+  const countFrames = (ws) => ws.received.filter((m) => m.type === 'audio_frame').length;
+  const lastProx = (ws) => {
+    const all = ws.received.filter((m) => m.type === 'proximity_update');
+    return all.length ? all[all.length - 1] : null;
+  };
+
+  it('mesma célula e dentro do alcance: continuam se ouvindo', async () => {
+    locs.set(IN_TAVERN, { cellOrWorldDesc: TAVERN, pos: [0, 0, 0] });
+    locs.set(IN_TAVERN_2, { cellOrWorldDesc: TAVERN, pos: [RANGE * 0.5, 0, 0] });
+
+    const speaker = await connectAs(IN_TAVERN, 'sender');
+    const listener = await connectAs(IN_TAVERN_2, 'listener');
+    voip.tickProximity();
+    await settle();
+
+    const prox = lastProx(listener);
+    assert.ok(prox, 'o ouvinte precisa receber o mapa de volume');
+    assert.ok(
+      prox.peers.some((p) => p.actorId === IN_TAVERN),
+      'quem está na mesma célula e no alcance tem que aparecer no proximity_update'
+    );
+
+    speaker.send(JSON.stringify({ type: 'audio_frame', seq: 1, data: FRAME }));
+    const got = await waitForType(listener, 'audio_frame');
+    assert.strictEqual(got.fromActorId, IN_TAVERN);
+  });
+
+  it('células diferentes com coordenadas próximas: não se ouvem', async () => {
+    // A mesma distância do caso anterior — a única coisa que muda é a célula.
+    // Sem a checagem, este par passaria pelo filtro de alcance exatamente igual.
+    locs.set(IN_TAVERN, { cellOrWorldDesc: TAVERN, pos: [0, 0, 0] });
+    locs.set(IN_DUNGEON, { cellOrWorldDesc: DUNGEON, pos: [RANGE * 0.5, 0, 0] });
+
+    const speaker = await connectAs(IN_TAVERN, 'sender');
+    const listener = await connectAs(IN_DUNGEON, 'listener');
+    voip.tickProximity();
+    await settle();
+
+    const prox = lastProx(listener);
+    assert.ok(prox, 'o ouvinte recebe o mapa mesmo vazio — o silêncio é a resposta');
+    assert.strictEqual(
+      prox.peers.filter((p) => p.actorId === IN_TAVERN).length, 0,
+      'quem está em outra célula não pode entrar no proximity_update'
+    );
+
+    // E o mesmo mapa é o que o relay consulta: audiência errada aqui é áudio
+    // entregue a quem não deveria receber, não só um ganho errado no slider.
+    const audience = voip._audienceByActor.get(IN_TAVERN) || [];
+    assert.strictEqual(
+      audience.filter((a) => a.actorId === IN_DUNGEON).length, 0,
+      'a audiência do locutor não pode conter alguém de outra célula'
+    );
+
+    speaker.send(JSON.stringify({ type: 'audio_frame', seq: 2, data: FRAME }));
+    await settle();
+    assert.strictEqual(countFrames(listener), 0, 'nenhum quadro atravessa a parede da célula');
+  });
+});
+
 describe('voip-service — comando /voz', () => {
   it('requestVoiceConnection não lança sem personagem ativo', () => {
     assert.doesNotThrow(() => voip.requestVoiceConnection(0xdeadbeef));

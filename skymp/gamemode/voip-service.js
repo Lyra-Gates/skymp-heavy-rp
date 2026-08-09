@@ -124,6 +124,11 @@ function _ticketKey(actorId, role) {
 // pra que falar e escrever cheguem exatamente nas mesmas pessoas.
 const { VOICE_RANGES } = require('./core/proximity-ranges');
 
+// A regra de "o que conta como célula" mora num lugar só. Reaproveitar o
+// `getCell` daqui em vez de escrever mais uma cadeia de nomes de campo é o que
+// mantém voz, nametag e alcance de ação concordando sobre onde cada um está.
+const rangeUtils = require('./core/range-utils');
+
 /**
  * Formato do áudio no fio (Fase 1): PCM cru, 16-bit little-endian, mono, 48kHz,
  * quadros de 20ms (960 amostras = 1920 bytes → 2560 chars em base64).
@@ -403,7 +408,11 @@ function tickProximity() {
     try {
       const loc = mp.get(actorId, 'locationalData');
       if (!loc) continue;
-      actors.push({ actorId, entry, pos: loc.pos });
+      // A célula vem junto com a posição na mesma leitura, e é preciso guardar
+      // as duas: cada interior do Skyrim tem origem de coordenadas própria, então
+      // `pos` sozinho não diz onde a pessoa está — duas tavernas distintas têm
+      // coordenadas na mesma vizinhança numérica.
+      actors.push({ actorId, entry, pos: loc.pos, cell: rangeUtils.getCell(loc) });
     } catch { continue; }
   }
 
@@ -412,6 +421,15 @@ function tickProximity() {
 
     for (const peer of actors) {
       if (peer.actorId === client.actorId) continue;
+
+      // Células diferentes são lugares diferentes, por mais perto que os números
+      // fiquem — sem isso a voz atravessa de um interior para outro sem existir
+      // caminho entre eles, e o `_audienceByActor` montado aqui é o mesmo que o
+      // relay usa pra decidir quem recebe `audio_frame`. Mesma regra que
+      // `range-utils.distanceBetween` aplica (`ca !== cb` → Infinity) e que o
+      // `nametag-service` já usa. Célula desconhecida de um dos lados não
+      // descarta: falta de informação não é prova de estarem separados.
+      if (client.cell && peer.cell && client.cell !== peer.cell) continue;
 
       const dist = distance3D(client.pos, peer.pos);
       const range = VOICE_RANGES[peer.entry.voiceMode || 'normal'];
