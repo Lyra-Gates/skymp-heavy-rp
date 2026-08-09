@@ -11,6 +11,10 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **`ARCHITECTURE.md` 1.4.8 descreve a nametag e a revelação por staff**, nos quatro idiomas. Os dois entraram pela branch e a arquitetura não os mencionava — a mesma classe de problema que motivou escrever as seções 1.4.5–1.4.7 depois do fato, e que a §1.4 existe para não repetir.
+
+  Junto saíram dois números que envelheceram em silêncio no [`QA_REPORT_2026-08.md`](docs/technical/QA_REPORT_2026-08.md): ele dizia **seis** módulos registrados, e são **oito** — `soul` e `nametag` faltavam nas quatro cópias. Um relatório que lista os módulos e erra a lista é pior que um que não os liste, porque quem confere "está tudo desligado por padrão?" recebe uma resposta que parece completa.
+
 - **`/revelaridentidade` — a revelação de identidade por staff, que o desenho pedia desde 12/07/2026.** O [`NAMETAG_IDENTITY_SYSTEM.md`](docs/technical/NAMETAG_IDENTITY_SYSTEM.md) listava *"Staff futura: nome real, com permissao auditada"* como regra 2 de 4 da escada de exibição, e a única implementação que existiu vivia no `disguise-service`, apagado em 06/08 — respondendo com o nome de **quem digitou o comando** em vez do alvo.
 
   **Comando explícito, não estado passivo.** "Staff sempre vê o nome real" não tem evento para auditar, e a regra pede auditoria: um estado não responde *quem* furou o anonimato de *quem* e *quando*, que é a pergunta de uma arbitragem contestada. Além disso obrigaria o `identity-service` a importar o `admin-service` para consultar o `staffCache` (chaveado por `actorId`, enquanto `getDisplayName` trabalha com personagens), e o efeito apareceria de uma vez em todo chamador — chat local, aba Social, nametag. É a forma de defeito que a [`PARKED_SERVICES_DECISION.md`](docs/technical/PARKED_SERVICES_DECISION.md) §7.1 usou para apagar o `disguise-service`, por dentro em vez de por fora. O preço da escolha é atrito: investigar custa um comando por pessoa. Aceito.
@@ -354,7 +358,7 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Testes do `identity-service`** — o sistema que sustenta o disfarce (o nome exibido depende de quem está olhando) não tinha teste nenhum. Fixa o contrato: desconhecido é "Desconhecido", conhecimento não é recíproco, e sem observador nunca se revela nome civil. Qualquer integração futura que vaze o registro civil falha aqui em vez de arruinar uma cena.
 - **[OPERATIONS.md](docs/technical/OPERATIONS.md)** — runbook de operação: pré-boot, diagnóstico de schema, matriz de quem pode o quê, portas, segredos, e uma seção honesta do que ainda não é coberto.
 
-Total de testes: **540** (406 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 08/08/2026. A linha dizia **496** (362 no gamemode), desatualizada pelos testes que entraram com o `soul-service`, o log de moderação e o VOIP; antes dela dizia 301, e nenhuma das parcelas batia.
+Total de testes: **578** (444 gamemode + 40 web + 30 game-api + 24 launcher + 40 bot) + 13 checks de sistema. Contagem conferida rodando as cinco suítes em 08/08/2026, depois de integrar a nametag e a revelação por staff. A linha dizia **496** (362 no gamemode), desatualizada pelos testes que entraram com o `soul-service`, o log de moderação e o VOIP; antes dela dizia 301, e nenhuma das parcelas batia.
 
 É a terceira vez que este número envelhece em silêncio, e ele não é decorativo: o passo 0.1 do roteiro da Fase 0 manda conferir a contagem **antes** de ligar qualquer coisa. Quando pedia "253 passando", um testador pararia ali achando que tinha quebrado alguma coisa — que é o custo real de um número errado no primeiro passo do teste.
 

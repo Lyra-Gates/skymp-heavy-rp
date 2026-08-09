@@ -14,7 +14,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 | Componente | Pruebas | Instalable | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 406/406 ✅ + 13/13 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
+| `skymp/gamemode` | 444/444 ✅ + 13/13 comprobaciones de sistema | ✅ | **Maduro, y ahora con un arranque real detrás.** Transacciones atómicas, máquina de estados, registro de módulos, cobertura de pruebas real. La segunda pasada (2.16–2.26) encontró diez defectos que la suite no podía atrapar — nueve de ellos de configuración o de ciclo de vida. |
 | `apps/bot-discord` | 40/40 ✅ | ✅ | **Funcional**, alcance pequeño (sincronización de roles + canales de voz temporales). |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganó smoke tests en esta ronda. |
 | `apps/launcher` | 24/24 ✅ (paridad) | ✅ | **Estaba roto de punta a punta** (ver 2.1) y sin ninguna prueba. La lógica de paridad del modpack se extrajo a `electron/parity.mjs` y se probó — encontró el agujero del plugin extra (2.15). El resto de `main.ts` necesita Electron. |
@@ -26,7 +26,7 @@ Un barrido completo del monorepo: gamemode, panel web, bot de Discord, launcher,
 
 > ⚠️ **Hasta el 06/08/2026 las banderas no encendían nada** — el gamemode nunca cargó su propio `.env` (2.16). El primer arranque real del servidor ocurrió el 06/08/2026, con cuatro módulos activos y 33 comandos registrados.
 
-Seis módulos registrados en `core/module-registry.js`, todos detrás de una flag `ENABLE_*` y **todos apagados por defecto**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
+**Ocho** módulos registrados en `core/module-registry.js`, todos detrás de una flag `ENABLE_*` y **todos apagados por defecto**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
 
 Siete servicios existen en disco y **nunca se registran** — `economy-regional`, `jobs`, `crafting`, `housing`, `trade`, `disguise`, `horse` (PARKED). Otros cuatro se borraron el 06/08/2026 (`economy-service`, `justice`, `faction`, `survival`) por duplicar un sistema activo o por ser inseguros — ver `PARKED_SERVICES_DECISION.md`. Los que quedaron y tocaban oro fueron migrados a `core/transaction-service`.
 

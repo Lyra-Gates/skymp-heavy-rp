@@ -14,7 +14,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 | Componente | Testes | Instalável | Estado real |
 |---|---|---|---|
-| `skymp/gamemode` | 406/406 ✅ + 13/13 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
+| `skymp/gamemode` | 444/444 ✅ + 13/13 checks de sistema | ✅ | **Maduro, e agora com um boot real atrás.** Transações atômicas, máquina de estado, registry de módulos, cobertura de teste real. A segunda rodada (2.16–2.25) achou dez defeitos que a suíte não pegava — nove deles de configuração ou de ciclo de vida. |
 | `apps/bot-discord` | 40/40 ✅ | ✅ | **Funcional.** Sync de cargo, canais de voz temporários e, desde 07/08/2026, o log de moderação que a `ARCHITECTURE.md` 1.3 registrava como intenção nunca implementada. |
 | `apps/web` | 40/40 ✅ | ✅ | **Funcional.** Ganhou smoke tests nesta rodada. |
 | `apps/launcher` | 24/24 ✅ (paridade) | ✅ | **Estava quebrado ponta a ponta** (ver 2.1) e sem teste nenhum. A lógica de paridade de modpack foi extraída pra `electron/parity.mjs` e testada — achou o buraco do plugin extra (2.15). O resto do `main.ts` depende de Electron. |
@@ -24,7 +24,7 @@ Varredura completa do monorepo: gamemode, painel web, bot do Discord, launcher, 
 
 ### O que efetivamente roda hoje
 
-Seis módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `voip` (lab).
+**Oito** módulos registrados no `core/module-registry.js`, todos atrás de flag `ENABLE_*` e **todos desligados por padrão**: `npc-cleaner` (core), `death`, `governance`, `market-stalls`, `player-panel`, `soul`, `voip`, `nametag` (lab).
 
 > ⚠️ **Até 06/08/2026 as flags não ligavam nada** — o gamemode nunca carregou o próprio `.env` (2.16). O primeiro boot real do servidor aconteceu em 06/08/2026, com quatro módulos ativos e 33 comandos registrados.
 
