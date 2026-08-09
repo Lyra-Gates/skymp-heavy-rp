@@ -18,7 +18,20 @@ comportamento observado em teste automatizado, que roda com `mp` **mockado**. Um
 mock aceita qualquer payload; o addon nativo não.
 
 Esta revisão cruza cada suposição com a arquitetura. **Nenhuma linha de código
-mudou.**
+mudou** — a rodada foi de leitura, de propósito: achar e registrar sem consertar
+no calor da descoberta.
+
+> **Atualização de 09/08/2026 — dois dos quatro 🔴 foram consertados.** O
+> `death-service` (§6, os dois achados) e o `safe-zones` (§2) saíram em
+> [`09fbb12`](../../commit/09fbb12), numa rodada separada que fez **só** os dois
+> consertos. Os vereditos abaixo foram atualizados no lugar, com a marca ✅
+> **corrigido** e o que mudou. **`hit-events` (§1) e `voip-service` (§5)
+> continuam 🔴** e continuam sem conserto — ver a priorização no fim, que explica
+> por que nenhum dos dois bloqueia a sessão.
+>
+> O texto do achado foi **mantido no passado**, não apagado: o que ele descreve
+> aconteceu, e um documento de auditoria que reescreve o diagnóstico depois do
+> conserto perde a única coisa que o torna útil na próxima vez.
 
 ## Como ler os vereditos
 
@@ -27,6 +40,7 @@ mudou.**
 | ✅ **Confirmado** | A suposição bate com o que se sabe da arquitetura real. |
 | 🟡 **Provável, pendente de Fase 0** | A arquitetura sustenta a suposição; só jogador real fecha. É o resultado esperado da maioria. |
 | 🔴 **Desalinhado** | A suposição não bate com o que a arquitetura faz. |
+| ✅ **Corrigido** | Era 🔴; o código mudou. Traz o commit e o que o conserto **não** alcança. |
 | ⚪ **Não verificável** | Nem a referência upstream nem o código local respondem. |
 
 Procedência, como no resto do projeto: **`[DOC]`** é código-fonte primário lido;
@@ -44,18 +58,20 @@ cadeia inteira lida no código.
 | Sistema | Veredito | Em uma frase |
 |---|---|---|
 | `core/hit-events.js` | 🔴 | Existe um caminho nativo (`mp["onPapyrusEvent:OnHit"]`) com o agressor **já resolvido e validado pelo servidor**, e não o usamos — coletamos em paralelo a ele. |
-| `core/safe-zones.js` | 🔴 | A leitura está certa, mas o `cellId` do exemplo (`"0x162e2"`) não é o formato `FormDesc` que o servidor devolve — a zona nunca casaria, e falharia **aberta**. |
+| `core/safe-zones.js` | ✅ **corrigido** | Era 🔴: o `cellId` do exemplo (`"0x162e2"`) não era `FormDesc`, a zona nunca casaria e falharia **aberta**. Exemplo corrigido e o loader agora **recusa e grita**. `09fbb12` |
 | `identity-service` | ✅ | Resolução de nome por observador é 100% nossa, em banco; não há suposição sobre o SkyMP para conferir. |
 | `nametag-service` | 🟡 | A projeção mundo→tela não é contrariada por nada; a wiki aponta um caminho mais barato (`SetTextRefr()`) que ninguém verificou. |
 | `voip-service` | 🔴 | Calcula distância entre atores **sem comparar célula** — único dos três sistemas de proximidade que não faz isso. |
-| `death-service` | 🔴 | Dois desalinhamentos independentes: o servidor **respawna sozinho em 25 s** e o payload do nosso respawn **lança**. |
+| `death-service` | ✅ **corrigido** | Eram dois: o servidor respawnava sozinho em 25 s e o payload do respawn lançava. O handler passa a **bloquear o respawn nativo do que é dele**, e o payload está na forma que o addon aceita. `09fbb12` |
 | `market-stalls-service` / governança | 🟡 | Lê `cellOrWorldDesc` corretamente e compara célula com célula; duas properties de barraca ficam ⚪. |
 | `npc-cleaner.js` | ✅ | `baseDesc` no formato `"1a6a0:Skyrim.esm"` é **exatamente** o que `BaseDescBinding` devolve. |
 | Escala de mob | ⚪ | Metade `[DOC]` e fechada (lista nivelada é do servidor); a outra metade — se **estatística** escala por cliente — segue em aberto e é medição da Fase 0. |
 
 **Um achado é sistêmico e explica dois dos 🔴:** o projeto trata identidade de
 célula como *hexadecimal com prefixo `0x`*, e o SkyMP a trata como **`FormDesc`
-em string** (`"162e2:Skyrim.esm"`). Ver §10.
+em string** (`"162e2:Skyrim.esm"`). Ver §10 — **os dois pontos foram corrigidos
+em `09fbb12`**, e a §10 registra o que sobrou como regra para as próximas
+features.
 
 **O que mudou da primeira passagem para esta:**
 
@@ -192,7 +208,7 @@ comparada por **igualdade de string** com o `cellId` escrito na config
 
 `"0x162e2" !== "162e2:Skyrim.esm"` — a comparação de string nunca casa.
 
-**Veredito: 🔴 Desalinhado.**
+**Veredito: 🔴 Desalinhado — ✅ corrigido em [`09fbb12`](../../commit/09fbb12).**
 
 **Impacto prático.** Hoje é **latente**, e por dois motivos independentes:
 `zones` nasce vazia com `enabled` em `false`, e — confirmado por leitura nesta
@@ -207,16 +223,37 @@ assim falha **aberta** — a proteção simplesmente não existe, sem erro em lu
 nenhum. É o modo de falha que o próprio cabeçalho do arquivo diz querer evitar:
 *"config ausente não pode virar comportamento surpresa"*.
 
-**Proposta (não implementada).**
+### ✅ Corrigido em [`09fbb12`](../../commit/09fbb12)
 
-1. Corrigir `safe-zones.example.json` para o formato `FormDesc`
-   (`"162e2:Skyrim.esm"`) e documentar isso no `_sobre_area`.
-2. Validar o formato no `loadZones()`: um `cellId` que case `/^0x/i` ou que não
-   contenha `:` é quase certamente erro de digitação — recusar com log explícito,
-   como já se faz com categoria desconhecida.
-3. Alternativa mais robusta que não depende de o humano acertar o formato: aceitar
-   FormID numérico na config e converter com **`mp.getDescFromId`** **`[DOC]`**
-   (§8.3), que existe exatamente para isso.
+Os itens 1 e 2 da proposta saíram; o 3 não, e o motivo está registrado abaixo.
+
+1. **`safe-zones.example.json` agora traz `"162e2:Skyrim.esm"`**, com um bloco
+   `_sobre_cellid` explicando o formato e por que errar nele não dá erro. Era o
+   caminho pelo qual o defeito entraria — quem copia o exemplo faz o esperado.
+2. **`loadZones` recusa `cellId` fora do formato e grita.** Quatro casos
+   cobertos: prefixo `0x`, ausência de `:`, hex inválido antes do `:` e arquivo
+   vazio depois. O log diz a forma certa, não só que está errada. **A zona sai
+   da lista** em vez de entrar inerte — as duas protegem igual (nada), mas só uma
+   aparece; é a mesma disciplina da categoria desconhecida logo ao lado.
+3. **A conversão a partir de FormID numérico (`mp.getDescFromId`) não entrou
+   aqui.** Ela resolveria o formato sem depender de o humano acertar, mas trocaria
+   uma config declarativa em disco — legível, versionada, conferível sem servidor
+   — por uma que só se resolve com o `mp` vivo. Para uma lista que ainda nasce
+   vazia e cuja primeira zona nem foi decidida, validar é mais barato que
+   converter. O `death-service` **usa** a derivação (§6.3), porque lá a constante
+   é do código e não da config.
+
+`parseZones` foi separado da leitura de disco para que o teste exercitasse config
+malformada sem escrever em `skymp/config/safe-zones.json` — um teste que falhasse
+no meio deixaria para trás uma config de zona segura ativa, que é exatamente a
+surpresa que este módulo existe para não causar. Mesmo padrão do
+`sweepOnce(policy = loadPolicy())` do `npc-cleaner`.
+
+**O que o conserto não muda:** as zonas continuam nascendo vazias e desligadas, e
+**nenhum chamador de `canPerform` informa `context.actorId`** — então a dimensão
+de lugar segue não sendo consultada. Isto era latente antes e continua latente; o
+que mudou é que agora falha **alto** em vez de aberto. A `ARCHITECTURE.md` §1.4.7
+continua sendo o registro correto disso.
 
 ---
 
@@ -413,7 +450,7 @@ dá a entender — o que importa para o Achado A abaixo.
 
 Isso tudo é ✅ dentro do sistema.
 
-### 6.2 🔴 Achado A — o servidor respawna sozinho em 25 s
+### 6.2 🔴 Achado A — o servidor respawna sozinho em 25 s · ✅ corrigido
 
 **Suposição do código.** Que, depois de `onDeath`, o personagem fica onde caiu e
 sob nosso controle pelos 4 minutos de `BLEED_OUT_MS`, até alguém usar `/socorrer`
@@ -462,28 +499,53 @@ central de Heavy RP do `SKYMP_RP_DEVELOPMENT_PLAN.md` §8.1. E é invisível em
 teste: o `mp` mockado não tem `DeathEvent`, não tem `spawnDelay` e nunca
 respawna ninguém.
 
-**Proposta (não implementada).** `_dispatch` precisa poder devolver `false`, e o
-`death-service` precisa pedir isso. Duas decisões que **não** são minhas de
-tomar:
+### ✅ Corrigido em [`09fbb12`](../../commit/09fbb12) — decisão: bloquear (opção 1)
 
-1. **Bloquear sempre** (`return false` incondicional) e assumir 100% do ciclo de
-   morte — coerente com o desenho atual, mas passa a ser nossa a
-   responsabilidade de todo respawn, inclusive nos caminhos de erro.
-2. **Bloquear e reprogramar** — devolver `false` e ajustar a property
-   `spawnDelay` **`[DOC]`** para a janela que quisermos, deixando o servidor fazer
-   o respawn no tempo certo.
+A decisão estava registrada aqui como aberta, entre **bloquear sempre** e
+**bloquear e reprogramar `spawnDelay`**. Fechou na primeira, e **não por
+preferência de estilo: a segunda não funciona.**
 
-A opção 1 é a que menos muda o código existente. A 2 é a que menos duplica
-mecanismo do servidor. Registrado como decisão aberta, não resolvida aqui.
+**Por que reprogramar o `spawnDelay` não resolve.** O respawn deste projeto não é
+um teleporte. `executeRespawn` faz `Resurrect` → `locationalData` →
+`_wasDead=false` → `characterState.set(NORMAL)` → notificação →
+`panelRefreshBus`; e o `bleedOut` antes dele cobra a penalidade pelo
+`transaction-service` e grava o contexto anti-RDM. **`RespawnWithDelay()` não faz
+nada disso.** Alinhar o relógio nativo só faria o respawn empobrecido acontecer na
+hora certa — sem penalidade, sem transição de estado, sem painel. O relógio nunca
+foi o problema; o problema é *quem* respawna.
 
-Há também um efeito de segunda ordem a considerar junto: `RespawnWithDelay` é
-como o servidor devolve **qualquer** ator morto ao mundo. O `hunting-service`
-previsto em `HOSTILE_MOB_ACTIVATION_DECISION.md` §7.3 vai assinar o mesmo hook —
-e um `return false` global mataria o respawn **dos mobs também**. O barramento
-`death-events.js` vai precisar de uma política de agregação de retorno (bloqueia
-se algum assinante pedir? só o dono do ator decide?), que hoje ele não tem.
+**O que a opção 1 perde, conferido antes de escolher.** **`[DOC]`**
+`DeathEvent` não sobrescreve `OnFireBlocked`, então bloquear não deixa nada
+pendente no motor: perde-se o respawn, que é exatamente o que substituímos. Não
+havia razão técnica escondida para a opção 2.
 
-### 6.3 🔴 Achado B — o payload do nosso respawn lança
+**O bloqueio é escopado, e é por causa do efeito de segunda ordem que esta seção
+já tinha registrado.** `RespawnWithDelay` é como o servidor devolve **qualquer**
+ator morto ao mundo, e o `hunting-service` vai assinar o mesmo hook — um
+`return false` global mataria o respawn dos mobs junto. Então:
+
+- **O barramento agrega retorno.** `_dispatch` devolve `false` se **algum**
+  assinante pediu, `undefined` caso contrário. Não sai do laço cedo (bloquear é
+  decisão do fim, não atalho que cala quem vem depois), só o booleano `false`
+  exato conta (um `0` ou `null` por descuido não desliga o respawn do servidor), e
+  **assinante que lança não bloqueia** — mesma regra do upstream, pela mesma
+  razão: falha de um consumidor não pode virar decisão de mundo.
+- **O `death-service` só reivindica ator com personagem ativo.** A checagem é
+  `getActiveCharacterData`, síncrona e O(1), porque o motor lê o retorno no mesmo
+  frame e não dá para esperar o `handlePlayerDowned`, que é async. Um lobo morto
+  não tem `characterData`, o retorno fica `undefined`, e a fauna respawna normal —
+  que é o requisito da §7.2 do `HOSTILE_MOB_ACTIVATION_DECISION.md`.
+
+**O que o conserto NÃO alcança, e continua valendo.** **`[DEEPWIKI]`** (§9.2 da
+referência, `PartOne.cpp:175-221`) `PartOne::SetUserActor` chama
+`RespawnWithDelay()` se o ator estiver morto no handshake. **Um jogador que caia e
+reconecte é respawnado por aquele caminho**, que não passa pelo `DeathEvent` e
+portanto não passa por este bloqueio. Bloquear o evento resolve o caminho
+principal, não todos — e isso é observação da Fase 0, não conserto desta rodada.
+Vale incluir "cair e reconectar" nos passos da etapa de morte do
+`FASE_0_ROTEIRO.md`.
+
+### 6.3 🔴 Achado B — o payload do nosso respawn lança · ✅ corrigido
 
 **Suposição do código.** Que `mp.set(actorId, 'locationalData', {...})` aceita
 `{ pos, worldOrCell, angleZ }`
@@ -526,15 +588,42 @@ Combinado com o Achado A, o comportamento real na Fase 0 seria: morrer → levan
 sozinho aos 25 s em outro lugar → e, se alguém chegasse a acionar o bleed-out,
 uma segunda ressurreição no lugar errado com o estado travado.
 
-**Proposta (não implementada).** Corrigir o payload para
-`{ cellOrWorldDesc: "162e2:Skyrim.esm", pos: RESPAWN_POS, rot: [0,0,0] }` — ou,
-preferível, derivar a string com **`mp.getDescFromId`** **`[DOC]`** em vez de
-escrevê-la à mão, que é a mesma classe de erro que a §10 descreve. Confirmar o
-`162e2` contra o ESM antes: o valor herdado nunca foi verificado in-game.
+### ✅ Corrigido em [`09fbb12`](../../commit/09fbb12)
 
-### Veredito do sistema: 🔴 Desalinhado (dois achados)
+O payload virou `{ cellOrWorldDesc, pos, rot }`, e a célula é **derivada** com
+**`mp.getDescFromId`** **`[DOC]`** — a forma preferível que a proposta apontava —
+com `'162e2:Skyrim.esm'` só como rede para o caso de o método não existir (o
+`market-stalls-service` já trata `getDescFromId` como possivelmente ausente).
+Derivar sobrevive a mudança de load order; o literal escrito à mão, não.
 
-`mp.onDeath` e `killerId` estão ✅; o ciclo de vida em volta deles, não.
+**A varredura foi feita, e não assumiu que era só ali.** As quatro escritas de
+`locationalData` do repositório foram conferidas: `admin-service` repassa o objeto
+lido de `mp.get` (correto por construção), `governance-service` e `whitelist` já
+usavam a forma certa. **Só o `death-service` estava errado** — o que reforça o
+diagnóstico desta seção, e não o enfraquece: a forma certa já existia em dois
+lugares do mesmo repositório.
+
+**O que continua sem verificação, e agora está dito no código.** O `162e2` **não
+foi conferido contra o ESM**. Ele veio herdado, e ninguém abriu o arquivo. O que
+esta rodada consertou é o **formato**, que era defeito certo; o **valor** segue
+sendo observação da Fase 0, registrado como tal tanto no `death-service.js` quanto
+no `safe-zones.example.json`.
+
+**O mock do teste passou a ser rigoroso, e isso é parte do conserto.** Enquanto o
+`mp.set` do `death-service.test.js` guardava qualquer payload, o defeito ficava
+verde — que é o parágrafo de abertura desta revisão: *um mock aceita qualquer
+payload; o addon nativo não*. Ele agora emula `LocationalDataBinding::Set`, e
+reverter o payload reprova dois testes — sendo o mais eloquente **"volta o
+personagem pra NORMAL"**, que não é sobre posição nenhuma. Reprova porque o
+`mp.set` lança antes e derruba as linhas seguintes junto, que é exatamente o
+efeito real em produção.
+
+### Veredito do sistema: 🔴 Desalinhado (dois achados) — ✅ **os dois corrigidos**
+
+`mp.onDeath` e `killerId` já estavam ✅. O ciclo de vida em volta deles passou a
+estar: uma autoridade só sobre o respawn, e um payload que o addon aceita. **O que
+não mudou é o que sempre valeu — nada disto rodou com jogador conectado**, e é a
+etapa de morte da Fase 0 que fecha.
 
 ---
 
@@ -671,14 +760,22 @@ Dois dos 🔴 têm a mesma raiz, e vale nomeá-la separada dos sistemas:
 **O projeto trata identidade de célula como número hex com prefixo `0x`. O SkyMP
 a trata como `FormDesc` serializado em string.**
 
-| Onde | Escrito | Deveria ser |
-|---|---|---|
-| `death-service.js:36` | `RESPAWN_CELL = '0x162e2'` | `'162e2:Skyrim.esm'` |
-| `safe-zones.example.json` | `"cellId": "0x162e2"` | `"162e2:Skyrim.esm"` |
+| Onde | Escrito | Deveria ser | Estado |
+|---|---|---|---|
+| `death-service.js:36` | `RESPAWN_CELL = '0x162e2'` | `'162e2:Skyrim.esm'` | ✅ derivado por `mp.getDescFromId` em `09fbb12` |
+| `safe-zones.example.json` | `"cellId": "0x162e2"` | `"162e2:Skyrim.esm"` | ✅ corrigido e **validado no loader** em `09fbb12` |
 
 Os dois vieram do mesmo valor herdado. E os dois falham **em silêncio**, que é o
 que os torna caros: **`[DOC]`** `FormDesc::FromString` não valida — sem `:` ela
 apenas resolve para outra faixa de FormID (§8.5). Não há exceção, não há log.
+
+**Os dois foram consertados por caminhos diferentes, de propósito.** No
+`death-service` a célula é constante **do código**, então foi derivada de
+`mp.getDescFromId` — o servidor sabe de qual arquivo aquele FormID veio, e a
+derivação sobrevive a mudança de load order. No `safe-zones` a célula é dado **de
+config**, escrito por humano, e ali derivar trocaria uma config declarativa em
+disco por uma que só se resolve com o `mp` vivo; o caminho foi **validar e
+recusar alto**. A regra geral que sobra é a mesma para os dois:
 
 Onde a comparação é **ator contra ator** (nametag, market-stalls, voz,
 npc-cleaner) o formato não importa, porque os dois lados vêm da mesma fonte. O
@@ -705,23 +802,28 @@ validação ao vivo que a Fase 0 já existe para fazer. Para esses quatro, **nad
 nesta revisão sugere que a sessão vá encontrar surpresa de arquitetura**, e o
 roteiro segue como planejado.
 
-**Um sistema bloqueia parte da sessão: o `death-service`.** Os outros dois 🔴 não
-bloqueiam, por motivos diferentes.
+**Um sistema bloqueava parte da sessão: o `death-service`. Não bloqueia mais.**
+Os outros dois 🔴 não bloqueavam, por motivos diferentes, e continuam abertos.
 
 Prioridade entre os 🔴:
 
-1. **`death-service` Achado A (respawn automático em 25 s) — bloqueia.** Não
-   adianta testar morte, socorro e bleed-out com o servidor ressuscitando o
-   jogador aos 25 segundos por baixo. A etapa de morte do `FASE_0_ROTEIRO.md`
-   mediria um comportamento que não é o desenhado, e o mais provável é que a
-   sessão gastasse tempo de duas pessoas depurando "o socorro não funciona"
-   quando o problema é outro. **Precisa de conserto antes da sessão**, e o
-   conserto depende de uma decisão de desenho (bloquear sempre × reprogramar
-   `spawnDelay`) que não é técnica.
-2. **`death-service` Achado B (payload do respawn lança) — bloqueia junto.** É o
-   mesmo teste, e consertar A sem B só troca o sintoma: o jogador ficaria caído
-   até o bleed-out e então falharia o respawn. Os dois saem na mesma rodada de
-   código, e o B é o mais barato dos dois.
+1. **`death-service` Achado A (respawn automático em 25 s) — bloqueava.
+   ✅ Corrigido em [`09fbb12`](../../commit/09fbb12).** Não adiantava testar
+   morte, socorro e bleed-out com o servidor ressuscitando o jogador aos 25
+   segundos por baixo: a etapa de morte do `FASE_0_ROTEIRO.md` mediria um
+   comportamento que não é o desenhado, e o mais provável é que a sessão gastasse
+   tempo de duas pessoas depurando "o socorro não funciona" quando o problema
+   seria outro. A decisão de desenho que faltava foi tomada (bloquear, §6.2) e o
+   handler passou a reivindicar o que é dele.
+
+   **Um passo novo para o roteiro, que este conserto não cobre:** o bloqueio vale
+   para o `DeathEvent`, não para o handshake. **Cair e reconectar** ainda leva o
+   jogador a ser respawnado por `PartOne::SetUserActor`. Vale exercitar isso
+   explicitamente na sessão em vez de descobrir por acidente.
+2. **`death-service` Achado B (payload do respawn lança) — bloqueava junto.
+   ✅ Corrigido no mesmo commit.** Era o mesmo teste, e consertar A sem B só
+   trocaria o sintoma: o jogador ficaria caído até o bleed-out e então falharia o
+   respawn. Saíram juntos, como previsto.
 3. **`voip-service` (distância sem célula) — não bloqueia, mas muda o que
    observar.** A voz já era 🟡 por um motivo maior (ninguém ouviu áudio ainda), e
    o roteiro não depende dela. Mas **se** a sessão chegar a produzir áudio, este
@@ -731,11 +833,14 @@ Prioridade entre os 🔴:
    `tickProximity`), ou incluir no roteiro o passo de **duas pessoas em interiores
    diferentes** e registrar o resultado. Não vale ir para a sessão sem escolher
    uma das duas.
-4. **`safe-zones` (formato do `cellId`) — não bloqueia.** As zonas nascem vazias e
+4. **`safe-zones` (formato do `cellId`) — não bloqueava.
+   ✅ Corrigido em [`09fbb12`](../../commit/09fbb12).** As zonas nascem vazias e
    desligadas, e nenhum chamador de `canPerform` informa `context.actorId`; nada
-   na Fase 0 depende delas. Vale corrigir o exemplo e a validação **antes de
-   alguém preencher a config**, que é quando o defeito passaria a valer — mas isso
-   pode acontecer depois da sessão sem custo.
+   na Fase 0 dependia delas. O conserto era barato e a janela para fazê-lo era
+   **antes de alguém preencher a config** — que é quando o defeito passaria a
+   valer —, então saiu junto em vez de esperar. O que muda para a sessão: nada. O
+   que muda para depois dela: quem preencher a config agora recebe erro em vez de
+   uma zona que parece ativa.
 5. **`hit-events` (o `OnHit` nativo não usado) — não bloqueia, e não deve entrar
    antes da sessão.** É o achado mais interessante desta rodada e o que mais muda
    o desenho a médio prazo, mas o sistema atual **funciona como está** e a Fase 0
