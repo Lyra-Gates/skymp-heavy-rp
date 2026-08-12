@@ -2,6 +2,8 @@
 
 Data: 2026-08-12. Branch: `fix/voip-proximidade-por-celula`. Commit-base: `112d51bc4f1e4308aebe3ab40881abe328db188e`.
 
+> **Registro histórico, superado:** o snapshot descrito abaixo foi consolidado no commit `c23179d` e publicado no `main`. As menções a árvore dirty, ownership temporário e commit-base descrevem o momento do handoff e não o estado atual do repositório. A suíte do gamemode chegou depois a 547 testes aprovados.
+
 ## Escopo preservado
 
 A árvore já estava modificada antes do início de AUTH-001. Este snapshot contém trabalho de UI gateway/rate limit, connection lifecycle, economia transacional, idempotência de market stalls, VOIP e documentação. Nenhum desses arquivos foi revertido ou reformatado durante esta etapa.
@@ -43,7 +45,7 @@ Ownership liberado ao Claude na quinta-feira: `apps/game-api/`, `apps/launcher/`
 
 ## Riscos conhecidos
 
-- A árvore está dirty e ainda não tem commit de consolidação; recuperação depende do Git e dos arquivos locais atuais.
+- **No momento deste handoff**, a árvore estava dirty e ainda não tinha commit de consolidação; esse risco foi encerrado pelo commit `c23179d`.
 - O launcher escreve um `profileId` derivado do Discord além da sessão opaca. Em produção, `offlineMode=false` faz o SkyMP usar o Master API, mas a redundância vira bypass se a configuração regredir.
 - Os nomes ticket/session são ambíguos entre web, fila, launcher e SkyMP.
 - O personagem aprovado mais recente é escolhido implicitamente; ainda não existe seleção de slot vinculada à sessão.

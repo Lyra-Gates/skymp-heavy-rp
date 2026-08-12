@@ -29,8 +29,9 @@ compra: podia debitar ouro e entregar o mesmo anuncio duas vezes.
 - Teste de regressao repete uma compra com o mesmo `requestId` e prova que ha
   apenas um historico, dois lancamentos de ouro (as duas pontas da unica venda)
   e um lancamento de inventario.
-- A suite completa, o typecheck e a conferencia de schema devem ser executados
-  apos aplicar a migration v13.
+- A migration v13 foi incorporada ao schema versionado. Em 11/08/2026, a suíte
+  completa do gamemode passou com **547 testes e zero falhas**. A homologação
+  concorrente com dois clientes reais continua pendente.
 
 ## Proximo passo
 

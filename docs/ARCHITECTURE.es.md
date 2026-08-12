@@ -10,7 +10,7 @@ La infraestructura se divide en los siguientes módulos:
 
 ### 1.1 Base de datos (MariaDB/MySQL)
 **MariaDB** es la fuente absoluta de verdad. Todos los servicios se conectan a ella.
-- **Tablas principales:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. El esquema completo está en `skymp/packages/database/schema.sql` más las migraciones `v2`–`v10`, aplicadas **en orden** (v6 = `launch_tickets`, v7 = índices de las consultas calientes, v8 = `game_sessions`, v9 = `characters.gold` para bases anteriores a la columna, v10 = las cuatro tablas de la Afinidad del Alma: `character_soul`, `character_signs`, `character_marks`, `character_paths`).
+- **Tablas principales:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. El esquema completo está en `skymp/packages/database/schema.sql` más las migraciones `v2`–`v13`, aplicadas **en orden** (v6 = `launch_tickets`, v7 = índices de consultas calientes, v8 = `game_sessions`, v9 = `characters.gold`, v10 = Afinidad del Alma, v11 = ledger de tesorerías institucionales, v12 = ledger del mercado regional, v13 = idempotencia de ventas en puestos).
 - Algunas tablas existen en el esquema pero ningún código activo las lee (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — pertenecen a módulos PARKED (ver 1.4).
 - **Regla estricta:** ningún cambio de estado del juego (dinero, posiciones, objetos) ocurre sin ser escrito o leído en MariaDB. Node.js no confía en datos sueltos en memoria durante períodos largos sin persistencia.
 
@@ -79,6 +79,8 @@ La comunicación entre el gamemode y la UI CEF (`skymp/ui/`) usa dos properties 
 - **`panelData`**: canal dedicado del panel del jugador, con formato `{ channel, data }` — el cliente lo despacha a `window.handlePanelData(...)` y cada pestaña (`status`, `governance`, `economy`, `social`) renderiza su propio bloque.
 
 En sentido UI→servidor, `mp.onUiEvent` despacha todo evento a través de `core/ui-event-router.js`, que enruta por el prefijo de `uiEvent.type` (p. ej. `governance:*` → `governance-service.js`, `panel:*` → `player-panel-service.js`). Los módulos nuevos que necesiten UI solo llaman `uiEventRouter.register('<prefijo>', handler)` en su `initialize()` — no hace falta editar `phase0-basic.js` para cada tipo de evento nuevo.
+
+Desde el 11/08/2026, `core/ui-event-gateway.js` posee el callback global y valida el envelope antes de enrutar; `core/ui-event-rate-limiter.js` mide y, cuando está configurado, limita el volumen por actor y tipo. `core/connection-monitor.js` controla polling, reconexión e invalida respuestas antiguas de whitelist. `core/opaque-credential.js` centraliza generación, hash y redacción de credenciales opacas. En economía, `core/institutional-treasury-service.js` y `core/regional-market-transaction-service.js` mantienen saldo, stock y ledger en una sola transacción; la migración v13 vuelve idempotentes los reintentos de puestos. Estas fronteras están probadas, mientras los módulos PARKED siguen fuera del boot.
 
 #### 1.4.2 Panel del jugador (in-game)
 `player-panel-service.js` — módulo `player-panel` (`ENABLE_PLAYER_PANEL_SERVICE`), activado con el comando `/painel`. No duplica lógica de negocio: solo agrega lecturas de otros servicios que ya existen.

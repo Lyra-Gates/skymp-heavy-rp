@@ -90,13 +90,13 @@ features.
 > caminho mais forte, disponível hoje, que não estamos usando.
 
 **Suposição do código.** O cabeçalho de
-[hit-events.js:15-21](../../skymp/gamemode/core/hit-events.js:15) e a
+[hit-events.js:15-21](../../skymp/gamemode/core/hit-events.js) e a
 `ARCHITECTURE.md` §1.4.5 registram a premissa em texto: *"o SkyMP **recusou**
 expor o pacote de hit ao gamemode (issue #1338) — o evento é reconstruído do lado
 do cliente"*. Disso decorre tudo o mais: que `makeEventSource` é o único caminho
 barato; que o snippet precisa capturar `ctx.sp.on('hit')` por conta própria; que
 `0x14` é problema nosso para traduzir
-([hit-events.js:138](../../skymp/gamemode/core/hit-events.js:138)); e que o
+([hit-events.js:138](../../skymp/gamemode/core/hit-events.js)); e que o
 resultado é *"evidência, não enforcement"* porque vem cru do cliente.
 
 **O que a arquitetura diz.**
@@ -189,7 +189,7 @@ Isto **não** é para a rodada de código pré-Fase 0: ver a priorização em
 **Suposição do código.** Que `mp.get(actorId, 'locationalData')` devolve célula e
 posição; que `loc.pos` é um array de 3 números; e que a célula do ator pode ser
 comparada por **igualdade de string** com o `cellId` escrito na config
-([safe-zones.js:177-189](../../skymp/gamemode/core/safe-zones.js:177)).
+([safe-zones.js:177-189](../../skymp/gamemode/core/safe-zones.js)).
 
 **O que a arquitetura diz.** **`[DOC]`** `LocationalDataBinding.cpp` (referência
 §8.4) devolve exatamente:
@@ -289,7 +289,7 @@ snippet injetado via `makeProperty`/`updateOwner`; que
 `ctx.getFormIdInClientFormat` traduz o FormID de servidor; que os eixos vão de
 −1 a +1 com `y` positivo para cima; e que **alguém precisa projetar mundo→tela a
 cada quadro** para a etiqueta acompanhar o ator
-([nametag-service.js:209-229](../../skymp/gamemode/nametag-service.js:209)).
+([nametag-service.js:209-229](../../skymp/gamemode/nametag-service.js)).
 
 **O que a arquitetura diz.**
 
@@ -332,7 +332,7 @@ aquele registro; confirma que ele é honesto.
    dos dois, e o custo de descobrir isso agora é uma leitura de arquivo.
 2. **A destruição de `FormView` na troca de célula já está coberta por acidente
    feliz.** O snippet resolve o form a cada tick com `getFormEx` e chama
-   `esconder()` quando não acha ([nametag-service.js:205-207](../../skymp/gamemode/nametag-service.js:205)),
+   `esconder()` quando não acha ([nametag-service.js:205-207](../../skymp/gamemode/nametag-service.js)),
    então a etiqueta some sozinha em vez de ficar presa a uma referência morta.
    Vale saber que o comportamento é ciclo de vida da plataforma, não bug — para
    ninguém "consertar" isso depurando *"a etiqueta sumiu quando entrei na
@@ -357,7 +357,7 @@ gargalo desconhecido é a CEF, não a distância.
 confiável a cada 2 s para calcular volume por distância; e — implicitamente —
 que **a distância euclidiana entre dois `pos` é uma medida de "estão perto um do
 outro no mesmo lugar"**
-([voip-service.js:404-421](../../skymp/gamemode/voip-service.js:404)).
+([voip-service.js:404-421](../../skymp/gamemode/voip-service.js)).
 
 **O que a arquitetura diz.** **`[DOC]`** (§8.4) `locationalData` devolve `pos`
 **e** `cellOrWorldDesc`. Os dois campos vêm juntos, na mesma leitura, porque a
@@ -480,7 +480,7 @@ própria ao adotar `mp.onDeath` como gatilho primário.
 O mesmo dado condena o caminho antigo com um número que ninguém tinha: **o
 polling de 2 s lia um valor que também se atualiza a cada ~2 s**, então o atraso
 real era o dobro do que supúnhamos. A rede de segurança é mais frouxa do que o
-comentário em [death-service.js:159](../../skymp/gamemode/death-service.js:159)
+comentário em [death-service.js:159](../../skymp/gamemode/death-service.js)
 dá a entender — o que importa para o Achado A abaixo.
 
 Isso tudo é ✅ dentro do sistema.
@@ -504,9 +504,9 @@ ou o bleed-out fechar.
 
 Nosso handler é
 `mp.onDeath = (actorId, killerId) => _dispatch(actorId, killerId)`
-([death-events.js:112](../../skymp/gamemode/core/death-events.js:112)), e
+([death-events.js:112](../../skymp/gamemode/core/death-events.js)), e
 `_dispatch` é um laço `for` sem `return`
-([death-events.js:78-89](../../skymp/gamemode/core/death-events.js:78)) —
+([death-events.js:78-89](../../skymp/gamemode/core/death-events.js)) —
 **devolve `undefined`**. Os handlers dos assinantes também têm o retorno
 descartado: `handler(actorId, killerId)` é chamado como statement.
 
@@ -584,7 +584,7 @@ Vale incluir "cair e reconectar" nos passos da etapa de morte do
 
 **Suposição do código.** Que `mp.set(actorId, 'locationalData', {...})` aceita
 `{ pos, worldOrCell, angleZ }`
-([death-service.js:369-373](../../skymp/gamemode/death-service.js:369)).
+([death-service.js:369-373](../../skymp/gamemode/death-service.js)).
 
 **O que a arquitetura exige.** **`[DOC]`** `LocationalDataBinding::Set` (§8.4) lê
 exatamente `cellOrWorldDesc` (string), `pos` (array) e `rot` (array), via
@@ -600,12 +600,12 @@ Dois agravantes que reforçam o veredito:
 - **O projeto já sabe a forma certa em dois lugares.** `types/mp.d.ts:38-42`
   declara `LocationalData` como `{ pos, rot, cellOrWorldDesc }` — exatamente o
   que a §8.4 confirma —, e
-  [governance-service.js:711-715](../../skymp/gamemode/governance-service.js:711)
+  [governance-service.js:711-715](../../skymp/gamemode/governance-service.js)
   escreve o payload **correto** ao prender alguém. É o mesmo `mp.set` com a mesma
   property, com formas diferentes, no mesmo repositório. O `npm run typecheck` é
   informativo (`ARCHITECTURE.md` §1.4), então nunca reclamou.
 - **`RESPAWN_CELL = '0x162e2'`**
-  ([death-service.js:36](../../skymp/gamemode/death-service.js:36)) não é
+  ([death-service.js:36](../../skymp/gamemode/death-service.js)) não é
   `FormDesc`. Mesmo com a chave certa, **`[DOC]`** `FormDesc::FromString("0x162e2")`
   não encontra `:`, cai no ramo sem arquivo, e `ToFormId` resolve para
   `0xff000000 + 0x162e2` — a faixa de forms **gerados pelo servidor**, não o
@@ -666,7 +666,7 @@ etapa de morte da Fase 0 que fecha.
 
 **Suposição do código.** Que dá para condicionar ação à célula e à distância
 lendo `locationalData`, priorizando mesma célula e depois menor distância
-euclidiana ([market-stalls-service.js:154-158](../../skymp/gamemode/market-stalls-service.js:154)).
+euclidiana ([market-stalls-service.js:154-158](../../skymp/gamemode/market-stalls-service.js)).
 
 **O que a arquitetura diz.** **`[DOC]`** A leitura está correta: a cadeia começa em
 `loc.cellOrWorldDesc`, que é o campo real (§8.4). O `'unknown'` no fim da cadeia
@@ -691,7 +691,7 @@ existe para isso.
 1. **⚪ Duas properties da barraca não estão na lista de bindings padrão.**
    `spawnStallVisual` faz `mp.set(refId, 'scale', ...)` e
    `mp.set(refId, 'displayName', ...)`
-   ([market-stalls-service.js:227-232](../../skymp/gamemode/market-stalls-service.js:227)).
+   ([market-stalls-service.js:227-232](../../skymp/gamemode/market-stalls-service.js)).
    A lista real de `CreateStandardPropertyBindings()` — **`[DOC]`** §8.2 — traz
    `pos`, `angle` e `worldOrCellDesc` (as outras três usadas ali), mas **não**
    `scale` nem `displayName`. Não dá para concluir daí que falham: podem cair no
@@ -701,7 +701,7 @@ existe para isso.
    spawn de barraca da Fase 0 em vez de investigar agora.
 2. **`getNearestCityId` compara coordenadas entre células**, com penalidade fixa
    de 50000 em vez de descarte
-   ([market-stalls-service.js:296-301](../../skymp/gamemode/market-stalls-service.js:296)).
+   ([market-stalls-service.js:296-301](../../skymp/gamemode/market-stalls-service.js)).
    É a mesma suposição que torna o `voip-service` 🔴, mas aqui o efeito é
    limitado: a pergunta é "qual cidade cobra imposto", a penalidade já empurra a
    mesma célula para a frente, e o pior caso é atribuição de jurisdição errada,
@@ -715,7 +715,7 @@ existe para isso.
 **Suposição do código.** Que `mp.get(npcActorId, 'baseDesc')` devolve uma
 **string** no formato `"1a6a0:Skyrim.esm"`, comparável diretamente com a lista de
 bloqueio da config; e que `mp.getActorsByProfileId(0)` enumera NPCs
-([npc-cleaner.js:162-170](../../skymp/gamemode/npc-cleaner.js:162)).
+([npc-cleaner.js:162-170](../../skymp/gamemode/npc-cleaner.js)).
 
 **O que a arquitetura diz.**
 
@@ -730,7 +730,7 @@ bloqueio da config; e que `mp.getActorsByProfileId(0)` enumera NPCs
 **Veredito: ✅ Confirmado.**
 
 Vale registrar por que este acertou: o comentário em
-[npc-cleaner.js:40](../../skymp/gamemode/npc-cleaner.js:40) mostra que a versão
+[npc-cleaner.js:40](../../skymp/gamemode/npc-cleaner.js) mostra que a versão
 anterior comparava `baseDesc` (string) com FormID numérico e que isso foi
 corrigido deliberadamente. O `npc-policy.example.json` já traz o formato certo.
 Foi o único sistema que enfrentou a questão do formato de `FormDesc` de frente —

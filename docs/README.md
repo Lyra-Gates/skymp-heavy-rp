@@ -2,7 +2,7 @@
 
 Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
-> **Última conferência contra o código: 08/08/2026.** Os documentos foram lidos contra o estado real do repositório e as afirmações checadas uma a uma. O que estava desatualizado foi corrigido no mesmo commit. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
+> **Última conferência contra o código: 11/08/2026.** README, arquitetura, plano principal, design da Alma, roadmap ativo e changelog foram reconciliados com o commit `c23179d`. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
 
 ---
 
@@ -72,6 +72,30 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [FAUNA_CENSUS_PROTOCOL.md](technical/FAUNA_CENSUS_PROTOCOL.md) | Sessão separada do roteiro, e de outra natureza: **não há "passou" nem "falhou", só o que existe no mundo.** Como rodar o censo de fauna e a prova do cadáver — as duas perguntas que decidem se a mecânica de caça existe. |
 | [GOVERNANCE_MARKET_STALLS_TEST_PLAN.md](technical/GOVERNANCE_MARKET_STALLS_TEST_PLAN.md) | Plano em camadas de 13/07, restrito a governança e barracas. Superado pelo roteiro acima. |
 
+### Ciclo de hardening de 11/08/2026
+
+| Documento | Estado |
+|---|---|
+| [roadmap/CODEX_CLAUDE_IMPLEMENTATION_PLAN.md](roadmap/CODEX_CLAUDE_IMPLEMENTATION_PLAN.md) | Plano coordenado; o snapshot inicial já foi consolidado em `c23179d`. |
+| [roadmap/TASK_001_UI_EVENT_CONTRACT.md](roadmap/TASK_001_UI_EVENT_CONTRACT.md) | Gateway, validação e rate limiting de eventos CEF implementados; CEF real pendente. |
+| [roadmap/TASK_002_CORE_TYPECHECK.md](roadmap/TASK_002_CORE_TYPECHECK.md) | Estado do typecheck e limites do contrato JS atual. |
+| [roadmap/TASK_003_CONNECTION_LIFECYCLE.md](roadmap/TASK_003_CONNECTION_LIFECYCLE.md) | Monitor de conexão implementado; cliente real pendente. |
+| [roadmap/TASK_004_ECONOMY_TRANSACTION_BOUNDARY.md](roadmap/TASK_004_ECONOMY_TRANSACTION_BOUNDARY.md) | Tesouros e mercado regional transacionais; módulo regional permanece PARKED. |
+| [roadmap/TASK_005_VOIP_CAPACITY_AND_SECURITY.md](roadmap/TASK_005_VOIP_CAPACITY_AND_SECURITY.md) | Limites de protocolo implementados; benchmark de áudio real pendente. |
+| [roadmap/TASK_006_MARKET_STALL_IDEMPOTENCY.md](roadmap/TASK_006_MARKET_STALL_IDEMPOTENCY.md) | Retry idempotente implementado; concorrência com dois clientes pendente. |
+| [technical/AUTH_001_TRUST_BOUNDARY_INVENTORY.md](technical/AUTH_001_TRUST_BOUNDARY_INVENTORY.md) | Inventário das identidades, tokens e fronteiras de confiança. |
+| [technical/AUTH_002_OPAQUE_TICKET_V1.md](technical/AUTH_002_OPAQUE_TICKET_V1.md) | Contrato de credencial opaca, hashing e redaction. |
+| [technical/CHR_001_ACCOUNT_SESSION_CHARACTER_IDENTITY.md](technical/CHR_001_ACCOUNT_SESSION_CHARACTER_IDENTITY.md) | Contrato de identidade entre conta, sessão e personagem. |
+
+### Pesquisa de forks
+
+| Documento | Sobre |
+|---|---|
+| [research/SKYMP_FORK_RESEARCH_EXECUTIVE_SUMMARY.md](research/SKYMP_FORK_RESEARCH_EXECUTIVE_SUMMARY.md) | Síntese executiva da pesquisa do ecossistema e lacunas Heavy RP. |
+| [research/SKYMP_ECOSYSTEM_SYSTEM_MAP.md](research/SKYMP_ECOSYSTEM_SYSTEM_MAP.md) | Mapa dos sistemas encontrados nos forks estudados. |
+| [research/SKYMP_FORKS_SYSTEM_MATRIX.md](research/SKYMP_FORKS_SYSTEM_MATRIX.md) | Matriz comparativa dos forks. |
+| [technical/REFERENCE_STUDY_SKYMP_FORKS_2026-08-11.md](technical/REFERENCE_STUDY_SKYMP_FORKS_2026-08-11.md) | Estudo técnico consolidado e rastreável. |
+
 ---
 
 ## Modding
@@ -117,7 +141,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 ## Convenções desta documentação
 
 - **Português.** Termos técnicos consagrados ficam em inglês (`whitelist`, `commit`, `hash`).
-- **Sobre o idioma:** existem **oito documentos traduzidos** para inglês, russo e espanhol — os três de entrada (`README`, `CONTRIBUTING`, `SECURITY`) e os cinco que barram um dev de fora (ver a tabela abaixo). Russo porque é a língua nativa da comunidade SkyMP (o upstream e o Red House são russos), espanhol pelo alcance na América Latina. Os outros 25 documentos ficam **só em português** de propósito: são regras de RP, rubricas de staff, backlog e decisões históricas — servem à operação deste servidor, não a quem chega de fora. Tradução desatualizada é pior que tradução ausente: é um texto em que as pessoas confiam e que mente em silêncio. Se algum documento específico bloquear alguém, traduzimos aquele sob demanda.
+- **Sobre o idioma:** existem **oito documentos traduzidos** para inglês, russo e espanhol — os três de entrada (`README`, `CONTRIBUTING`, `SECURITY`) e os cinco que barram um dev de fora (ver a tabela abaixo). Russo porque é a língua nativa da comunidade SkyMP (o upstream e o Red House são russos), espanhol pelo alcance na América Latina. Os demais documentos ficam **só em português** de propósito: são regras de RP, pesquisas, handoffs, rubricas de staff, backlog e decisões históricas — servem à operação deste servidor, não a quem chega de fora. Tradução desatualizada é pior que tradução ausente: é um texto em que as pessoas confiam e que mente em silêncio. Se algum documento específico bloquear alguém, traduzimos aquele sob demanda.
 - **Mexeu num documento traduzido? Atualize as quatro cópias no mesmo PR.** É a regra que decide se essa tradução vale a pena ou vira dívida. Se não der pra atualizar todas, é melhor apagar as traduções daquele documento do que deixá-las mentindo.
   - **O `README` é a exceção deliberada, e só ele.** As quatro cópias não têm as mesmas seções: a portuguesa carrega o log de status do projeto, e as três traduzidas carregam tabela de componentes, "o que você não acha em outro lugar" e a política de idioma da documentação — porque quem chega em inglês, russo ou espanhol está avaliando o projeto, não acompanhando o dia a dia dele. Isso é adaptação de público, não tradução vencida. O que **não** pode divergir é afirmação: o aviso de que o servidor ainda não foi validado com jogadores reais está nas quatro, e nenhuma diz algo que outra contradiga. Para todos os outros sete documentos da família, seção que existe numa cópia existe nas quatro.
 - **Idioma novo entra na linha de troca de TODOS os arquivos da família.** Os quatro arquivos de cada documento (`X.md`, `X.en.md`, `X.ru.md`, `X.es.md`) carregam a mesma linha de links no topo. Um idioma que não seja adicionado nessa linha em todos eles fica invisível.

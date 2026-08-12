@@ -19,7 +19,7 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 | Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
 | Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
-| Navegar toda a documentação | [docs/README.md](docs/README.md) — mapa dos 29 documentos |
+| Navegar toda a documentação | [docs/README.md](docs/README.md) — índice mantido dos documentos do projeto |
 | Reportar falha de segurança | [SECURITY.md](SECURITY.md) — **não abra issue pública** |
 | Perguntar, propor ou mostrar o que fez | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
 
@@ -36,7 +36,11 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 - **Launcher App**: Um Launcher em React + Electron (Vite) em `apps/launcher`, controlando autenticação, configurações e boot da build. Na auditoria de agosto ele estava quebrado ponta a ponta (nenhuma variável de ambiente era carregada) e o client secret do Discord ia embutido no instalador — ambos corrigidos, mas ainda sem validação em runtime. Ver [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) 2.1 e 2.2.
 - **Fase Inicial (Fase 0)**: As fundações locais (conexão, persistência base em banco MariaDB via scripts SQL migrados) já foram garantidas em ambiente de laboratório.
 
-- **Afinidade da Alma (domínio)**: `core/soul.js` — toda alma nasce de sete valores ocultos derivados da **ficha aprovada** do personagem, com orçamento fixo (afinidade alta obriga outra a ser baixa, então nenhuma alma é melhor que outra). A resolução **nunca falha**: devolve Limpo, Caro, Complicado ou Marcado — os quatro dão certo. Função pura, 28 testes, sem banco e sem `mp`. O serviço que entrega sinais e grava marcas depende do teste in-game. Desenho em [SOUL_AFFINITY.md](docs/design/SOUL_AFFINITY.md).
+- **Afinidade da Alma**: `core/soul.js` contém o domínio puro (28 testes), enquanto `soul-service.js` persiste almas, entrega sinais, grava marcas, avança árvores e expõe `/alma`. O serviço está registrado atrás de `ENABLE_SOUL_SERVICE`, desligado por padrão e ainda aguarda homologação in-game. Desenho em [SOUL_AFFINITY.md](docs/design/SOUL_AFFINITY.md).
+
+- **Fronteiras de confiança e ciclo de conexão**: eventos CEF passam por envelope validado, gateway único e rate limiter observável (`ui-event-gateway`, `ui-event-rate-limiter`); conexões e reconexões passam por `connection-monitor`, que invalida respostas assíncronas antigas. Credenciais opacas têm geração, hashing e redação centralizados em `core/opaque-credential.js`.
+
+- **Economia transacional**: transferências entre tesouros e compras/vendas regionais usam transações, ledger e chaves de idempotência (`institutional-treasury-service`, `regional-market-transaction-service`, migrations v11–v12). Compras em barracas aceitam `requestId` e impedem cobrança duplicada via migration v13. A economia regional continua PARKED; as fronteiras já estão implementadas e testadas para uma futura ativação segura.
 
 - **API do Jogo (`apps/game-api`)**: serve a porta 7758 que o launcher sempre chamou e que não existia — `/mods.json` (paridade de modpack, a base do contrato de FormID) e a fila de entrada com capacidade e expiração de reserva. A fila é autenticada por ticket emitido pelo painel, nunca pelo `discordId` que o cliente informa. Manifesto gerado por `scripts/generate-mods-manifest.js`.
 

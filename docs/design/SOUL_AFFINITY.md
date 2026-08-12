@@ -4,7 +4,7 @@
 
 **Estado: DESENHO FECHADO. Domínio implementado e testado.** Um veto e quatro condições, todos incorporados. Emendou a §8 da Constituição (v1.1).
 
-`skymp/gamemode/core/soul.js` — gerador, bandas e resolução — **existe, com 28 testes** (§III.13). É função pura: não abre banco, não toca `mp`, não sabe que existe um jogo. **O serviço continua bloqueado pela Fase 0** — nada entrega sinal, grava marca ou avança árvore antes do teste in-game.
+`skymp/gamemode/core/soul.js` — gerador, bandas e resolução — **existe, com 28 testes** (§III.13). É função pura: não abre banco, não toca `mp`, não sabe que existe um jogo. `skymp/gamemode/soul-service.js` também está implementado e registrado atrás de `ENABLE_SOUL_SERVICE`: persiste a alma, entrega sinais, grava marcas, avança árvores e expõe `/alma`. Ele fica desligado por padrão e ainda precisa de homologação com cliente real na Fase 0.
 
 O documento tem três partes. A **Parte I** é a análise de 15 pontos exigida pela Constituição §15 — o que a proposta resolve e o que ela quebra. A **Parte II** é o desenho que sai dela: como o sistema vira jogo bom sem perder jogabilidade nem diversão. A **Parte III** é a especificação — valores, fórmula, schema, eventos e testes.
 

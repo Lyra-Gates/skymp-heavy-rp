@@ -10,7 +10,7 @@
 
 ### 1.1 База данных (MariaDB/MySQL)
 **MariaDB** — абсолютный источник истины. К ней подключаются все сервисы.
-- **Основные таблицы:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. Полная схема — в `skymp/packages/database/schema.sql` плюс миграции `v2`–`v10`, применяемые **по порядку** (v6 = `launch_tickets`, v7 = индексы для горячих запросов, v8 = `game_sessions`, v9 = `characters.gold` для баз, созданных до этой колонки, v10 = четыре таблицы Родства Души: `character_soul`, `character_signs`, `character_marks`, `character_paths`).
+- **Основные таблицы:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. Полная схема — в `skymp/packages/database/schema.sql` плюс миграции `v2`–`v13`, применяемые **по порядку** (v6 = `launch_tickets`, v7 = индексы горячих запросов, v8 = `game_sessions`, v9 = `characters.gold`, v10 = Родство Души, v11 = журнал институциональных казначейств, v12 = журнал регионального рынка, v13 = идемпотентность продаж торговых точек).
 - Некоторые таблицы есть в схеме, но их не читает никакой активный код (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — они принадлежат PARKED-модулям (см. 1.4).
 - **Жёсткое правило:** ни одно изменение игрового состояния (деньги, позиции, предметы) не происходит без записи в MariaDB или чтения из неё. Node.js не доверяет данным, долго живущим в памяти без сохранения.
 
@@ -79,6 +79,8 @@ Express, порт `GAME_API_PORT` (7758) — тот самый порт, кот�
 - **`panelData`**: выделенный канал панели игрока в формате `{ channel, data }` — клиент направляет это в `window.handlePanelData(...)`, и каждая вкладка (`status`, `governance`, `economy`, `social`) рисует свой блок.
 
 В направлении интерфейс→сервер `mp.onUiEvent` направляет каждое событие через `core/ui-event-router.js`, который маршрутизирует по префиксу `uiEvent.type` (например, `governance:*` → `governance-service.js`, `panel:*` → `player-panel-service.js`). Новым модулям, которым нужен интерфейс, достаточно вызвать `uiEventRouter.register('<префикс>', handler)` в своём `initialize()` — править `phase0-basic.js` под каждый новый тип события не нужно.
+
+С 11.08.2026 `core/ui-event-gateway.js` владеет глобальным callback и проверяет envelope до маршрутизации; `core/ui-event-rate-limiter.js` измеряет и при настройке ограничивает объём по актёру и типу события. `core/connection-monitor.js` отвечает за polling, переподключение и отмену устаревших ответов whitelist. `core/opaque-credential.js` централизует генерацию, хеширование и редактирование непрозрачных учётных данных. В экономике `core/institutional-treasury-service.js` и `core/regional-market-transaction-service.js` объединяют баланс, склад и ledger в одной транзакции; миграция v13 делает повторы покупок идемпотентными. Эти границы покрыты тестами, а PARKED-модули по-прежнему не включены в boot.
 
 #### 1.4.2 Панель игрока (в игре)
 `player-panel-service.js` — модуль `player-panel` (`ENABLE_PLAYER_PANEL_SERVICE`), открывается командой `/painel`. Не дублирует бизнес-логику: только агрегирует чтения из уже существующих сервисов.

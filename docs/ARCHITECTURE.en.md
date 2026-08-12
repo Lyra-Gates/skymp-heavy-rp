@@ -10,7 +10,7 @@ The infrastructure splits into the following modules:
 
 ### 1.1 Database (MariaDB/MySQL)
 **MariaDB** is the absolute source of truth. Every service connects to it.
-- **Main tables:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. The full schema lives in `skymp/packages/database/schema.sql` plus migrations `v2`–`v10`, applied **in order** (v6 = `launch_tickets`, v7 = indexes for the hot queries, v8 = `game_sessions`, v9 = `characters.gold` for databases predating the column, v10 = the four Soul Affinity tables: `character_soul`, `character_signs`, `character_marks`, `character_paths`).
+- **Main tables:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. The full schema lives in `skymp/packages/database/schema.sql` plus migrations `v2`–`v13`, applied **in order** (v6 = `launch_tickets`, v7 = hot-query indexes, v8 = `game_sessions`, v9 = `characters.gold`, v10 = Soul Affinity, v11 = institutional treasury ledger, v12 = regional market ledger, v13 = market-stall sale idempotency).
 - Some tables exist in the schema but aren't read by any active code (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — they belong to PARKED modules (see 1.4).
 - **Strict rule:** no game state change (money, positions, items) happens without being written to or read from MariaDB. Node.js does not trust loose in-memory data over long stretches without persistence.
 
@@ -79,6 +79,8 @@ Communication between the gamemode and the CEF UI (`skymp/ui/`) uses two SkyMP p
 - **`panelData`**: the player panel's dedicated channel, shaped `{ channel, data }` — the client dispatches to `window.handlePanelData(...)` and each tab (`status`, `governance`, `economy`, `social`) renders its own block.
 
 In the UI→server direction, `mp.onUiEvent` dispatches every event through `core/ui-event-router.js`, which routes by the prefix of `uiEvent.type` (e.g. `governance:*` → `governance-service.js`, `panel:*` → `player-panel-service.js`). New modules that need UI just call `uiEventRouter.register('<prefix>', handler)` in their `initialize()` — there's no need to edit `phase0-basic.js` for each new event type.
+
+Since 2026-08-11, `core/ui-event-gateway.js` owns the global callback and validates envelopes before routing; `core/ui-event-rate-limiter.js` measures and, when configured, limits volume per actor and event type. `core/connection-monitor.js` handles polling, reconnection, and stale whitelist-response invalidation. `core/opaque-credential.js` centralizes opaque credential generation, hashing, and redaction. For the economy, `core/institutional-treasury-service.js` and `core/regional-market-transaction-service.js` keep balance, stock, and ledger changes in one transaction; migration v13 makes market-stall retries idempotent. These boundaries are tested, while PARKED modules remain outside boot.
 
 #### 1.4.2 Player panel (in-game)
 `player-panel-service.js` — module `player-panel` (`ENABLE_PLAYER_PANEL_SERVICE`), opened by the `/painel` command. It duplicates no business logic: it only aggregates reads from existing services.

@@ -19,7 +19,7 @@ Entregar uma fundação segura para autenticação, personagem e distribuição 
 
 ## Estado inicial que deve ser preservado
 
-Há alterações locais não commitadas nas tarefas `TASK_001` a `TASK_006`, incluindo UI gateway, connection monitor, economia transacional, market idempotency e VOIP. Elas pertencem ao trabalho atual e não devem ser revertidas. Antes da primeira implementação deste plano, consolidar esse snapshot em commit/branch ou registrar seu hash de patch.
+O snapshot das tarefas `TASK_001` a `TASK_006` foi consolidado no commit `c23179d` e publicado no `main`. UI gateway, connection monitor, economia transacional, idempotência de barracas e proteções de VOIP fazem parte da base versionada. Trabalho futuro deve partir desse commit ou de um descendente, sem reabrir as decisões já registradas nos documentos de tarefa.
 
 ## Divisão de ownership
 
