@@ -27,6 +27,15 @@ A hipótese central do documento de mobs está marcada 🟡 **não verificada** 
 > O mundo provavelmente já está cheio de lobos, ursos e bandidos vanilla,
 > ativos e hostis, agora. Nunca desligamos nada. Nunca ninguém olhou.
 
+> **Atualização de laboratório — 12/08/2026.** O primeiro boot instrumentado
+> mostrou que esta hipótese não valia para a configuração local instalada:
+> `npcEnabled` estava ausente e o servidor registrou que desabilitava NPCs por
+> padrão. Depois de definir `npcEnabled: true` somente na configuração local, o
+> boot confirmou `NPCs are enabled`, com `fauna-census` e `corpse-probe` ativos.
+> Isso prova a configuração, não a presença das criaturas: o censo dentro do
+> cliente e a prova de cadáver continuam pendentes. Roteiro e evidências em
+> `docs/roadmap/MOBS_LOOT_LAB_HANDOFF_2026-08-12.md`.
+
 O raciocínio: o `npc-cleaner.js` sai antes de varrer quando `blockedBaseDescs`
 está vazia, e `skymp/config/npc-policy.json` **não existe no disco** — só o
 `.example.json`. O serviço é inerte duas vezes. Se a inferência estiver certa,
@@ -184,6 +193,10 @@ Build/commit: ___
 Locais varridos: ___
 
 ## 1. Criaturas hostis vanilla já estão ativas?
+
+**Estado em 12/08/2026:** NPCs estavam desligados por configuração. O ambiente
+local de laboratório agora inicia com `npcEnabled: true`, mas ainda falta rodar
+`/censofauna` dentro do jogo para confirmar fauna, `baseDesc` e densidade reais.
 Resposta: ___  (arquivos: ___)
 
 ## 2. `baseDesc` reais encontrados

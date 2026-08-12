@@ -1,5 +1,7 @@
 param(
-  [int]$Seconds = 0
+  [int]$Seconds = 0,
+  [switch]$EnableFaunaCensus,
+  [switch]$EnableCorpseProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +16,14 @@ if (-not (Test-Path -LiteralPath $entry)) {
 
 Push-Location $server
 try {
+  if ($EnableFaunaCensus) {
+    $env:ENABLE_FAUNA_CENSUS = "true"
+  }
+  if ($EnableCorpseProbe) {
+    $env:ENABLE_CORPSE_PROBE = "true"
+    Write-Warning "Corpse probe writes and restores an NPC corpse inventory. Use only in a supervised lab session."
+  }
+
   if ($Seconds -gt 0) {
     $out = Join-Path $server "phase0-server.out.log"
     $err = Join-Path $server "phase0-server.err.log"

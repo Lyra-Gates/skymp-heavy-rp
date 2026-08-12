@@ -70,6 +70,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [GUIA_SESSAO_DE_TESTE.md](technical/GUIA_SESSAO_DE_TESTE.md) | **Como chegar até o roteiro:** ligar os quatro serviços, conferir as portas, e o guia copiável para mandar aos testadores. A Parte 2 é escrita para quem nunca viu o repositório. |
 | [FASE_0_ROTEIRO.md](technical/FASE_0_ROTEIRO.md) | **O roteiro do teste in-game — o único bloqueio real do projeto.** Passo a passo, o que observar, o que significa falhar, e o registro pra preencher enquanto testa. Comece pelo guia acima. |
 | [FAUNA_CENSUS_PROTOCOL.md](technical/FAUNA_CENSUS_PROTOCOL.md) | Sessão separada do roteiro, e de outra natureza: **não há "passou" nem "falhou", só o que existe no mundo.** Como rodar o censo de fauna e a prova do cadáver — as duas perguntas que decidem se a mecânica de caça existe. |
+| [MOBS_LOOT_LAB_HANDOFF_2026-08-12.md](roadmap/MOBS_LOOT_LAB_HANDOFF_2026-08-12.md) | Resultado do boot instrumentado: NPCs estavam desabilitados por ausência de `npcEnabled`; configuração local corrigida, sondas carregadas e comandos da sessão in-game registrados. |
 | [GOVERNANCE_MARKET_STALLS_TEST_PLAN.md](technical/GOVERNANCE_MARKET_STALLS_TEST_PLAN.md) | Plano em camadas de 13/07, restrito a governança e barracas. Superado pelo roteiro acima. |
 
 ### Ciclo de hardening de 11/08/2026
