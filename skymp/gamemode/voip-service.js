@@ -39,7 +39,13 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { WebSocketServer, WebSocket } = require('ws');
+// O gamemode roda em CommonJS dentro do Node embutido pelo SkyMP. A tipagem
+// publicada por `ws` e a do Node atual divergem ao inferir destructuring de
+// `require`, embora o valor exista em runtime no ws 8.x. Manter a fronteira
+// como `any` evita um falso positivo do checkJs sem mudar o contrato real.
+/** @type {any} */
+const ws = require('ws');
+const { WebSocketServer, WebSocket } = ws;
 const commands = require('./commands');
 
 const VOIP_PORT = Number.parseInt(process.env.VOIP_PORT, 10) || 7778;
@@ -142,6 +148,12 @@ const AUDIO_SAMPLE_RATE = 48000;
 const AUDIO_CHANNELS = 1;
 const AUDIO_FRAME_MS = 20;
 
+// PCM a 48 kHz gera 50 frames de 20 ms por segundo. O bucket deixa uma pequena
+// folga para jitter do helper, mas impede que um sender autenticado transforme
+// o relay em multiplicador de banda mandando centenas de frames por segundo.
+const AUDIO_FRAME_RATE_PER_SECOND = 60;
+const AUDIO_FRAME_BURST = 12;
+
 /**
  * Teto do payload base64 de um `audio_frame`, em caracteres.
  *
@@ -155,6 +167,9 @@ const AUDIO_FRAME_MS = 20;
  * (o helper pode agrupar sob carga), qualquer coisa acima disso é bug ou abuso.
  */
 const MAX_AUDIO_FRAME_B64 = 8192;
+// A mensagem de audio cabe com folga e SDP/ICE continuam tendo espaco. Este
+// teto e aplicado pelo ws antes de transformar bytes de rede em string/JSON.
+const MAX_VOIP_MESSAGE_BYTES = 32 * 1024;
 
 let wss = null;
 let _proximityTimer = null;
@@ -220,10 +235,31 @@ function _hasOpenConnection(entry) {
   return VOIP_ROLES.some((role) => entry[role] && entry[role].ws.readyState === WebSocket.OPEN);
 }
 
+/** Confirma que a mensagem vem do socket autenticado que ainda ocupa o papel. */
+function _isCurrentClientSocket(actorId, role, socket) {
+  const entry = voipClients.get(actorId);
+  return Boolean(entry && role && entry[role] && entry[role].ws === socket);
+}
+
+/**
+ * Consome um frame do bucket de uma conexao. Retorna false sem enviar nada
+ * quando a cadencia excede o que o formato de audio permite reproduzir.
+ */
+function _consumeAudioFrameQuota(conn, now = Date.now()) {
+  const elapsedMs = Math.max(0, now - conn.audioLastRefillAt);
+  const replenished = (elapsedMs * AUDIO_FRAME_RATE_PER_SECOND) / 1000;
+  conn.audioTokens = Math.min(AUDIO_FRAME_BURST, conn.audioTokens + replenished);
+  conn.audioLastRefillAt = now;
+
+  if (conn.audioTokens < 1) return false;
+  conn.audioTokens -= 1;
+  return true;
+}
+
 function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
   if (wss) return;
 
-  wss = new WebSocketServer({ port, host });
+  wss = new WebSocketServer({ port, host, maxPayload: MAX_VOIP_MESSAGE_BYTES });
 
   wss.on('listening', () => {
     console.log(`[voip] WebSocket signaling server listening on ws://${host}:${port}`);
@@ -274,7 +310,15 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
           if (previous && previous.ws !== ws) {
             try { previous.ws.close(); } catch { /* já morto */ }
           }
-          entry[clientRole] = { ws, actorId: clientActorId, role: clientRole, oversizedFrameLogged: false };
+          entry[clientRole] = {
+            ws,
+            actorId: clientActorId,
+            role: clientRole,
+            oversizedFrameLogged: false,
+            audioRateLimitLogged: false,
+            audioTokens: AUDIO_FRAME_BURST,
+            audioLastRefillAt: Date.now()
+          };
 
           console.log(`[voip] Actor 0x${clientActorId.toString(16)} connected to VOIP as ${clientRole}.`);
           ws.send(JSON.stringify({ type: 'auth_ok', actorId: clientActorId, role: clientRole }));
@@ -284,7 +328,7 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
         case 'voice_mode':
           // Modo de voz é do ator, não do socket: define o alcance com que a
           // pessoa é ouvida, e quem fala (helper) não é quem tem o seletor (UI).
-          if (clientActorId !== null && voipClients.has(clientActorId)) {
+          if (clientActorId !== null && _isCurrentClientSocket(clientActorId, clientRole, ws)) {
             voipClients.get(clientActorId).voiceMode = msg.mode || 'normal';
           }
           break;
@@ -294,7 +338,7 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
         case 'ice':
           // Repassa sinalizacao WebRTC para o peer alvo — sempre pro `listener`
           // dele. É o navegador que tem `RTCPeerConnection`; o helper ignoraria.
-          if (msg.targetActorId) {
+          if (clientActorId !== null && _isCurrentClientSocket(clientActorId, clientRole, ws) && msg.targetActorId) {
             const target = _openListener(parseInt(msg.targetActorId));
             if (target) {
               target.ws.send(JSON.stringify({
@@ -314,11 +358,18 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
           // provaram a mesma identidade pelo mesmo handshake, então exigir papel
           // aqui não fecharia furo nenhum — só quebraria a sonda em Node e quem
           // ainda autentica sem `role`. O relay usa a identidade autenticada.
-          if (clientActorId === null) break;
+          if (clientActorId === null || !_isCurrentClientSocket(clientActorId, clientRole, ws)) break;
           if (typeof msg.data !== 'string') break;
+          const entry = voipClients.get(clientActorId);
+          const conn = entry && clientRole ? entry[clientRole] : null;
+          if (!conn || !_consumeAudioFrameQuota(conn)) {
+            if (conn && conn.ws === ws && !conn.audioRateLimitLogged) {
+              conn.audioRateLimitLogged = true;
+              console.warn(`[voip] Actor 0x${clientActorId.toString(16)} excedeu o limite de audio_frame; descartando.`);
+            }
+            break;
+          }
           if (msg.data.length > MAX_AUDIO_FRAME_B64) {
-            const entry = voipClients.get(clientActorId);
-            const conn = entry && clientRole ? entry[clientRole] : null;
             // Loga uma vez por conexão: o descarte é barato, o log em 50Hz não.
             if (conn && conn.ws === ws && !conn.oversizedFrameLogged) {
               conn.oversizedFrameLogged = true;
@@ -337,7 +388,7 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
           // Mute é do ator, não da conexão: silencia a pessoa na cena, venha a
           // voz pelo helper ou pelo caminho antigo. Por conexão, mutar pela UI
           // deixaria o helper transmitindo — mutado na tela e audível na cena.
-          if (clientActorId !== null && voipClients.has(clientActorId)) {
+          if (clientActorId !== null && _isCurrentClientSocket(clientActorId, clientRole, ws)) {
             voipClients.get(clientActorId).muted = msg.muted === true;
             console.log(`[voip] Actor 0x${clientActorId.toString(16)} mute=${msg.muted}`);
           }
@@ -679,6 +730,9 @@ module.exports = {
   AUDIO_CHANNELS,
   AUDIO_FRAME_MS,
   MAX_AUDIO_FRAME_B64,
+  AUDIO_FRAME_RATE_PER_SECOND,
+  AUDIO_FRAME_BURST,
+  MAX_VOIP_MESSAGE_BYTES,
   // `tickProximity` é chamado pelo ticker de 2s em produção; exposto porque o
   // teste do relay precisa de um tick determinístico em vez de esperar o timer.
   tickProximity,
@@ -691,6 +745,8 @@ module.exports = {
   _consumeTicket,
   _pendingTickets,
   _ticketKey,
+  _consumeAudioFrameQuota,
+  _isCurrentClientSocket,
   _audienceByActor,
   _voipClients: voipClients,
   _debugExposeTicketEnabled,

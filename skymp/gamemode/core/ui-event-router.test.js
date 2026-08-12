@@ -82,4 +82,11 @@ describe('ui-event-router', () => {
     assert.throws(() => uiEventRouter.register('', async () => true));
     assert.throws(() => uiEventRouter.register('panel', 'not-a-function'));
   });
+
+  it('recusa envelope array, type vazio e type excessivamente longo', async () => {
+    assert.strictEqual(uiEventRouter.isValidEventEnvelope([]), false);
+    assert.strictEqual(uiEventRouter.isValidEventEnvelope({ type: '' }), false);
+    assert.strictEqual(uiEventRouter.isValidEventEnvelope({ type: 'x'.repeat(129) }), false);
+    assert.strictEqual(uiEventRouter.isValidEventEnvelope({ type: 'panel:open' }), true);
+  });
 });

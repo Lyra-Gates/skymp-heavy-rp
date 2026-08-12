@@ -61,7 +61,7 @@ cadeia inteira lida no código.
 | `core/safe-zones.js` | ✅ **corrigido** | Era 🔴: o `cellId` do exemplo (`"0x162e2"`) não era `FormDesc`, a zona nunca casaria e falharia **aberta**. Exemplo corrigido e o loader agora **recusa e grita**. `09fbb12` |
 | `identity-service` | ✅ | Resolução de nome por observador é 100% nossa, em banco; não há suposição sobre o SkyMP para conferir. |
 | `nametag-service` | 🟡 | A projeção mundo→tela não é contrariada por nada; a wiki aponta um caminho mais barato (`SetTextRefr()`) que ninguém verificou. |
-| `voip-service` | 🔴 | Calcula distância entre atores **sem comparar célula** — único dos três sistemas de proximidade que não faz isso. |
+| `voip-service` | ✅ **corrigido** | Era 🔴: calculava distância entre atores **sem comparar célula** — único dos três sistemas de proximidade que não fazia isso. O `tickProximity` agora guarda a célula junto com a posição e descarta o par quando divergem. [`112d51b`](https://github.com/vinicius3232/skymp-heavy-rp/commit/112d51b) |
 | `death-service` | ✅ **corrigido** | Eram dois: o servidor respawnava sozinho em 25 s e o payload do respawn lançava. O handler passa a **bloquear o respawn nativo do que é dele**, e o payload está na forma que o addon aceita. `09fbb12` |
 | `market-stalls-service` / governança | 🟡 | Lê `cellOrWorldDesc` corretamente e compara célula com célula; duas properties de barraca ficam ⚪. |
 | `npc-cleaner.js` | ✅ | `baseDesc` no formato `"1a6a0:Skyrim.esm"` é **exatamente** o que `BaseDescBinding` devolve. |
@@ -384,7 +384,7 @@ o que torna o achado sólido em vez de especulativo:
 | `nametag-service.js:271` | Sim — pula candidato de célula diferente, com comentário explicando por quê |
 | `voip-service.js:417` | **Não** |
 
-**Veredito: 🔴 Desalinhado.**
+**Veredito: 🔴 Desalinhado — ✅ corrigido em [`112d51b`](https://github.com/vinicius3232/skymp-heavy-rp/commit/112d51b).**
 
 **Impacto prático.** Dois jogadores em células diferentes com coordenadas
 numericamente próximas ouvem um ao outro. O caso não é exótico: interiores do
@@ -408,12 +408,47 @@ volume anexado — **não passa pelo SkyMP**, e a arquitetura do upstream nem
 sustenta nem contraria. Aquilo continua 🟡 pelo motivo de sempre: **ninguém ouviu
 áudio ainda**.
 
-**Proposta (não implementada).** Guardar a célula junto com a posição no laço que
-monta `actors`, e descartar o par quando divergirem — a mesma regra que
-`range-utils.distanceBetween` já implementa e que o `nametag-service` já aplica.
-Reaproveitar `rangeUtils.getCell(loc)` em vez de escrever uma quarta cadeia
-defensiva de nomes de campo é o caminho mais barato e o que mantém a regra num
-lugar só. É uma mudança pequena e contida no `tickProximity`.
+### ✅ Corrigido em [`112d51b`](https://github.com/vinicius3232/skymp-heavy-rp/commit/112d51b)
+
+A proposta era guardar a célula junto com a posição e descartar o par quando
+divergissem. Saiu inteira, e contida no `tickProximity` como previsto — duas
+linhas de comportamento, nenhuma mudança de formato.
+
+1. **O laço que monta `actors` passa a guardar a célula**, via
+   `rangeUtils.getCell(loc)`. Não é economia de digitação: a quarta cadeia
+   defensiva de nomes de campo seria o quarto lugar do repositório com opinião
+   própria sobre o que conta como célula, e o dia em que uma delas divergisse a
+   voz e a nametag discordariam sobre onde a mesma pessoa está. A regra continua
+   num lugar só — `core/range-utils.js` não foi tocado, só lido.
+2. **O laço interno descarta o par quando as duas células existem e divergem**,
+   antes de calcular distância. É literalmente a regra do
+   `range-utils.distanceBetween` (`if (ca && cb && ca !== cb) return Infinity`) e
+   a mesma que o `nametag-service` aplica — o `voip-service` deixa de ser o
+   terceiro voto discordante da tabela acima.
+
+**Célula desconhecida não descarta ninguém**, e isso é decisão, não descuido:
+`ca && cb` é a mesma guarda do `range-utils`. Falta de informação não é prova de
+que duas pessoas estão separadas, e derrubar o par por ausência de campo faria a
+voz sumir sozinha em qualquer cenário onde o `locationalData` viesse magro — uma
+falha silenciosa trocada por outra. É também o que os mocks dos outros blocos
+deste arquivo de teste devolvem (`{ pos }` sem célula), então o comportamento
+anterior deles continua exercitado exatamente como era.
+
+**Dois testes novos**, em bloco próprio com `mp` mockado devolvendo os dois
+campos: mesma célula dentro do alcance continua se ouvindo (o caso feliz não
+regride), e células diferentes com coordenadas na mesma vizinhança numérica não
+aparecem no `proximity_update` uma da outra, não entram no `_audienceByActor` e
+não recebem `audio_frame`. Os dois foram conferidos contra o mutante: removida a
+checagem, o segundo reprova; invertida, os dois reprovam. Suíte do gamemode:
+**498 → 500, zero falhas**.
+
+**O que o conserto não alcança.** O sistema de voz continua 🟡 pelo motivo maior
+e inalterado: **ninguém ouviu áudio ainda**. Este conserto tira do caminho um
+defeito que a Fase 0 poderia não revelar; não substitui a sessão que vai revelar
+o resto. E o custo O(n²) do tick a cada 2 s segue igual — a checagem de célula é
+uma comparação de string a mais por par, e a nota herdada da §4 sobre
+`mp.getNeighborsByPosition` continua valendo como otimização de quando a POC
+virar feature.
 
 ---
 

@@ -178,6 +178,25 @@ describe('player-panel-service', () => {
       const handled = await playerPanel.handleUiEvent(ACTOR_ID, { type: 'panel:social:rename', data: {} });
       assert.strictEqual(handled, true);
     });
+
+    it('recusa schema de rename com array, string de id ou alias excessivo', async () => {
+      assert.deepStrictEqual(playerPanel.validateRenamePayload([]), { ok: false });
+      assert.deepStrictEqual(
+        playerPanel.validateRenamePayload({ targetCharacterId: '42', alias: 'Apelido' }),
+        { ok: false }
+      );
+      assert.deepStrictEqual(
+        playerPanel.validateRenamePayload({ targetCharacterId: 42, alias: 'a'.repeat(129) }),
+        { ok: false }
+      );
+    });
+
+    it('normaliza o alias somente depois de validar o schema de rename', () => {
+      assert.deepStrictEqual(
+        playerPanel.validateRenamePayload({ targetCharacterId: 42, alias: '  O   Cocheiro  ' }),
+        { ok: true, targetCharacterId: 42, alias: 'O Cocheiro' }
+      );
+    });
   });
 
   describe('handlePanelRefreshRequest', () => {

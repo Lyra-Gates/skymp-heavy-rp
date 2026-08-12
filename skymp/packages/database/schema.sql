@@ -225,6 +225,25 @@ CREATE TABLE IF NOT EXISTS `market_prices` (
   CONSTRAINT `fk_market_hold` FOREIGN KEY (`hold_id`) REFERENCES `holds` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS `regional_market_transactions` (
+  `transaction_id` CHAR(36) NOT NULL PRIMARY KEY,
+  `idempotency_key` VARCHAR(64) NOT NULL,
+  `actor_character_id` INT NOT NULL,
+  `hold_id` VARCHAR(32) NOT NULL,
+  `direction` ENUM('buy', 'sell') NOT NULL,
+  `base_id` INT NOT NULL,
+  `count` INT NOT NULL,
+  `unit_price` INT NOT NULL,
+  `gross_amount` INT NOT NULL,
+  `tax_amount` INT NOT NULL DEFAULT 0,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_regional_market_idempotency` (`idempotency_key`),
+  KEY `idx_regional_market_hold_date` (`hold_id`, `created_at`),
+  KEY `idx_regional_market_character_date` (`actor_character_id`, `created_at`),
+  CONSTRAINT `fk_regional_market_character` FOREIGN KEY (`actor_character_id`) REFERENCES `characters` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_regional_market_hold` FOREIGN KEY (`hold_id`) REFERENCES `holds` (`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
 -- 10.2. Rotas Comerciais entre Holds
 CREATE TABLE IF NOT EXISTS `trade_routes` (
   `id`           INT AUTO_INCREMENT PRIMARY KEY,
@@ -265,6 +284,23 @@ CREATE TABLE IF NOT EXISTS `factions` (
   `treasury`     INT NOT NULL DEFAULT 0,
   `created_at`   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `fk_faction_leader` FOREIGN KEY (`leader_character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- 12.0. Ledger de tesouros institucionais (Hold <-> Facção)
+CREATE TABLE IF NOT EXISTS `institutional_treasury_transactions` (
+  `transfer_id` CHAR(36) NOT NULL PRIMARY KEY,
+  `idempotency_key` VARCHAR(64) NOT NULL,
+  `actor_character_id` INT NOT NULL,
+  `hold_id` VARCHAR(32) NOT NULL,
+  `faction_id` INT NOT NULL,
+  `amount` INT NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_institutional_treasury_idempotency` (`idempotency_key`),
+  KEY `idx_institutional_treasury_hold_date` (`hold_id`, `created_at`),
+  KEY `idx_institutional_treasury_faction_date` (`faction_id`, `created_at`),
+  CONSTRAINT `fk_institutional_treasury_actor` FOREIGN KEY (`actor_character_id`) REFERENCES `characters` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_institutional_treasury_hold` FOREIGN KEY (`hold_id`) REFERENCES `holds` (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_institutional_treasury_faction` FOREIGN KEY (`faction_id`) REFERENCES `factions` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 -- 12.1. Membros de Facções

@@ -6,7 +6,7 @@
  *
  * Por que isto existe
  * ───────────────────
- * As migrations `v2`–`v9` são aplicadas **à mão**, em ordem, e nada verifica
+ * As migrations `v2`–`v10` são aplicadas **à mão**, em ordem, e nada verifica
  * que foram todas aplicadas. Um banco meio-migrado é a falha mais cara de
  * diagnosticar que existe neste projeto, porque tudo *quase* funciona: o
  * servidor sobe, o login passa, e só a query que toca a coluna faltante
@@ -242,7 +242,7 @@ function imprimirResultado(resultado, strict) {
   }
 
   console.error(
-    '\nAplique as migrations pendentes de skymp/packages/database, em ordem (v2 -> v9).\n' +
+    '\nAplique as migrations pendentes de skymp/packages/database, em ordem (v2 -> v10).\n' +
     'Se voce acha que ja aplicou todas, aplicou parcialmente: as migrations sao\n' +
     'idempotentes (IF NOT EXISTS), entao rodar de novo e seguro.'
   );

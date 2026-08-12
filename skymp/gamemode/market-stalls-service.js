@@ -69,14 +69,14 @@ const _rateLimits = new Map();
  * @param {string} action
  * @returns {boolean} true se BLOQUEADO (rate limited)
  */
-function isRateLimited(characterId, action) {
+function isRateLimited(characterId, action, requestId = null) {
   const key = `${characterId}:${action}`;
   const now = Date.now();
-  const last = _rateLimits.get(key) || 0;
-  if (now - last < RATE_LIMIT_MS) {
+  const last = _rateLimits.get(key);
+  if (last && now - last.timestamp < RATE_LIMIT_MS && (!requestId || last.requestId !== requestId)) {
     return true;
   }
-  _rateLimits.set(key, now);
+  _rateLimits.set(key, { timestamp: now, requestId });
   return false;
 }
 
@@ -85,8 +85,8 @@ function isRateLimited(characterId, action) {
  */
 function _cleanupRateLimits() {
   const cutoff = Date.now() - RATE_LIMIT_MS * 2;
-  for (const [key, ts] of _rateLimits.entries()) {
-    if (ts < cutoff) _rateLimits.delete(key);
+  for (const [key, entry] of _rateLimits.entries()) {
+    if (entry.timestamp < cutoff) _rateLimits.delete(key);
   }
 }
 
@@ -96,6 +96,22 @@ function _cleanupRateLimits() {
 
 function uuid() {
   return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+}
+
+function normalizePurchaseRequestId(value) {
+  if (value === undefined || value === null) return uuid();
+  if (typeof value !== 'string') return null;
+  const key = value.trim();
+  return key.length >= 8 && key.length <= 64 ? key : null;
+}
+
+async function findPurchaseReplay(conn, idempotencyKey) {
+  const [rows] = await conn.query(
+    `SELECT id, stall_id, buyer_character_id, count, unit_price, tax_amount
+     FROM market_stall_sales WHERE idempotency_key = ? FOR UPDATE`,
+    [idempotencyKey]
+  );
+  return rows[0] || null;
 }
 
 function notify(actorId, message) {
@@ -688,11 +704,17 @@ async function listItems(actorId, stallIdRaw) {
 // Compra (refatorado com UUID consistente e idempotency)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw) {
+async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw, requestId) {
   const buyer = getCharacter(actorId);
   if (!buyer) return;
 
-  if (isRateLimited(buyer.characterId, 'stall_buy')) {
+  const idempotencyKey = normalizePurchaseRequestId(requestId);
+  if (!idempotencyKey) {
+    notify(actorId, 'Solicitacao de compra invalida.');
+    return;
+  }
+
+  if (isRateLimited(buyer.characterId, 'stall_buy', idempotencyKey)) {
     notify(actorId, 'Aguarde antes de usar este comando novamente.');
     return;
   }
@@ -706,12 +728,18 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw) {
   const stallId = parsePositiveInt(stallIdRaw, 0);
   const itemId = parsePositiveInt(itemIdRaw, 0);
   const count = parsePositiveInt(countRaw, 1);
-  const idempotencyKey = uuid();
 
   const conn = await db.getConnection();
   let itemForClient = null;
   try {
     await conn.beginTransaction();
+
+    const replay = await findPurchaseReplay(conn, idempotencyKey);
+    if (replay) {
+      await conn.commit();
+      notify(actorId, `Compra #${replay.id} ja havia sido confirmada.`);
+      return { ok: true, replayed: true, saleId: replay.id };
+    }
 
     const [rows] = await conn.query(
       `SELECT msi.*, ms.owner_character_id, ms.city_id, ms.tax_rate, ms.status AS stall_status
@@ -773,9 +801,9 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw) {
     // Registro de venda (historico do mercado, alem do ledger da economia)
     await conn.query(
       `INSERT INTO market_stall_sales
-        (stall_id, seller_character_id, buyer_character_id, base_id, count, unit_price, tax_amount, city_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [stallId, item.owner_character_id, buyer.characterId, item.base_id, count, item.price, taxAmount, item.city_id]
+        (stall_id, seller_character_id, buyer_character_id, base_id, count, unit_price, tax_amount, city_id, idempotency_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [stallId, item.owner_character_id, buyer.characterId, item.base_id, count, item.price, taxAmount, item.city_id, idempotencyKey]
     );
 
     // Ledger: saldo que muda sem linha aqui e ouro sem rastro.
@@ -819,6 +847,7 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw) {
       notify(sellerActorId, `Vendido: x${count} por ${itemForClient.total}g (taxa: ${itemForClient.taxAmount}g).`);
     }
   } catch (_) { /* vendedor offline, ignora */ }
+  return { ok: true, replayed: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1174,7 +1203,7 @@ async function handleInteractionAction(actorId, action, payload = {}) {
     case 'stall.view':
       return listItems(actorId, stallId);
     case 'stall.buy':
-      return buyItem(actorId, stallId, payload.itemId, payload.count || 1);
+      return buyItem(actorId, stallId, payload.itemId, payload.count || 1, payload.requestId);
     case 'stall.manage':
       if (payload.actionType === 'add') {
         return addItem(actorId, stallId, payload.baseId, payload.count, payload.price, payload.label || 'Mercadoria');

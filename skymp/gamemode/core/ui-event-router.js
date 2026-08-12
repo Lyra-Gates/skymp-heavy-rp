@@ -20,6 +20,31 @@
 
 // Mapa de prefixo → handler(actorId, uiEvent) => boolean | Promise<boolean>
 const _handlers = new Map();
+const MAX_EVENT_TYPE_LENGTH = 128;
+
+/**
+ * Valida o envelope minimo que cruza a fronteira CEF -> gamemode.
+ *
+ * Isto nao valida o `data`: cada modulo e dono do schema do seu comando.
+ * O objetivo aqui e impedir que um payload malformado chegue a handlers que
+ * assumem `uiEvent.type` como string.
+ *
+ * @param {unknown} uiEvent
+ * @returns {boolean}
+ */
+function isValidEventEnvelope(uiEvent) {
+  /** @type {{ type?: unknown } | null} */
+  const event = uiEvent && typeof uiEvent === 'object' && !Array.isArray(uiEvent)
+    ? uiEvent
+    : null;
+
+  return Boolean(
+    event &&
+    typeof event.type === 'string' &&
+    event.type.length > 0 &&
+    event.type.length <= MAX_EVENT_TYPE_LENGTH
+  );
+}
 
 /**
  * Registra um handler para um prefixo de evento.
@@ -50,7 +75,7 @@ function unregister(prefix) {
  * @returns {Promise<boolean>} true se algum handler tratou o evento
  */
 async function dispatch(actorId, uiEvent) {
-  if (!uiEvent || typeof uiEvent.type !== 'string') return false;
+  if (!isValidEventEnvelope(uiEvent)) return false;
 
   const prefix = uiEvent.type.split(':')[0];
   const targeted = _handlers.get(prefix);
@@ -85,4 +110,4 @@ function list() {
   return Array.from(_handlers.keys());
 }
 
-module.exports = { register, unregister, dispatch, list };
+module.exports = { register, unregister, dispatch, list, isValidEventEnvelope };

@@ -18,6 +18,10 @@
     "checkJs": true,
     "noEmit": true,
     "allowJs": true,
+    // O `ws` instalado publica apenas JavaScript. Sem este limite, o
+    // TypeScript entra no fonte da dependencia e denuncia detalhes internos
+    // que nao pertencem ao contrato usado pelo gamemode.
+    "maxNodeModuleJsDepth": 0,
     // Sem isto, os .d.ts do `ws` e do `mysql2` dentro de node_modules entram na
     // checagem e produzem dezenas de erros de dentro das bibliotecas, que
     // afogam os erros do nosso código.

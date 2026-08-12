@@ -29,6 +29,8 @@ const MODULE = 'governance';
 const DEFAULT_RANGE = 450;
 const SEARCH_RANGE = 350;
 const ESCORT_RANGE = 650;
+const MAX_UI_ACTION_LENGTH = 64;
+const MAX_UI_REASON_LENGTH = 256;
 
 const SCOPE = Object.freeze({
   REALM: 'realm',
@@ -146,9 +148,80 @@ function getCharacter(actorId) {
 }
 
 function parseActorId(raw) {
-  if (!raw) return NaN;
-  const clean = String(raw).toLowerCase().startsWith('0x') ? String(raw).slice(2) : String(raw);
+  if (typeof raw === 'number') {
+    return Number.isSafeInteger(raw) && raw > 0 ? raw : NaN;
+  }
+  if (typeof raw !== 'string') return NaN;
+
+  const clean = raw.trim().replace(/^0x/i, '');
+  if (!/^[0-9a-f]{1,8}$/i.test(clean)) return NaN;
+
   return Number.parseInt(clean, 16);
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isValidUiAction(action) {
+  return typeof action === 'string' &&
+    action.length > 0 &&
+    action.length <= MAX_UI_ACTION_LENGTH &&
+    /^(guard|stall|npc)\.[a-z_]+$/.test(action);
+}
+
+function isStrictPositiveInteger(raw) {
+  if (typeof raw === 'number') return Number.isSafeInteger(raw) && raw > 0;
+  if (typeof raw !== 'string' || !/^[1-9]\d*$/.test(raw)) return false;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed > 0;
+}
+
+/**
+ * Valida somente a forma da intencao CEF. Limites de negocio (por exemplo,
+ * teto de pena) continuam nas funcoes de dominio que aplicam a acao.
+ * @param {string} action
+ * @param {unknown} payload
+ * @returns {{ok: true, targetActorId: number}|{ok: false, message: string}}
+ */
+function validateUiInteractionPayload(action, payload) {
+  if (!isPlainObject(payload)) return { ok: false, message: 'Dados da acao invalidos.' };
+
+  /** @type {{targetActorId?: unknown, target?: unknown, actorId?: unknown, reason?: unknown, amount?: unknown, sentenceMinutes?: unknown, baseId?: unknown, itemId?: unknown, count?: unknown, requestId?: unknown}} */
+  const data = /** @type {any} */ (payload);
+
+  const targetRaw = data.targetActorId ?? data.target ?? data.actorId;
+  const targetActorId = parseActorId(targetRaw);
+  if (!Number.isFinite(targetActorId)) return { ok: false, message: 'Alvo invalido.' };
+
+  if (Object.hasOwn(data, 'reason') &&
+    (typeof data.reason !== 'string' || data.reason.length > MAX_UI_REASON_LENGTH)) {
+    return { ok: false, message: 'Motivo invalido.' };
+  }
+
+  if (action === 'guard.fine' && !isStrictPositiveInteger(data.amount)) {
+    return { ok: false, message: 'Valor de multa invalido.' };
+  }
+  if (action === 'guard.arrest' && Object.hasOwn(data, 'sentenceMinutes') &&
+    !isStrictPositiveInteger(data.sentenceMinutes)) {
+    return { ok: false, message: 'Tempo de prisao invalido.' };
+  }
+  if (action === 'guard.confiscate' &&
+    (!isStrictPositiveInteger(data.baseId) ||
+      (Object.hasOwn(data, 'count') && !isStrictPositiveInteger(data.count)))) {
+    return { ok: false, message: 'Item de confisco invalido.' };
+  }
+  if (action === 'stall.buy' &&
+    (!isStrictPositiveInteger(data.itemId) ||
+      (Object.hasOwn(data, 'count') && !isStrictPositiveInteger(data.count)))) {
+    return { ok: false, message: 'Item de barraca invalido.' };
+  }
+  if (Object.hasOwn(data, 'requestId') &&
+    (typeof data.requestId !== 'string' || data.requestId.trim().length < 8 || data.requestId.trim().length > 48)) {
+    return { ok: false, message: 'Solicitacao invalida.' };
+  }
+
+  return { ok: true, targetActorId };
 }
 
 function parsePositiveInt(raw, fallback = 0) {
@@ -230,8 +303,8 @@ async function ensureDefaultRolesForExistingScopes() {
   }
 }
 
-async function getMembership(characterId, scopeType, scopeId) {
-  const rows = await db.query(
+async function getMembership(characterId, scopeType, scopeId, queryable = db) {
+  const rows = await queryable.query(
     `SELECT gm.*, gr.name AS role_name, gr.weight
      FROM governance_memberships gm
      INNER JOIN governance_roles gr ON gr.id = gm.role_id
@@ -839,11 +912,17 @@ async function getInteractionActions(actorId, targetActorId) {
 }
 
 async function handleInteractionAction(actorId, action, payload = {}) {
-  const targetActorId = parseActorId(payload.targetActorId || payload.target || payload.actorId);
-  if (!Number.isFinite(targetActorId)) {
-    notify(actorId, 'Alvo invalido.');
+  if (!isValidUiAction(action)) {
+    notify(actorId, 'Acao de governanca invalida.');
     return;
   }
+
+  const validation = validateUiInteractionPayload(action, payload);
+  if (!validation.ok) {
+    notify(actorId, /** @type {{message: string}} */ (validation).message);
+    return;
+  }
+  const { targetActorId } = validation;
 
   if (action.startsWith('stall.')) {
     try {
@@ -897,15 +976,23 @@ async function handleUiEvent(actorId, uiEvent) {
   if (!initialized || !uiEvent || typeof uiEvent !== 'object') return false;
 
   const type = uiEvent.type;
-  const data = uiEvent.data || {};
+  const data = isPlainObject(uiEvent.data) ? uiEvent.data : {};
   if (type === 'governance:interaction:actions') {
     const targetActorId = parseActorId(data.targetActorId);
+    if (!Number.isFinite(targetActorId)) {
+      notify(actorId, 'Alvo invalido.');
+      return true;
+    }
     const result = await getInteractionActions(actorId, targetActorId);
     sendBrowserModal(actorId, 'governance:interaction:actions', result);
     notify(actorId, `Acoes disponiveis: ${safeJson(result.sections)}`);
     return true;
   }
   if (type === 'governance:interaction:execute') {
+    if (!isValidUiAction(data.action)) {
+      notify(actorId, 'Acao de governanca invalida.');
+      return true;
+    }
     await handleInteractionAction(actorId, data.action, data);
     return true;
   }
@@ -1222,9 +1309,11 @@ module.exports = {
   initGovernanceService,
   shutdownGovernanceService,
   handleUiEvent,
+  validateUiInteractionPayload,
   getInteractionActions,
   handleInteractionAction,
   getMyGovernanceSummary,
+  getMembership,
   hasPermission,
   createRealm,
   createCity,

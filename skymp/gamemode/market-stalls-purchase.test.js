@@ -67,6 +67,10 @@ function novaConexao() {
       }
       if (/SELECT count FROM character_inventory/i.test(sql)) return [[]];
       if (/INSERT INTO character_inventory/i.test(sql)) return [{}];
+      if (/FROM market_stall_sales WHERE idempotency_key = \? FOR UPDATE/i.test(sql)) {
+        const sale = vendas.find(venda => venda.requestId === params[0]);
+        return [sale ? [{ id: sale.id, stall_id: sale.stallId, buyer_character_id: sale.comprador, count: 1, unit_price: PRECO, tax_amount: sale.imposto }] : []];
+      }
       if (/UPDATE cities SET treasury/i.test(sql)) {
         tesouro.push({ valor: params[0], cidade: params[1] });
         return [{}];
@@ -80,7 +84,7 @@ function novaConexao() {
         return [{}];
       }
       if (/INSERT INTO market_stall_sales/i.test(sql)) {
-        vendas.push({ stallId: params[0], vendedor: params[1], comprador: params[2], imposto: params[6] });
+        vendas.push({ id: vendas.length + 1, stallId: params[0], vendedor: params[1], comprador: params[2], imposto: params[6], requestId: params[8] });
         return [{}];
       }
       return [[]];
@@ -194,6 +198,20 @@ describe('buyItem — tudo numa transacao so', () => {
     assert.equal(vendas[0].comprador, COMPRADOR_CHAR);
     assert.equal(vendas[0].vendedor, VENDEDOR_CHAR);
     assert.equal(vendas[0].imposto, 20, 'o imposto e o unico rastro do que foi pro tesouro da cidade');
+  });
+
+  it('repete o mesmo requestId sem cobrar, entregar ou registrar uma segunda vez', async () => {
+    const requestId = 'stall-buy-request-0001';
+    await marketStalls.buyItem(COMPRADOR_ACTOR, STALL_ID, ITEM_ID, 2, requestId);
+    await marketStalls.buyItem(COMPRADOR_ACTOR, STALL_ID, ITEM_ID, 2, requestId);
+
+    assert.deepEqual(eventos, ['begin', 'commit', 'begin', 'commit']);
+    assert.equal(saldos[COMPRADOR_CHAR], 800);
+    assert.equal(saldos[VENDEDOR_CHAR], 180);
+    assert.equal(ledgerOuro.length, 2);
+    assert.equal(ledgerItem.length, 1);
+    assert.equal(vendas.length, 1);
+    assert.ok(notificacoes.some(n => /ja havia sido confirmada/i.test(n.message)));
   });
 });
 

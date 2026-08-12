@@ -195,6 +195,23 @@ describe('voip-service — handshake por ticket', () => {
   });
 });
 
+describe('voip-service — quota de audio_frame', () => {
+  it('aceita o burst inicial e descarta o frame seguinte ate haver reposicao', () => {
+    const conn = { audioTokens: voip.AUDIO_FRAME_BURST, audioLastRefillAt: 0 };
+
+    for (let i = 0; i < voip.AUDIO_FRAME_BURST; i++) {
+      assert.strictEqual(voip._consumeAudioFrameQuota(conn, 0), true);
+    }
+    assert.strictEqual(voip._consumeAudioFrameQuota(conn, 0), false);
+  });
+
+  it('repoe frames pela cadencia configurada, sem ultrapassar o burst', () => {
+    const conn = { audioTokens: 0, audioLastRefillAt: 0 };
+    assert.strictEqual(voip._consumeAudioFrameQuota(conn, 1000), true);
+    assert.ok(conn.audioTokens <= voip.AUDIO_FRAME_BURST - 1);
+  });
+});
+
 /**
  * Relay de `audio_frame` — o caminho novo, que substitui o WebRTC P2P (bloqueado
  * pela CEF do lado da captura). Aqui `mp` precisa ser mockado: a proximidade lê

@@ -48,6 +48,9 @@ const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
 const commands      = require(path.join(gamemodeDir, 'commands'));
 const moduleRegistry = require(path.join(gamemodeDir, 'core', 'module-registry'));
 const uiEventRouter  = require(path.join(gamemodeDir, 'core', 'ui-event-router'));
+const { installUiEventGateway } = require(path.join(gamemodeDir, 'core', 'ui-event-gateway'));
+const { createUiEventRateLimiter } = require(path.join(gamemodeDir, 'core', 'ui-event-rate-limiter'));
+const { createConnectionMonitor } = require(path.join(gamemodeDir, 'core', 'connection-monitor'));
 const serverOptions  = require(path.join(gamemodeDir, 'core', 'server-options'));
 const governance    = require(path.join(gamemodeDir, 'governance-service'));
 const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
@@ -372,101 +375,33 @@ if (typeof mp !== "undefined") {
     updateNeighbor: ''
   });
 
-  mp.onUiEvent = (pcFormId, uiEvent) => {
-    try {
-      console.log(`[phase0] onUiEvent callback from ${pcFormId.toString(16)}:`, uiEvent);
-      uiEventRouter.dispatch(pcFormId, uiEvent).catch(err =>
-        console.error('[phase0] ui-event-router dispatch failed:', err.message)
-      );
-      if (uiEvent.type === 'cef::chat:send') {
-        const text = uiEvent.data;
-        commands.handleChatInput(pcFormId, text);
-      }
-    } catch (err) {
-      console.error("[phase0] Error in onUiEvent:", err.message);
+  const configuredRateLimit = Number(process.env.UI_EVENT_RATE_LIMIT_MAX_EVENTS);
+  const configuredRateWindow = Number(process.env.UI_EVENT_RATE_LIMIT_WINDOW_MS);
+  const uiEventRateLimiter = createUiEventRateLimiter({
+    maxEvents: Number.isSafeInteger(configuredRateLimit) && configuredRateLimit > 0 ? configuredRateLimit : 0,
+    windowMs: Number.isSafeInteger(configuredRateWindow) && configuredRateWindow > 0 ? configuredRateWindow : undefined
+  });
+  installUiEventGateway(mp, {
+    uiEventRouter,
+    handleChatInput: commands.handleChatInput,
+    rateLimiter: uiEventRateLimiter
+  });
+  // Telemetria sem payload: fornece a base real para escolher um limite sem
+  // registrar texto do jogador nem bloquear a UI antes da medicao.
+  const uiEventMetricsTimer = setInterval(() => {
+    const metrics = uiEventRateLimiter.snapshot();
+    if (metrics.observed > 0 || metrics.rejected > 0) {
+      console.log('[phase0] UI event metrics:', JSON.stringify(metrics));
     }
-  };
+  }, 60_000);
+  if (typeof uiEventMetricsTimer.unref === 'function') uiEventMetricsTimer.unref();
 } else {
   console.log("[phase0] mp API not available");
 }
 
-const activeUsers = new Set();
-// Cache userId -> actorId enquanto conectado. Necessário porque no momento em
-// que detectamos a desconexão (connected === false) o ator já foi destruído
-// pela engine e mp.getUserActor(userId) normalmente falha/retorna nada —
-// sem isso, removeActiveCharacter/playerPanel.cleanup nunca rodavam de fato.
-const userActorMap = new Map();
-
-// Polling de Conexões de Rede (2 em 2 segundos)
-setInterval(() => {
-  if (typeof mp === "undefined") return;
-
-  for (let userId = 1; userId <= 10; userId++) {
-    const connected = mp.isConnected(userId);
-    if (connected && !activeUsers.has(userId)) {
-      activeUsers.add(userId);
-      console.log(`[phase0] Connection detected! User ID: ${userId}`);
-      
-      try {
-        const actorId = mp.getUserActor(userId);
-        console.log(`[phase0] User ${userId} actor:`, actorId ? actorId.toString(16) : 'none');
-        
-        if (actorId) {
-          // Mapeia o actorId para o profileId do usuário
-          let foundProfileId = -1;
-          for (let pId = 1; pId <= 50; pId++) {
-            const actors = mp.getActorsByProfileId(pId);
-            if (actors && actors.includes(actorId)) {
-              foundProfileId = pId;
-              break;
-            }
-          }
-          console.log(`[phase0] User ${userId} mapped to profileId: ${foundProfileId}`);
-          userActorMap.set(userId, actorId);
-
-          if (foundProfileId !== -1) {
-            // Executa verificação assíncrona no banco
-            whitelist.checkWhitelist(userId, foundProfileId, actorId)
-              .then((allowed) => {
-                if (allowed) {
-                  console.log(`[phase0] User ${userId} successfully approved by database check.`);
-                } else {
-                  console.log(`[phase0] User ${userId} was rejected and kicked by database check.`);
-                  activeUsers.delete(userId);
-                  userActorMap.delete(userId);
-                  commands.removeActiveCharacter(actorId);
-                  playerPanel.cleanup(actorId);
-                }
-              })
-              .catch((err) => {
-                console.error(`[phase0] Error in async checkWhitelist for user ${userId}:`, err.message);
-                if (typeof mp !== 'undefined') mp.kick(userId);
-                activeUsers.delete(userId);
-                userActorMap.delete(userId);
-                commands.removeActiveCharacter(actorId);
-                playerPanel.cleanup(actorId);
-              });
-          } else {
-            console.log(`[phase0] User ${userId} actor ${actorId.toString(16)} has no associated profileId in server registry.`);
-          }
-        }
-      } catch (err) {
-        console.error(`[phase0] Error processing connection for user ${userId}:`, err.message);
-      }
-    } else if (!connected && activeUsers.has(userId)) {
-      activeUsers.delete(userId);
-      console.log(`[phase0] Disconnection detected! User ID: ${userId}`);
-
-      const actorId = userActorMap.get(userId);
-      userActorMap.delete(userId);
-      if (actorId) {
-        try {
-          commands.removeActiveCharacter(actorId);
-          playerPanel.cleanup(actorId);
-        } catch (err) {
-          console.error(`[phase0] Error cleaning up disconnected user ${userId}:`, err.message);
-        }
-      }
-    }
-  }
-}, 2000);
+// Polling de conexão (a API SkyMP ainda não expõe callback de login). O monitor
+// protege contra respostas de whitelist de sessões antigas e espera o ator e o
+// profile aparecerem em vez de abandonar uma conexão publicada cedo pela engine.
+if (typeof mp !== 'undefined') {
+  createConnectionMonitor({ mp, whitelist, commands, playerPanel }).start();
+}

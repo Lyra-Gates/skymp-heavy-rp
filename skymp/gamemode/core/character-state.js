@@ -146,7 +146,7 @@ function is(characterId, states) {
  * @param {object} [metadata] - Dados adicionais sobre o estado
  */
 function set(characterId, newState, metadata = {}) {
-  if (!Object.values(STATES).includes(newState)) {
+  if (!/** @type {any} */ (Object.values(STATES)).includes(newState)) {
     throw new Error(`[character-state] Estado inválido: ${newState}`);
   }
   const previous = get(characterId);
@@ -161,7 +161,7 @@ function set(characterId, newState, metadata = {}) {
  */
 function reset(characterId) {
   const current = get(characterId);
-  if (!DURABLE_STATES.has(current)) {
+  if (!/** @type {any} */ (DURABLE_STATES).has(current)) {
     set(characterId, STATES.NORMAL, {});
   } else {
     console.log(`[character-state] char=${characterId} mantém estado durável ${current} no reset`);

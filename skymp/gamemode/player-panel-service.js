@@ -28,6 +28,7 @@ const panelRefreshBus = require('./core/panel-refresh-bus');
 const { actorRef } = require('./core/papyrus');
 
 const VITALS_POLL_INTERVAL_MS = 2000;
+const MAX_PANEL_ALIAS_INPUT_LENGTH = 128;
 
 let initialized = false;
 let _vitalsTimer = null;
@@ -312,6 +313,25 @@ function cleanup(actorId) {
 }
 
 /**
+ * O painel recebe JSON da CEF. Manter o schema ao lado do handler evita que um
+ * novo campo de UI vire, por acidente, entrada livre para a camada de banco.
+ * @param {unknown} data
+ * @returns {{ok: true, targetCharacterId: number, alias: string}|{ok: false}}
+ */
+function validateRenamePayload(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false };
+
+  /** @type {{targetCharacterId?: unknown, alias?: unknown}} */
+  const payload = /** @type {any} */ (data);
+  const { targetCharacterId, alias } = payload;
+  if (typeof targetCharacterId !== 'number' || !Number.isSafeInteger(targetCharacterId) || targetCharacterId <= 0) return { ok: false };
+  if (typeof alias !== 'string' || alias.length > MAX_PANEL_ALIAS_INPUT_LENGTH) return { ok: false };
+
+  const cleanAlias = identity.sanitizeDisplayName(alias);
+  return cleanAlias ? { ok: true, targetCharacterId, alias: cleanAlias } : { ok: false };
+}
+
+/**
  * Handler de eventos UI→servidor para o namespace 'panel'.
  * Registrado no core/ui-event-router.
  * @param {number} actorId
@@ -347,9 +367,14 @@ async function handleUiEvent(actorId, uiEvent) {
       await pushSocial(actorId);
       return true;
     case 'panel:social:rename': {
-      const data = uiEvent.data || {};
-      const renamed = await renameKnownPerson(actorId, data.targetCharacterId, data.alias);
+      const payload = validateRenamePayload(uiEvent.data);
+      if (!payload.ok) {
+        commands.sendNotification(actorId, 'Dados de apelido invalidos.');
+        return true;
+      }
+      const renamed = await renameKnownPerson(actorId, payload.targetCharacterId, payload.alias);
       if (renamed) await pushSocial(actorId);
+      else commands.sendNotification(actorId, 'Nao foi possivel alterar esse apelido.');
       return true;
     }
     default:
@@ -394,6 +419,7 @@ module.exports = {
   buildStatusSnapshot,
   buildSocialSnapshot,
   renameKnownPerson,
+  validateRenamePayload,
   handlePanelRefreshRequest,
   isInitialized: () => initialized,
   // Expostos só pra teste: a otimização de custo mora na seleção de quem entra

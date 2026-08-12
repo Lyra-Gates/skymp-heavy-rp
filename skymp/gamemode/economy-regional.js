@@ -11,10 +11,10 @@
  */
 
 const db = require('./database');
-// Ouro passa pelo transaction-service: atomico (BEGIN/FOR UPDATE/COMMIT) e com
-// ledger em `gold_transactions`. O antigo `economy-service` fazia UPDATE solto
-// e foi apagado justamente por isso.
-const transactionService = require('./core/transaction-service');
+// Compra e venda usam uma fronteira unica: inventario, ouro, estoque, imposto
+// e os tres ledgers so ficam visiveis depois do mesmo COMMIT.
+const regionalMarketTransactions = require('./core/regional-market-transaction-service');
+const institutionalTreasury = require('./core/institutional-treasury-service');
 const admin = require('./admin-service');
 const commands = require('./commands');
 
@@ -38,6 +38,18 @@ async function loadCache() {
     pricesCache[p.hold_id][p.base_id] = p;
   }
   console.log(`[economy-regional] Cache loaded: ${holds.length} holds, ${prices.length} price entries.`);
+}
+
+async function refreshCacheAfterCommit(operation) {
+  try {
+    await loadCache();
+  } catch (err) {
+    // O commit ja aconteceu; cache atrasado nao pode transformar uma compra ou
+    // venda confirmada em erro para o jogador. A proxima recarga periodica
+    // tentara novamente e a transacao continua consultando o banco como fonte
+    // de verdade.
+    console.error(`[economy-regional] Cache nao recarregado apos ${operation}:`, err.message);
+  }
 }
 
 setInterval(() => {
@@ -87,78 +99,72 @@ function getDynamicBuyPrice(stock, baseValue) {
 /**
  * /sell [baseId] [qty] — Vende item ao mercado regional do Hold atual.
  */
-async function sellToMarket(actorId, characterId, baseId, qty = 1) {
+async function sellToMarket(actorId, characterId, baseId, qty = 1, idempotencyKey) {
   const holdId = characterHold.get(characterId) || 'whiterun';
-  const hold   = holdCache[holdId];
-  if (!hold) return;
-
-  // Verifica inventário
-  const inventoryService = require('./inventory-service');
-  const has = await inventoryService.hasItem(characterId, baseId, qty);
-  if (!has) {
-    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Você não tem itens suficientes.']);
-    return;
+  let result;
+  try {
+    result = await regionalMarketTransactions.sell({ actorId, characterId, holdId, baseId, count: qty, idempotencyKey });
+  } catch (err) {
+    console.error(`[economy-regional] Falha atomica na venda em ${holdId}:`, err.message);
+    const message = /Estoque insuficiente|não possui item/i.test(err.message)
+      ? 'Voce nao tem itens suficientes.'
+      : 'Falha tecnica: a venda nao foi concluida.';
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [message]);
+    return false;
   }
-
-  // Calcula preço punitivo
-  const entry = pricesCache[holdId]?.[baseId];
-  const baseValue = getBaseValue(entry);
-  const currentStock = entry ? entry.stock : 50;
-  const price = getDynamicSellPrice(currentStock, baseValue);
-
-  const gross    = price * qty;
-  const tax      = Math.ceil(gross * hold.tax_rate);
-  const net      = gross - tax;
-
-  // Executa transação
-  await inventoryService.removeItem(actorId, characterId, baseId, qty);
-  await transactionService.addGold({ characterId, amount: net, reason: 'regional_sale', module: 'economy-regional' });
-
-  // Acumula imposto no tesouro do Hold
-  await db.query('UPDATE holds SET treasury = treasury + ? WHERE id = ?', [tax, holdId]);
-
-  // Aumenta o estoque no mercado
-  await db.query(
-    'INSERT INTO market_prices (hold_id, base_id, sell_price, buy_price, stock) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE stock = LEAST(stock + ?, 100)',
-    [holdId, baseId, price, getDynamicBuyPrice(currentStock, baseValue), Math.min(100, 50 + qty), qty]
-  );
+  if (!result.ok) {
+    const messages = {
+      invalid_character: 'Personagem invalido.', invalid_item: 'ID invalido.', invalid_count: 'Quantidade invalida.',
+      invalid_idempotency_key: 'Solicitacao invalida. Tente novamente.', invalid_hold: 'Mercado invalido.',
+      hold_not_found: 'Mercado indisponivel nesta cidade.'
+    };
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [messages[result.code] || 'Venda recusada.']);
+    return false;
+  }
+  if (!result.replayed) await refreshCacheAfterCommit('venda');
 
   if (typeof mp !== 'undefined') {
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
-      `Vendeu ${qty}x item por ${net}g (imposto: ${tax}g para ${hold.name}).`
+      result.replayed
+        ? `Venda de ${qty}x item ja havia sido confirmada.`
+        : `Vendeu ${qty}x item por ${result.net}g (imposto: ${result.tax}g para ${holdCache[holdId]?.name || holdId}).`
     ]);
   }
-  console.log(`[economy-regional] Char ${characterId} sold ${qty}x 0x${baseId.toString(16)} for ${net}g (+${tax}g tax) in ${holdId}`);
+  console.log(`[economy-regional] Char ${characterId} sold ${qty}x 0x${baseId.toString(16)} for ${result.net}g (+${result.tax}g tax) in ${holdId}${result.replayed ? ' (replay)' : ''}`);
+  return true;
 }
 
 /**
  * /buyitem [baseId] [qty] — Compra item do mercado regional.
  */
-async function buyFromMarket(actorId, characterId, baseId, qty = 1) {
+async function buyFromMarket(actorId, characterId, baseId, qty = 1, idempotencyKey) {
   const holdId = characterHold.get(characterId) || 'whiterun';
-  const entry  = pricesCache[holdId]?.[baseId];
-  if (!entry || entry.stock < qty) {
-    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Item indisponível neste mercado.']);
-    return;
+  let result;
+  try {
+    result = await regionalMarketTransactions.buy({ actorId, characterId, holdId, baseId, count: qty, idempotencyKey });
+  } catch (err) {
+    console.error(`[economy-regional] Falha atomica na compra em ${holdId}:`, err.message);
+    const message = /Ouro insuficiente/i.test(err.message) ? 'Ouro insuficiente.' : 'Falha tecnica: a compra nao foi concluida.';
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [message]);
+    return false;
   }
-
-  const baseValue = getBaseValue(entry);
-  const unitPrice = getDynamicBuyPrice(entry.stock, baseValue);
-  const totalCost = unitPrice * qty;
-  const paid = await transactionService.removeGold({ characterId, amount: totalCost, reason: 'regional_purchase', module: 'economy-regional' });
-  if (!paid) {
-    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Ouro insuficiente. Necessário: ${totalCost}g.`]);
-    return;
+  if (!result.ok) {
+    const messages = {
+      invalid_character: 'Personagem invalido.', invalid_item: 'ID invalido.', invalid_count: 'Quantidade invalida.',
+      invalid_idempotency_key: 'Solicitacao invalida. Tente novamente.', invalid_hold: 'Mercado invalido.',
+      out_of_stock: 'Item indisponivel neste mercado.'
+    };
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [messages[result.code] || 'Compra recusada.']);
+    return false;
   }
-
-  const inventoryService = require('./inventory-service');
-  await inventoryService.giveItem(actorId, characterId, baseId, qty);
-  await db.query('UPDATE market_prices SET stock = GREATEST(stock - ?, 0) WHERE hold_id=? AND base_id=?', [qty, holdId, baseId]);
-  await loadCache();
+  if (!result.replayed) await refreshCacheAfterCommit('compra');
 
   if (typeof mp !== 'undefined') {
-    mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Comprou ${qty}x item por ${totalCost}g.`]);
+    mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
+      result.replayed ? `Compra de ${qty}x item ja havia sido confirmada.` : `Comprou ${qty}x item por ${result.gross}g.`
+    ]);
   }
+  return true;
 }
 
 /**
@@ -194,41 +200,43 @@ function setCharacterHold(characterId, holdId) {
 /**
  * Lord: /holdwithdraw [amount] - Saca impostos da cidade para o cofre da facção.
  */
-async function withdrawHoldTreasury(actorId, characterId, amount) {
+async function withdrawHoldTreasury(actorId, characterId, amount, idempotencyKey) {
   const holdId = characterHold.get(characterId) || 'whiterun';
-  const hold = holdCache[holdId];
-  if (!hold) return;
-
-  if (!hold.ruling_faction_id) {
-    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Esta cidade não tem um lorde.']);
-    return;
+  let result;
+  try {
+    result = await institutionalTreasury.transferHoldTreasury({
+      characterId,
+      holdId,
+      amount,
+      idempotencyKey
+    });
+  } catch (err) {
+    console.error(`[economy-regional] Falha atomica no saque do hold ${holdId}:`, err.message);
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Falha tecnica: nenhum ouro foi transferido.']);
+    return false;
   }
 
-  // Facção é um ESCOPO dentro da governança, não um sistema paralelo — é o que
-  // `governance_memberships.scope_type` já modela. O antigo `faction-service`
-  // mantinha uma segunda tabela de "quem pertence a qual facção com qual
-  // patente", e duas fontes de verdade sobre isso é como se perde o controle de
-  // quem manda em quê. Foi apagado; a associação vem daqui.
-  const governance = require('./governance-service');
-  const membership = await governance.getMembership(characterId, 'faction', hold.ruling_faction_id);
-
-  if (!membership || membership.role_name !== 'leader') {
-    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Apenas o Lorde desta cidade pode sacar os impostos.']);
-    return;
+  if (!result.ok) {
+    const messages = {
+      invalid_amount: 'Valor invalido.',
+      invalid_idempotency_key: 'Solicitacao invalida. Tente novamente.',
+      hold_not_found: 'Hold desconhecido.',
+      no_ruling_faction: 'Esta cidade nao tem um lorde.',
+      not_ruling_leader: 'Apenas o Lorde desta cidade pode sacar os impostos.',
+      insufficient_treasury: `Tesouro local insuficiente${result.treasury !== undefined ? `: ${result.treasury}g.` : '.'}`
+    };
+    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [messages[result.code] || 'Transferencia recusada.']);
+    return false;
   }
 
-  if (amount <= 0 || hold.treasury < amount) {
-    if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Valor inválido. Tesouro local: ${hold.treasury}g.`]);
-    return;
-  }
-
-  await db.query('UPDATE holds SET treasury = treasury - ? WHERE id = ?', [amount, holdId]);
-  await db.query('UPDATE factions SET treasury = treasury + ? WHERE id = ?', [amount, factionInfo.factionId]);
-  
-  await loadCache();
-  
-  if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Você transferiu ${amount}g da cidade para o cofre da facção.`]);
-  console.log(`[economy-regional] Lord ${characterId} withdrew ${amount}g from ${holdId} to faction ${factionInfo.factionId}.`);
+  if (!result.replayed) await refreshCacheAfterCommit('saque institucional');
+  if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
+    result.replayed
+      ? `Transferencia ${result.amount}g ja havia sido confirmada.`
+      : `Voce transferiu ${result.amount}g da cidade para o cofre da faccao.`
+  ]);
+  console.log(`[economy-regional] Lord ${characterId} withdrew ${result.amount}g from ${holdId} to faction ${result.factionId}${result.replayed ? ' (replay)' : ''}.`);
+  return true;
 }
 
 /**
@@ -280,26 +288,34 @@ async function handleInteractionAction(actorId, action, payload = {}) {
   const ch = commands.getActiveCharacterData(actorId);
   if (!ch) return;
 
-  const baseIdText = payload.baseId || '';
-  const baseId = Number.parseInt(baseIdText, baseIdText.startsWith('0x') ? 16 : 10);
-  const qty = Number.parseInt(payload.count) || 1;
+  const baseId = parseDatabaseInteger(payload.baseId);
+  const qty = payload.count === undefined ? 1 : parseDatabaseInteger(payload.count);
 
   switch (action) {
     case 'npc.market_view':
       return showMarketInfo(actorId, ch.characterId);
     case 'npc.market_buy':
-      if (!Number.isFinite(baseId)) {
+      if (!baseId || !qty || qty > 100) {
         if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['ID Invalido.']);
         return;
       }
-      return buyFromMarket(actorId, ch.characterId, baseId, qty);
+      return buyFromMarket(actorId, ch.characterId, baseId, qty, payload.requestId);
     case 'npc.market_sell':
-      if (!Number.isFinite(baseId)) {
+      if (!baseId || !qty || qty > 100) {
         if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['ID Invalido.']);
         return;
       }
-      return sellToMarket(actorId, ch.characterId, baseId, qty);
+      return sellToMarket(actorId, ch.characterId, baseId, qty, payload.requestId);
   }
+}
+
+function parseDatabaseInteger(value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value > 0 && value <= 2147483647 ? value : null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!/^(?:[1-9]\d*|0x[0-9a-f]+)$/i.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 2147483647 ? parsed : null;
 }
 
 module.exports = {
