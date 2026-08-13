@@ -71,14 +71,54 @@ async function _recordInventoryLedger(conn, opts) {
 
 /**
  * Registra uma transação de ouro no ledger.
+ *
+ * `owner_*` e `counterparty_*` entraram na migration v15 (Economy Framework),
+ * com exatamente a forma que a v14 deu ao ledger de item e pelo mesmo motivo:
+ * uma venda gravava `-100` no comprador e `+95` no vendedor sem nada ligando as
+ * duas linhas (`ECONOMY_FRAMEWORK_AUDIT.md` Achado 1).
+ *
+ * Quem não passa nada continua gravando exatamente a linha de antes: titular
+ * `character`, ref igual ao `character_id`, contraparte nula. É o que mantém
+ * `addGold`/`removeGold` e os chamadores das primitivas inalterados enquanto o
+ * `core/economy-service.js` nomeia os dois lados.
+ *
+ * @param {object} conn conexão com transação ativa
+ * @param {object} opts
+ * @param {number|null} [opts.characterId] preenchido quando o titular é personagem
+ * @param {number} opts.delta positivo credita, negativo debita
+ * @param {string} opts.reason
+ * @param {string} opts.module
+ * @param {string} [opts.idempotencyKey]
+ * @param {string} [opts.ownerType] padrão `character`
+ * @param {string|number} [opts.ownerRef] padrão o próprio `characterId`
+ * @param {string} [opts.counterpartyType] o outro lado do movimento
+ * @param {string|number} [opts.counterpartyRef]
+ * @param {string} [opts.transferId] UUID compartilhado pelas pernas da mesma transferência
+ * @param {number} [opts.actorCharacterId] quem pediu o movimento, se não for o titular
  */
 async function _recordGoldLedger(conn, opts) {
   const txId = uuid();
+  const ownerType = opts.ownerType || 'character';
+  const ownerRef = opts.ownerRef !== undefined && opts.ownerRef !== null
+    ? String(opts.ownerRef)
+    : String(opts.characterId);
+
   await conn.query(
     `INSERT INTO gold_transactions
-      (transaction_id, character_id, delta, reason, module, idempotency_key, status)
-     VALUES (?, ?, ?, ?, ?, ?, 'committed')`,
-    [txId, opts.characterId, opts.delta, opts.reason, opts.module, opts.idempotencyKey || null]
+      (transaction_id, character_id, owner_type, owner_ref,
+       counterparty_type, counterparty_ref, transfer_id, actor_character_id,
+       delta, reason, module, idempotency_key, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'committed')`,
+    [
+      txId,
+      opts.characterId === undefined ? null : opts.characterId,
+      ownerType, ownerRef,
+      opts.counterpartyType || null,
+      opts.counterpartyRef === undefined || opts.counterpartyRef === null ? null : String(opts.counterpartyRef),
+      opts.transferId || null,
+      Number.isSafeInteger(opts.actorCharacterId) && opts.actorCharacterId > 0 ? opts.actorCharacterId : null,
+      opts.delta, opts.reason, opts.module, opts.idempotencyKey || null
+    ]
   );
   return txId;
 }
@@ -211,18 +251,63 @@ async function _applyInventoryDelta(conn, characterId, baseId, delta) {
 }
 
 /**
- * Atualiza o ouro do personagem dentro de uma transação ativa.
+ * O maior valor que cabe em `characters.gold INT` do MySQL.
+ *
+ * Existe pelo mesmo motivo que `MAX_STACK_COUNT`: `gold = gold + ?` no modo
+ * não-estrito satura em silêncio em vez de falhar, e a diferença vira
+ * patrimônio destruído sem nenhuma linha explicando. A assimetria — teto para
+ * item, nenhum para ouro — era o Achado 4 de `ECONOMY_FRAMEWORK_AUDIT.md`.
+ */
+const MAX_GOLD = 2147483647;
+
+/**
+ * Atualiza o ouro do personagem dentro de uma transação **do chamador**.
+ *
+ * ─── Validação ──────────────────────────────────────────────────────────────
+ *
+ * Ela é nova e é o Achado 3 da auditoria de economia — o mesmo defeito que o §6
+ * da auditoria de inventário corrigiu para item e não propagou para dinheiro. A
+ * versão anterior não validava nada: `delta = NaN` caía fora do ramo de débito
+ * (`NaN < 0` é `false`), chegava ao `UPDATE` e gravava `gold = gold + NaN`, que
+ * o MySQL não-estrito grava como `0` — **o patrimônio do jogador zerava em
+ * silêncio**. É a mesma classe do bug que o `/setgold` já teve.
+ *
+ * `delta = 0` é recusado, não ignorado, pela mesma razão do caminho de item:
+ * ele chegaria aqui vindo de um cálculo que deu errado, e gravar uma linha de
+ * ledger com delta zero esconderia esse erro atrás de uma operação
+ * "bem-sucedida".
+ *
+ * ─── Por que o SELECT agora acontece nos dois sentidos ──────────────────────
+ *
+ * Antes, só o débito lia a linha. O crédito ia direto ao `UPDATE`, o que tinha
+ * três consequências: creditar um personagem inexistente afetava 0 linhas sem
+ * ninguém checar, não havia como recusar estouro do `INT`, e a ordem em que as
+ * linhas eram travadas dependia do sentido da operação — que é o que produz o
+ * deadlock de compra cruzada (Achado 10). Ler sempre custa uma query e resolve
+ * os três; a ordenação canônica de travas fica a cargo do `economy-service`.
  */
 async function _applyGoldDelta(conn, characterId, delta) {
-  if (delta < 0) {
-    // FOR UPDATE serializa débitos concorrentes do mesmo personagem — sem isso,
-    // duas remoções simultâneas podem ambas ler o saldo antigo, ambas passar na
-    // checagem de saldo suficiente, e o UPDATE relativo (gold = gold + ?) deixar
-    // o saldo negativo mesmo assim.
-    const [rows] = await conn.query('SELECT gold FROM characters WHERE id = ? FOR UPDATE', [characterId]);
-    if (rows.length === 0) throw new Error(`Personagem ${characterId} não encontrado`);
-    if (rows[0].gold + delta < 0) throw new Error(`Ouro insuficiente: tem ${rows[0].gold}, precisa ${Math.abs(delta)}`);
+  if (!Number.isSafeInteger(characterId) || characterId <= 0) {
+    throw new Error(`[transaction] personagem invalido para ouro: ${JSON.stringify(characterId)}`);
   }
+  if (!Number.isSafeInteger(delta) || delta === 0) {
+    throw new Error(`[transaction] delta de ouro invalido: ${JSON.stringify(delta)}`);
+  }
+
+  // FOR UPDATE serializa operações concorrentes do mesmo personagem — sem isso,
+  // duas remoções simultâneas podem ambas ler o saldo antigo, ambas passar na
+  // checagem de saldo suficiente, e o UPDATE relativo (gold = gold + ?) deixar
+  // o saldo negativo mesmo assim.
+  const [rows] = await conn.query('SELECT gold FROM characters WHERE id = ? FOR UPDATE', [characterId]);
+  if (rows.length === 0) throw new Error(`Personagem ${characterId} não encontrado`);
+  const atual = Number(rows[0].gold);
+
+  if (delta < 0) {
+    if (atual + delta < 0) throw new Error(`Ouro insuficiente: tem ${atual}, precisa ${Math.abs(delta)}`);
+  } else if (atual + delta > MAX_GOLD) {
+    throw new Error(`Patrimonio cheio: ${atual} + ${delta} passa do limite de ${MAX_GOLD}`);
+  }
+
   await conn.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [delta, characterId]);
 }
 
@@ -568,6 +653,7 @@ module.exports = {
     applyStackDelta: _applyStackDelta,
     STACK_TABLES,
     MAX_STACK_COUNT,
+    MAX_GOLD,
     recordGoldLedger: _recordGoldLedger,
     recordInventoryLedger: _recordInventoryLedger,
     // Exportada quando o `crafting-service` migrou: ele precisava entregar o

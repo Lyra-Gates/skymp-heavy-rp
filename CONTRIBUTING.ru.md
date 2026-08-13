@@ -65,19 +65,30 @@ cd skymp/gamemode   && npm run check:schema
 
 Это сердце документа. Каждый пункт здесь — из-за реальной поломки.
 
-### 3.1 Золото и предметы: только через `core/transaction-service.js`
+### 3.1 Деньги: только через `core/economy-service.js`
 
-**Никогда** не пишите `UPDATE characters SET gold = ...` и не трогайте `character_inventory` напрямую.
+**Никогда** не пишите `UPDATE characters SET gold = ...`, `UPDATE cities SET treasury = ...` и подобное. И с 13.08.2026 не вызывайте примитивы `tx.*` из `transaction-service` в модуле предметной области.
 
-`transaction-service` делает `BEGIN` / `SELECT ... FOR UPDATE` / `COMMIT`, пишет в `gold_transactions` и принимает ключ идемпотентности. Был `economy-service.js` с голыми `UPDATE`: его `transfer` делал `removeGold`, потом `addGold` без транзакции — если второй падал, золото исчезало. Его удалили 06.08.2026 именно затем, чтобы лёгкий путь перестал быть неправильным.
+Дверь — [`core/economy-service.js`](skymp/gamemode/core/economy-service.js) ([фреймворк](docs/framework/ECONOMY_FRAMEWORK.md), [ADR 004](docs/technical/ADR_004_ECONOMY_ACCOUNTS_AND_LEDGER.md)). Он проверяет сумму, блокирует оба счёта в каноническом порядке, проверяет идемпотентность **внутри** транзакции и пишет **обе стороны** в журнал с общим `transfer_id`.
+
+`core/transaction-service.js` никуда не делся и остаётся единственным файлом, который пишет `characters.gold` — это движок, а не API. Прежний `economy-service.js`, удалённый 06.08.2026, делал голые `UPDATE` и `removeGold` с последующим `addGold` без транзакции; сегодняшний — его противоположность, и имя вернулось потому, что вернулась роль.
 
 ```js
 // правильно
-await transactionService.addGold({ characterId, amount, reason: 'quest_reward', module: 'quests' });
+await economy.transfer({
+  from: { type: 'character', ref: payerId },
+  to:   { type: 'city', ref: 'whiterun' },
+  amount, reason: 'guard_fine', module: 'governance',
+  actorCharacterId: guardId, idempotencyKey: requestId
+});
 
-// неправильно — без атомарности, без журнала, без следов
-await db.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [amount, characterId]);
+// неправильно — нет второй стороны в журнале, у казны нет истории
+await conn.query('UPDATE cities SET treasury = treasury + ? WHERE id = ?', [amount, cityId]);
 ```
+
+**Отказ — это не сбой.** `{ok:false, code}` — это решение по правилу; сбой инфраструктуры **бросает исключение**. Никогда не путайте одно с другим — именно из-за этого таймаут базы превращался в ордер на арест при штрафе стражи ([аудит, находка 7](docs/research/ECONOMY_FRAMEWORK_AUDIT.md)).
+
+Для **предметов** дверь — [`core/inventory.js`](skymp/gamemode/core/inventory.js) ([фреймворк](docs/framework/INVENTORY_FRAMEWORK.md)). Никогда не трогайте `character_inventory` напрямую.
 
 ### 3.2 Papyrus: `self` — это объект, а не FormID
 

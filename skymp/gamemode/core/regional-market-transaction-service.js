@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const database = require('../database');
 const transactionService = require('./transaction-service');
+const economyService = require('./economy-service');
 
 function uuid() {
   return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
@@ -83,6 +84,7 @@ async function buy(request, dependencies = {}) {
   if (valid.code) return { ok: false, code: valid.code };
   const db = dependencies.db || database;
   const tx = dependencies.tx || transactionService.tx;
+  const economy = dependencies.economy || economyService;
   const conn = await db.getConnection();
   let committed = false;
   try {
@@ -98,14 +100,28 @@ async function buy(request, dependencies = {}) {
 
     const unitPrice = buyPrice(priceEntry.stock, baseValue(priceEntry));
     const gross = unitPrice * valid.count;
-    await tx.applyGoldDelta(conn, request.characterId, -gross);
+    // Comprar do mercado NPC destroi septim. Contra `system:regional_market`,
+    // esse dreno fica listado — um dreno nao declarado e indistinguivel de ouro
+    // sumindo por bug (auditoria §9).
+    const pagamento = await economy.transferInTransaction(conn, {
+      from: { type: 'character', ref: request.characterId },
+      to: { type: 'system', ref: 'regional_market' },
+      amount: gross,
+      reason: 'regional_purchase',
+      module: 'economy-regional',
+      actorCharacterId: request.characterId,
+      idempotencyKey: `${valid.key}:gold`
+    });
+    if (!pagamento.ok) {
+      return await finish(conn, { ok: false, code: pagamento.code }, () => { committed = true; });
+    }
     await tx.applyInventoryDelta(conn, request.characterId, request.baseId, valid.count);
     const [stockUpdate] = await conn.query(
       'UPDATE market_prices SET stock = stock - ? WHERE hold_id = ? AND base_id = ? AND stock >= ?',
       [valid.count, request.holdId, request.baseId, valid.count]
     );
     if (stockUpdate.affectedRows !== 1) throw new Error('Estoque regional mudou durante a compra');
-    await tx.recordGoldLedger(conn, { characterId: request.characterId, delta: -gross, reason: 'regional_purchase', module: 'economy-regional', idempotencyKey: `${valid.key}:gold` });
+    // O ledger de ouro ja foi gravado pela transferencia acima.
     await tx.recordInventoryLedger(conn, { characterId: request.characterId, baseId: request.baseId, delta: valid.count, reason: 'regional_purchase', module: 'economy-regional', idempotencyKey: `${valid.key}:inventory` });
     const transactionId = await record(conn, { key: valid.key, characterId: request.characterId, holdId: request.holdId, direction: 'buy', baseId: request.baseId, count: valid.count, unitPrice, gross, tax: 0 });
     await conn.commit();
@@ -125,6 +141,7 @@ async function sell(request, dependencies = {}) {
   if (valid.code) return { ok: false, code: valid.code };
   const db = dependencies.db || database;
   const tx = dependencies.tx || transactionService.tx;
+  const economy = dependencies.economy || economyService;
   const conn = await db.getConnection();
   let committed = false;
   try {
@@ -146,8 +163,35 @@ async function sell(request, dependencies = {}) {
     const tax = Math.ceil(gross * Number(hold.tax_rate || 0));
     const net = gross - tax;
     await tx.applyInventoryDelta(conn, request.characterId, request.baseId, -valid.count);
-    await tx.applyGoldDelta(conn, request.characterId, net);
-    if (tax > 0) await conn.query('UPDATE holds SET treasury = treasury + ? WHERE id = ?', [tax, hold.id]);
+    // O NPC paga o bruto contra `system:regional_market` — este e o ponto em que
+    // septim entra no mundo, e agora ele tem linha em vez de aparecer do nada.
+    // Depois o vendedor paga o imposto ao Hold, que e a segunda transferencia.
+    // Ate 13/08/2026 era `applyGoldDelta(net)` + `UPDATE holds SET treasury`
+    // solto: o liquido chegava sem dizer de onde, e o imposto entrava no tesouro
+    // sem nenhum rastro (Achado 2 de `ECONOMY_FRAMEWORK_AUDIT.md`).
+    const pagamento = await economy.transferInTransaction(conn, {
+      from: { type: 'system', ref: 'regional_market' },
+      to: { type: 'character', ref: request.characterId },
+      amount: gross,
+      reason: 'regional_sale',
+      module: 'economy-regional',
+      actorCharacterId: request.characterId,
+      idempotencyKey: `${valid.key}:gold`
+    });
+    if (!pagamento.ok) throw new Error(`Pagamento regional recusado: ${pagamento.code}`);
+
+    if (tax > 0) {
+      const imposto = await economy.transferInTransaction(conn, {
+        from: { type: 'character', ref: request.characterId },
+        to: { type: 'hold', ref: hold.id },
+        amount: tax,
+        reason: 'regional_tax',
+        module: 'economy-regional',
+        actorCharacterId: request.characterId,
+        idempotencyKey: `${valid.key}:tax`
+      });
+      if (!imposto.ok) throw new Error(`Imposto regional recusado: ${imposto.code}`);
+    }
     await conn.query(
       `INSERT INTO market_prices (hold_id, base_id, sell_price, buy_price, stock)
        VALUES (?, ?, ?, ?, ?)
@@ -155,7 +199,7 @@ async function sell(request, dependencies = {}) {
       [request.holdId, request.baseId, unitPrice, buyPrice(stock, baseValue(priceEntry)), Math.min(100, 50 + valid.count), valid.count]
     );
     await tx.recordInventoryLedger(conn, { characterId: request.characterId, baseId: request.baseId, delta: -valid.count, reason: 'regional_sale', module: 'economy-regional', idempotencyKey: `${valid.key}:inventory` });
-    await tx.recordGoldLedger(conn, { characterId: request.characterId, delta: net, reason: 'regional_sale', module: 'economy-regional', idempotencyKey: `${valid.key}:gold` });
+    // O ledger de ouro ja foi gravado pelas duas transferencias acima.
     const transactionId = await record(conn, { key: valid.key, characterId: request.characterId, holdId: request.holdId, direction: 'sell', baseId: request.baseId, count: valid.count, unitPrice, gross, tax });
     await conn.commit();
     committed = true;

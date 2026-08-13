@@ -86,8 +86,12 @@ function responderQuery(sql, params = []) {
     return {};
   }
   if (/INSERT INTO gold_transactions/i.test(sql)) {
-    // (transaction_id, character_id, delta, reason, module, idempotency_key, status)
-    goldLedger.push({ characterId: params[1], delta: params[2], reason: params[3], module: params[4] });
+    // Posições mudaram na migration v15 (Economy Framework): o razão de ouro
+    // passou a nomear os dois lados do movimento, como o de item desde a v14.
+    // (transaction_id, character_id, owner_type, owner_ref,
+    //  counterparty_type, counterparty_ref, transfer_id, actor_character_id,
+    //  delta, reason, module, idempotency_key, status)
+    goldLedger.push({ characterId: params[1], delta: params[8], reason: params[9], module: params[10] });
     return {};
   }
   if (/UPDATE characters SET status/i.test(sql)) {

@@ -69,19 +69,30 @@ Usamos o test runner nativo do Node (`node --test`) — sem Jest, sem Vitest, se
 
 Esta seção é o coração do documento. Cada item existe porque quebrou de verdade.
 
-### 3.1 Ouro e itens: só pelo `core/transaction-service.js`
+### 3.1 Dinheiro: só pelo `core/economy-service.js`
 
-**Nunca** escreva `UPDATE characters SET gold = ...` nem mexa em `character_inventory` direto.
+**Nunca** escreva `UPDATE characters SET gold = ...`, `UPDATE cities SET treasury = ...` nem equivalente. E, desde 13/08/2026, também não chame as primitivas `tx.*` do `transaction-service` a partir de um módulo de domínio.
 
-O `transaction-service` faz `BEGIN` / `SELECT ... FOR UPDATE` / `COMMIT`, grava em `gold_transactions` e aceita chave de idempotência. Existia um `economy-service.js` que fazia `UPDATE` solto — o `transfer` dele fazia `removeGold` seguido de `addGold` sem transação, então se a segunda falhasse o ouro sumia. Foi apagado em 06/08/2026 justamente para que o caminho fácil deixe de ser o errado.
+A porta é [`core/economy-service.js`](skymp/gamemode/core/economy-service.js) ([framework](docs/framework/ECONOMY_FRAMEWORK.md), [ADR 004](docs/technical/ADR_004_ECONOMY_ACCOUNTS_AND_LEDGER.md)). Ele valida o valor, trava as duas contas em ordem canônica, confere idempotência **dentro** da transação e grava as **duas pernas** no ledger com o mesmo `transfer_id`.
+
+O `core/transaction-service.js` continua existindo e continua sendo o único arquivo que escreve `characters.gold` — ele é o motor, não a API. Um `economy-service.js` anterior, apagado em 06/08/2026, fazia `UPDATE` solto e `removeGold` seguido de `addGold` sem transação; o de hoje é o oposto disso, e o nome voltou porque o papel voltou.
 
 ```js
 // certo
-await transactionService.addGold({ characterId, amount, reason: 'quest_reward', module: 'quests' });
+await economy.transfer({
+  from: { type: 'character', ref: pagadorId },
+  to:   { type: 'city', ref: 'whiterun' },
+  amount, reason: 'guard_fine', module: 'governance',
+  actorCharacterId: guardaId, idempotencyKey: requestId
+});
 
-// errado — sem atomicidade, sem ledger, sem rastro
-await db.query('UPDATE characters SET gold = gold + ? WHERE id = ?', [amount, characterId]);
+// errado — sem ledger do outro lado, tesouro sem história
+await conn.query('UPDATE cities SET treasury = treasury + ? WHERE id = ?', [amount, cityId]);
 ```
+
+**Recusa não é falha.** `{ok:false, code}` é decisão de regra; falha de infraestrutura **lança**. Nunca trate as duas do mesmo jeito — era o que fazia um timeout de banco virar mandado de prisão na multa da guarda ([auditoria, Achado 7](docs/research/ECONOMY_FRAMEWORK_AUDIT.md)).
+
+Para **item**, a porta é [`core/inventory.js`](skymp/gamemode/core/inventory.js) ([framework](docs/framework/INVENTORY_FRAMEWORK.md)). Nunca mexa em `character_inventory` direto.
 
 ### 3.2 Papyrus: `self` é objeto, nunca FormID
 

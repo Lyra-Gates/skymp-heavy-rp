@@ -20,7 +20,11 @@ const actionPolicy = require('./core/action-policy');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 const moduleRegistry = require('./core/module-registry');
 const interactionRegistry = require('./core/interaction-registry');
-const transactionService = require('./core/transaction-service');
+// `core/transaction-service` saiu daqui em 13/08/2026: a multa era o único uso,
+// e ela passou a chamar o `economy-service`, que é a porta do dinheiro. Ver
+// ADR 004 §2.3 — módulo de domínio não fala com as primitivas do motor.
+const economyService = require('./core/economy-service');
+const debtService = require('./debt-service');
 const rangeUtils = require('./core/range-utils');
 const { actorRef } = require('./core/papyrus');
 
@@ -616,8 +620,57 @@ async function issueWarrant(officerActorId, targetActorId, severity, reason) {
   panelRefreshBus.requestRefresh(targetActorId, 'governance');
 }
 
+/**
+ * Para onde vai o ouro da multa.
+ *
+ * A instituição que deu ao guarda o poder de multar é a que recebe: o `source`
+ * devolvido por `hasPermission` é a linha de `governance_memberships` que
+ * autorizou a ação, e `scope_type`/`scope_id` dela mapeiam direto nos titulares
+ * `city`, `realm` e `faction` do `core/economy-service.js`.
+ *
+ * O caso `staff` não tem escopo — um governador de staff age sem cargo IC. Ali
+ * o ouro é **destruído**, contra `system:staff_fine`. Isso é o que já acontecia
+ * para *todas* as multas antes desta mudança (`removeGold` sem contraparte
+ * nenhuma); a diferença é que agora está declarado e tem linha de ledger, em
+ * vez de o septim sumir sem registro.
+ */
+function fineCreditor(permissionSource) {
+  const membership = permissionSource;
+  if (!membership || membership === 'staff') {
+    return { type: 'system', ref: 'staff_fine' };
+  }
+  if (!membership.scope_type || !membership.scope_id) {
+    return { type: 'system', ref: 'staff_fine' };
+  }
+  return { type: membership.scope_type, ref: String(membership.scope_id) };
+}
+
+/**
+ * Multa da guarda.
+ *
+ * ─── O que mudou, e por que ────────────────────────────────────────────────
+ *
+ * A versão anterior era o Achado 8 de `ECONOMY_FRAMEWORK_AUDIT.md`:
+ *
+ *   1. **Não era atômica.** `removeGold` commitava sozinho e o `INSERT INTO
+ *      fines` era outra transação. Um crash entre as duas deixava o jogador
+ *      pago e sem registro de multa.
+ *   2. **`false` significava três coisas.** `removeGold` devolvia `false` tanto
+ *      para "não tem ouro" quanto para "o banco caiu". Como o ramo `!paid`
+ *      emite **mandado de prisão**, um timeout de rede produzia um mandado
+ *      contra alguém que tinha o dinheiro — material de cena Heavy RP nascido
+ *      de infraestrutura.
+ *   3. **A "dívida" não era dívida.** A linha `fines.status = 'unpaid'` não
+ *      tinha caminho de pagamento, credor, amortização nem quitação, e o texto
+ *      dizia ao jogador que era dívida.
+ *
+ * Agora: uma transação só; o `economy-service` distingue recusa de falha (falha
+ * **lança** e cai no `catch`, sem multa e sem mandado); e a inadimplência abre
+ * uma dívida de verdade no `debt-service`, com credor institucional.
+ */
 async function fineTarget(officerActorId, targetActorId, amount, reason = 'multa') {
-  if (!await requirePermission(officerActorId, PERMISSIONS.GUARD_FINE)) return;
+  const permissao = await requirePermission(officerActorId, PERMISSIONS.GUARD_FINE);
+  if (!permissao) return;
   const range = assertRange(officerActorId, targetActorId, DEFAULT_RANGE);
   if (!range.ok) {
     notify(officerActorId, range.reason);
@@ -632,25 +685,72 @@ async function fineTarget(officerActorId, targetActorId, amount, reason = 'multa
     return;
   }
 
-  const paid = await transactionService.removeGold({
-    characterId: target.characterId,
-    amount: fine,
-    reason: `guard_fine:${reason}`,
-    module: MODULE
-  });
-  await db.query(
-    `INSERT INTO fines (target_character_id, officer_character_id, amount, reason, status, paid_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [target.characterId, officer.characterId, fine, reason, paid ? 'paid' : 'unpaid', paid ? new Date() : null]
-  );
-  if (!paid) {
-    await db.query(
-      `INSERT INTO warrants (target_character_id, issued_by_character_id, severity, reason, scope_type, scope_id)
-       VALUES (?, ?, 'minor', ?, ?, ?)`,
-      [target.characterId, officer.characterId, `Multa nao paga: ${reason}`, SCOPE.CITY, 'global']
+  const creditor = fineCreditor(permissao.source);
+  const requestKey = `fine-${officer.characterId}-${target.characterId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  let paid = false;
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const cobranca = await economyService.transferInTransaction(conn, {
+      from: { type: 'character', ref: target.characterId },
+      to: creditor,
+      amount: fine,
+      reason: 'guard_fine',
+      module: MODULE,
+      actorCharacterId: officer.characterId,
+      idempotencyKey: requestKey
+    });
+
+    // `insufficient_funds` é a única recusa que vira dívida: é o caso de RP.
+    // Qualquer outro código é erro de programação ou de dado (conta inexistente,
+    // valor inválido) e não pode virar multa nem mandado.
+    if (!cobranca.ok && cobranca.code !== 'insufficient_funds') {
+      await conn.rollback();
+      console.error(`[governance] multa recusada (${cobranca.code}) officer=${officer.characterId} alvo=${target.characterId}`);
+      notify(officerActorId, 'Nao foi possivel registrar a multa.');
+      return;
+    }
+    paid = cobranca.ok === true;
+
+    await conn.query(
+      `INSERT INTO fines (target_character_id, officer_character_id, amount, reason, status, paid_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [target.characterId, officer.characterId, fine, reason, paid ? 'paid' : 'unpaid', paid ? new Date() : null]
     );
+
+    if (!paid) {
+      await debtService.open({
+        debtorCharacterId: target.characterId,
+        creditor,
+        amount: fine,
+        reason: `Multa nao paga: ${reason}`.slice(0, 255),
+        originType: 'fine',
+        originRef: String(officer.characterId),
+        idempotencyKey: `${requestKey}~debt`
+      }, { conn });
+
+      await conn.query(
+        `INSERT INTO warrants (target_character_id, issued_by_character_id, severity, reason, scope_type, scope_id)
+         VALUES (?, ?, 'minor', ?, ?, ?)`,
+        [target.characterId, officer.characterId, `Multa nao paga: ${reason}`, SCOPE.CITY, 'global']
+      );
+    }
+
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* preserva o erro original */ }
+    // Falha de infraestrutura NAO vira multa, NAO vira divida e NAO vira
+    // mandado. É o inverso exato do comportamento antigo.
+    console.error(`[governance] multa falhou (officer=${officer.characterId} alvo=${target.characterId}):`, err.message);
+    notify(officerActorId, 'Nao foi possivel registrar a multa. Nada foi alterado.');
+    return;
+  } finally {
+    conn.release();
   }
-  await audit(officerActorId, targetActorId, 'guard:fine', `amount=${fine} reason=${reason} paid=${paid}`);
+
+  await audit(officerActorId, targetActorId, 'guard:fine', `amount=${fine} reason=${reason} paid=${paid} creditor=${creditor.type}:${creditor.ref}`);
   notify(officerActorId, paid ? 'Multa paga e registrada.' : 'Multa registrada como divida; mandado menor criado.');
   notify(targetActorId, paid ? `Voce pagou multa de ${fine} septims.` : `Multa de ${fine} septims registrada como divida.`);
   panelRefreshBus.requestRefresh(targetActorId, 'governance');

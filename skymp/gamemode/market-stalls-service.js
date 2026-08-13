@@ -26,6 +26,7 @@ const actionPolicy = require('./core/action-policy');
 const admin = require('./admin-service');
 const governance = require('./governance-service');
 const transactionService = require('./core/transaction-service');
+const economyService = require('./core/economy-service');
 const interactionRegistry = require('./core/interaction-registry');
 const { actorRef } = require('./core/papyrus');
 
@@ -851,16 +852,51 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw, requestId) {
     // guarda de saldo negativo estavam duplicados, e correcao no
     // transaction-service nao alcancava esta funcao.
     //
-    // `applyGoldDelta` faz o `SELECT ... FOR UPDATE` e recusa saldo negativo
-    // sozinho — por isso o SELECT manual que existia aqui saiu.
-    await transactionService.tx.applyGoldDelta(conn, buyer.characterId, -total);
-    await transactionService.tx.applyGoldDelta(conn, item.owner_character_id, sellerAmount);
+    // ── Em 13/08/2026 este bloco subiu mais um degrau ────────────────────────
+    //
+    // Ele chamava `tx.applyGoldDelta` duas vezes (comprador e vendedor) e
+    // creditava o imposto com `UPDATE cities SET treasury = treasury + ?`
+    // solto. Atomico e com ledger para os dois personagens — e **sem nenhuma
+    // linha para o imposto**, que era o Achado 2 de
+    // `ECONOMY_FRAMEWORK_AUDIT.md`: `cities.treasury` nao tinha como ser
+    // conferido contra historico nenhum, e a soma dos deltas de uma venda dava
+    // `-5` em vez de zero, com os 5 restantes existindo noutra tabela.
+    //
+    // Agora sao duas transferencias pelo `economy-service`, e o dinheiro fecha:
+    //
+    //   comprador → vendedor   (o total cheio)
+    //   vendedor  → cidade     (o imposto)
+    //
+    // O saldo final de cada um e identico ao de antes. O que muda e a historia:
+    // o vendedor *ganhou* 100 e *pagou* 5 de imposto, em vez de ter ganho 95 e
+    // 5 septims terem aparecido no tesouro sem origem. Modulo de dominio nao
+    // fala com as primitivas do motor (ADR 004 §2.3).
+    const pagamento = await economyService.transferInTransaction(conn, {
+      from: { type: 'character', ref: buyer.characterId },
+      to: { type: 'character', ref: item.owner_character_id },
+      amount: total,
+      reason: 'stall_purchase',
+      module: MODULE,
+      actorCharacterId: buyer.characterId,
+      idempotencyKey: `${idempotencyKey}_pay`
+    });
+    if (!pagamento.ok) {
+      throw new Error(pagamento.code === 'insufficient_funds'
+        ? `Ouro insuficiente: tem ${pagamento.balance}, precisa ${total}`
+        : `Pagamento recusado: ${pagamento.code}`);
+    }
 
     if (taxAmount > 0 && item.city_id) {
-      // Tesouro de cidade nao e ouro de personagem: nao tem linha em
-      // `gold_transactions` nem passa pelo transaction-service, que e sobre
-      // patrimonio de personagem. O rastro dele e `market_stall_sales.tax_amount`.
-      await conn.query('UPDATE cities SET treasury = treasury + ? WHERE id = ?', [taxAmount, item.city_id]);
+      const imposto = await economyService.transferInTransaction(conn, {
+        from: { type: 'character', ref: item.owner_character_id },
+        to: { type: 'city', ref: item.city_id },
+        amount: taxAmount,
+        reason: 'stall_tax',
+        module: MODULE,
+        actorCharacterId: buyer.characterId,
+        idempotencyKey: `${idempotencyKey}_tax`
+      });
+      if (!imposto.ok) throw new Error(`Imposto recusado: ${imposto.code}`);
     }
 
     // Estoque da barraca — dominio deste modulo, nao do transaction-service.
@@ -880,15 +916,11 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw, requestId) {
       [stallId, item.owner_character_id, buyer.characterId, item.base_id, count, item.price, taxAmount, item.city_id, idempotencyKey]
     );
 
-    // Ledger: saldo que muda sem linha aqui e ouro sem rastro.
-    await transactionService.tx.recordGoldLedger(conn, {
-      characterId: buyer.characterId, delta: -total,
-      reason: 'stall_purchase', module: MODULE, idempotencyKey: `${idempotencyKey}_buy_gold`
-    });
-    await transactionService.tx.recordGoldLedger(conn, {
-      characterId: item.owner_character_id, delta: sellerAmount,
-      reason: 'stall_sale', module: MODULE, idempotencyKey: `${idempotencyKey}_sell_gold`
-    });
+    // As duas pernas de ouro ja foram gravadas por `transferInTransaction`
+    // acima, com `transfer_id` ligando comprador e vendedor — o que estas duas
+    // chamadas manuais de `recordGoldLedger` nao conseguiam fazer. O ledger de
+    // item continua sendo escrito aqui: a entrega nao e uma transferencia de
+    // ouro, e o dono do outro lado e a barraca.
     await transactionService.tx.recordInventoryLedger(conn, {
       characterId: buyer.characterId,
       ownerType: 'character', ownerRef: String(buyer.characterId),
