@@ -26,9 +26,23 @@ const actionPolicy = require('./core/action-policy');
 const admin = require('./admin-service');
 const governance = require('./governance-service');
 const transactionService = require('./core/transaction-service');
+const interactionRegistry = require('./core/interaction-registry');
 const { actorRef } = require('./core/papyrus');
 
 const MODULE = 'market_stalls';
+
+/**
+ * Alcance para interagir com uma barraca, em unidades do Skyrim.
+ *
+ * O mesmo de `chat.localRange` (fala normal): quem consegue conversar com o
+ * vendedor consegue comprar dele. Vem de `core/proximity-ranges.js` porque
+ * inventar um quarto número aqui repetiria o bug que aquele arquivo existe
+ * para ter consertado — três tabelas de raio que discordavam entre si.
+ *
+ * O menu antigo não checava distância nenhuma na montagem: a vitrine de uma
+ * barraca aparecia para quem estivesse na mesma célula, a qualquer distância.
+ */
+const STALL_INTERACTION_RANGE = require('./core/proximity-ranges').RANGES.say;
 const MAX_STALLS_PER_CHARACTER = 2;
 const MIN_STALL_DISTANCE = 250;
 const DEFAULT_TAX_RATE = 0.05;
@@ -1142,80 +1156,26 @@ function commandDefs() {
   ];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UI Interaction Hooks
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function getInteractionSections(actorId, targetActorId) {
-  const actor = getCharacter(actorId);
-  const target = getCharacter(targetActorId);
-  if (!actor || !target) return [];
-
-  // Se o alvo for o proprio jogador, ele pode querer gerenciar
-  const isSelf = (actorId === targetActorId);
-
-  const rows = await db.query(
-    `SELECT id, name FROM market_stalls WHERE owner_character_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
-    [target.characterId]
-  );
-  if (rows.length === 0) return [];
-
-  const stall = rows[0];
-  const actions = [];
-
-  if (isSelf) {
-    actions.push({ action: 'stall.manage', label: 'Gerenciar' });
-  } else {
-    actions.push({ action: 'stall.view', label: 'Ver Vitrine' });
-    actions.push({ action: 'stall.buy', label: 'Comprar Item' });
-  }
-
-  return [{
-    id: 'market_stall',
-    label: `Barraca: ${stall.name}`,
-    actions
-  }];
-}
-
-async function handleInteractionAction(actorId, action, payload = {}) {
-  const targetActorRaw = payload.targetActorId || payload.target || payload.actorId;
-  const targetActorId = Number.parseInt(String(targetActorRaw), String(targetActorRaw).startsWith('0x') ? 16 : 10);
-  
-  if (!Number.isFinite(targetActorId)) {
-    notify(actorId, 'Alvo invalido.');
-    return;
-  }
-
-  const target = getCharacter(targetActorId);
-  if (!target) return;
-  
-  const rows = await db.query(
-    `SELECT id FROM market_stalls WHERE owner_character_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
-    [target.characterId]
-  );
-  if (rows.length === 0) {
-    notify(actorId, 'Este alvo nao possui barraca ativa.');
-    return;
-  }
-  const stallId = rows[0].id;
-
-  switch (action) {
-    case 'stall.view':
-      return listItems(actorId, stallId);
-    case 'stall.buy':
-      return buyItem(actorId, stallId, payload.itemId, payload.count || 1, payload.requestId);
-    case 'stall.manage':
-      if (payload.actionType === 'add') {
-        return addItem(actorId, stallId, payload.baseId, payload.count, payload.price, payload.label || 'Mercadoria');
-      } else if (payload.actionType === 'remove') {
-        // removeItem espera o ID da listagem (market_stall_items.id), nao o baseId.
-        return removeItem(actorId, payload.itemId);
-      }
-      return;
-    default:
-      notify(actorId, 'Acao de barraca desconhecida.');
-  }
-}
+/*
+ * `getInteractionSections` e `handleInteractionAction` foram REMOVIDAS em
+ * 13/08/2026.
+ *
+ * As duas so eram alcancaveis por dentro do `governance-service.js`, que as
+ * chamava com um `require('./market-stalls-service')` por nome fixo — o
+ * acoplamento que o Interaction Framework existe para eliminar. Hoje quem
+ * declara as acoes de barraca e `registerStallInteractions()`, logo abaixo.
+ *
+ * Duas coisas mudaram de comportamento junto, e nenhuma e perda:
+ *
+ *   - `stall.manage` saiu do menu. Ele dependia do ramo `isSelf`, que ja era
+ *     INALCANCAVEL: a governanca recusava `actorId === targetActorId` antes de
+ *     chegar aqui (`CORE_FRAMEWORK_AUDIT.md` §6.7a). O comando de chat continua
+ *     sendo o caminho, e a acao volta ao menu quando `object`/`container`
+ *     ganharem resolvedor e a barraca virar alvo de verdade.
+ *   - `stall.buy` passou a ter alcance e deduplicacao de verdade. A vitrine
+ *     aparecia para quem estivesse na mesma celula, a qualquer distancia, e o
+ *     `requestId` chegava e era ignorado.
+ */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle
@@ -1224,11 +1184,86 @@ async function handleInteractionAction(actorId, action, payload = {}) {
 let _expirationTimer = null;
 let _rateLimitCleanupTimer = null;
 
+/**
+ * Declara as ações de barraca no Interaction Framework.
+ *
+ * Este arquivo é a prova do §23 do pedido: até 13/08/2026, para a barraca
+ * aparecer no menu de interação, era o `governance-service.js` que precisava
+ * `require('./market-stalls-service')` dentro de `getInteractionActions`.
+ * Agora quem tem a ação é quem a declara, e a governança não conhece mais este
+ * módulo.
+ *
+ * O alvo continua sendo **o dono da barraca**, não a barraca. É honesto com o
+ * que existe hoje: não há resolvedor de `container` nem de `object`, e inventar
+ * um contra APIs do SkyMP que este projeto nunca exercitou seria pior que a
+ * ausência. Quando `object` ganhar resolvedor, muda o `target` do descritor e
+ * o resto continua igual.
+ */
+function registerStallInteractions() {
+  // Reinicializar o serviço re-declara o conjunto **deste** módulo, em vez de
+  // colidir com o que ele mesmo registrou antes. Ids de outro módulo continuam
+  // protegidos: `unregisterModule` só remove os próprios.
+  interactionRegistry.unregisterModule(MODULE);
+
+  /**
+   * A barraca ativa do alvo, ou `null`. Consultada no `canSee` e de novo no
+   * `execute`: a barraca pode ter sido empacotada entre um e outro.
+   */
+  async function stallDoAlvo(characterId) {
+    const rows = await db.query(
+      `SELECT id, name FROM market_stalls WHERE owner_character_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
+      [characterId]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  const comum = {
+    module: MODULE,
+    target: interactionRegistry.TARGET_TYPES.PLAYER,
+    section: 'barraca',
+    distance: STALL_INTERACTION_RANGE,
+    canSee: async ctx => Boolean(await stallDoAlvo(ctx.target.characterId))
+  };
+
+  interactionRegistry.register({
+    ...comum,
+    id: 'stall.view', label: 'Ver vitrine', order: 10,
+    // Ler uma vitrine não é evento de arbitragem. Gravar isso encheria
+    // `audit_logs` de linhas que ninguém vai consultar — §20 do pedido.
+    audit: interactionRegistry.AUDIT_LEVELS.TRACE,
+    execute: async ctx => {
+      const stall = await stallDoAlvo(ctx.target.characterId);
+      if (!stall) throw new Error('Barraca nao esta mais ativa.');
+      return listItems(ctx.actorId, stall.id);
+    }
+  });
+
+  interactionRegistry.register({
+    ...comum,
+    id: 'stall.buy', label: 'Comprar item', order: 20,
+    audit: interactionRegistry.AUDIT_LEVELS.ECONOMY,
+    // Compra move ouro e item. O `requestId` já existia no payload e era
+    // descartado; agora ele deduplica de verdade, e `buyItem` continua
+    // recebendo-o para a idempotência de banco (migration v13).
+    idempotent: true,
+    schema: {
+      itemId: { type: 'int', label: 'ID do item na vitrine', min: 1, required: true },
+      count: { type: 'int', label: 'Quantidade', min: 1, default: 1 }
+    },
+    execute: async ctx => {
+      const stall = await stallDoAlvo(ctx.target.characterId);
+      if (!stall) throw new Error('Barraca nao esta mais ativa.');
+      return buyItem(ctx.actorId, stall.id, ctx.data.itemId, ctx.data.count, ctx.requestId);
+    }
+  });
+}
+
 async function initMarketStallsService() {
   loadVisualConfig();
   actionPolicy.registerAction('stall_place', ['gameplay'], 'Montar barraca');
   actionPolicy.registerAction('stall_manage', ['gameplay', 'trade'], 'Gerenciar barraca');
   actionPolicy.registerAction('stall_buy', ['gameplay', 'trade'], 'Comprar em barraca');
+  registerStallInteractions();
 
   // Verificacao periodica de barracas expiradas (5 minutos)
   _expirationTimer = setInterval(async () => {
@@ -1274,7 +1309,5 @@ module.exports = {
   suspendStall,
   confiscateItem,
   expireStalls,
-  getInteractionSections,
-  handleInteractionAction,
   isInitialized: () => initialized
 };

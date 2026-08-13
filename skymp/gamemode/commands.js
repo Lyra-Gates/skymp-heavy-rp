@@ -208,6 +208,15 @@ function parseActorId(raw) {
 // Comandos CORE (sempre ativos, independente de módulos)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Alcance de uma apresentacao, em unidades do Skyrim.
+ *
+ * O mesmo do `broadcastProximityMessage` que anuncia a cena logo abaixo, e
+ * precisa continuar sendo: apresentar-se de uma distancia em que ninguem le o
+ * `* fulano se apresenta` seria uma apresentacao sem cena.
+ */
+const INTRODUCE_RANGE = 450;
+
 async function handleIntroduceCommand(actorId, args) {
   const targetActorId = parseActorId(args);
   const sourceCharacter = getActiveCharacterData(actorId);
@@ -241,7 +250,7 @@ async function handleIntroduceCommand(actorId, args) {
   broadcastProximityMessage(
     actorId,
     (observerActorId) => `* ${getDisplayNameForObserver(actorId, observerActorId)} se apresenta.`,
-    450
+    INTRODUCE_RANGE
   );
 }
 
@@ -273,8 +282,67 @@ async function handleAliasCommand(actorId, args) {
   sendNotification(actorId, `Voce passara a reconhecer essa pessoa como: ${alias}.`);
 }
 
+/**
+ * `identity.introduce` no Interaction Framework.
+ *
+ * ─── Por que esta interação existe ──────────────────────────────────────────
+ *
+ * Até 13/08/2026 "Apresentar-se" era um botão que a **CEF** inventava:
+ * `DEFAULT_INTERACTION_SECTIONS` em `skymp/ui/index.html` acrescentava três
+ * ações às do servidor, incondicionalmente, para todo alvo. Duas delas eram
+ * botões mortos (`/trade` e `/groupinvite`, que não existem) e foram removidas;
+ * esta era a única viva, e continuava sendo uma ação que aparecia sem o
+ * servidor ter autorizado nada.
+ *
+ * Registrando-a aqui, a lista do menu passa a vir **inteira** do servidor — que
+ * é a condição para o `canSee` significar alguma coisa. Ver
+ * `docs/research/CORE_FRAMEWORK_AUDIT.md` §7.
+ *
+ * ─── O que o `canSee` esconde, e por quê ────────────────────────────────────
+ *
+ * A ação some quando o alvo **já conhece** o personagem. Apresentar-se duas
+ * vezes não é erro nem exploit — `upsertKnownIdentity` é idempotente —, mas é
+ * um botão que não faz nada, e um menu de RP que oferece gestos vazios ensina o
+ * jogador a ignorá-lo.
+ *
+ * O alcance é o mesmo do `broadcastProximityMessage` que o comando já usa para
+ * anunciar a cena (450). Os dois números precisam ser o mesmo: apresentar-se de
+ * uma distância em que ninguém vê o `* fulano se apresenta` seria uma
+ * apresentação sem cena.
+ */
+function registerIdentityInteractions() {
+  const interactionRegistry = require('./core/interaction-registry');
+
+  interactionRegistry.unregisterModule('identity');
+
+  interactionRegistry.register({
+    id: 'identity.introduce',
+    module: 'identity',
+    target: interactionRegistry.TARGET_TYPES.PLAYER,
+    section: 'social',
+    label: 'Apresentar-se',
+    order: 10,
+    distance: INTRODUCE_RANGE,
+    // Apresentar-se é fala: quem está algemado, abatido ou morto não o faz.
+    // A `action-policy` já responde isso pela ação `introduce`, registrada lá
+    // desde sempre — reusar é o que evita uma segunda tabela de estados.
+    policyAction: 'introduce',
+    audit: interactionRegistry.AUDIT_LEVELS.TRACE,
+    // Sincrono e de graca: le o cache em memoria do observador, carregado no
+    // login dele. Um `canSee` que fosse ao banco custaria uma query por acao
+    // por mira — exatamente o que o §22 do pedido manda nao fazer.
+    canSee: ctx => !identity.getKnownDisplayName(ctx.target.characterId, ctx.characterId),
+    execute: async ctx => {
+      await handleIntroduceCommand(ctx.actorId, `0x${ctx.target.actorId.toString(16)}`);
+      return { message: null };
+    }
+  });
+}
+
 // Comandos de Staff (CORE — disponíveis independente de módulos)
 function registerCoreCommands() {
+  registerIdentityInteractions();
+
   commandRegistry.register(['/apresentar', '/introduce'], (actorId, args) => {
     handleIntroduceCommand(actorId, args).catch(err => {
       console.error('[identity] Failed to introduce character:', err.message);

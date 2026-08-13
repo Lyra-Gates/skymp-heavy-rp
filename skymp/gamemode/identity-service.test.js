@@ -158,3 +158,70 @@ describe('nome completo do personagem', () => {
     assert.equal(identity.getCharacterFullName({}), identity.UNKNOWN_NAME);
   });
 });
+
+/**
+ * A interação `identity.introduce` (13/08/2026).
+ *
+ * "Apresentar-se" era um botão que a CEF inventava: `DEFAULT_INTERACTION_SECTIONS`
+ * acrescentava três ações às do servidor, incondicionalmente, para todo alvo
+ * (`docs/research/CORE_FRAMEWORK_AUDIT.md` §7). Duas eram botões mortos; esta
+ * era a única viva, e ainda assim aparecia sem o servidor ter autorizado nada.
+ *
+ * Estes casos travam as duas coisas que a migração precisava acertar: que a
+ * ação existe de fato no registro, e que `getKnownDisplayName` — de que o
+ * `canSee` depende — continua exportada. A segunda é o tipo de quebra que só
+ * apareceria em jogo: uma função não exportada é `undefined`, e chamá-la dentro
+ * do `canSee` viraria "ação indisponível" em silêncio, para sempre.
+ */
+describe('identity.introduce — a interação', () => {
+  const interactionRegistry = require('./core/interaction-registry');
+  // Carregar `commands.js` é o que dispara `registerCoreCommands()`, e é lá que
+  // a interação é declarada.
+  require('./commands');
+
+  it('está registrada, contra jogador, e não gera linha de auditoria', () => {
+    const entry = interactionRegistry.get('identity.introduce');
+    assert.ok(entry, 'a ação sumiu do registro — o menu voltaria a não ter nada social');
+    assert.equal(entry.module, 'identity');
+    assert.equal(entry.target, interactionRegistry.TARGET_TYPES.PLAYER);
+    assert.equal(entry.section, 'social');
+    // Apresentar-se é gesto de cena, não evento de arbitragem. `identity-service`
+    // já grava `identity:introduce` em audit_logs por dentro do comando.
+    assert.equal(entry.audit, interactionRegistry.AUDIT_LEVELS.TRACE);
+    assert.equal(entry.idempotent, false);
+  });
+
+  it('exige proximidade e respeita a política de ação de fala', () => {
+    const entry = interactionRegistry.get('identity.introduce');
+    // O mesmo raio do `broadcastProximityMessage` que anuncia a cena: apresentar-se
+    // de onde ninguém lê o `* fulano se apresenta` seria apresentação sem cena.
+    assert.equal(entry.distance, 450);
+    // Quem está algemado, abatido ou morto não fala — e quem responde isso é a
+    // `action-policy`, não uma segunda tabela de estados aqui.
+    assert.equal(entry.policyAction, 'introduce');
+  });
+
+  it('canSee esconde a ação de quem o alvo já conhece', () => {
+    const entry = interactionRegistry.get('identity.introduce');
+    const OBSERVADOR = 20;
+    const APRESENTANDO = 10;
+
+    // Estranhos: a ação aparece.
+    assert.equal(entry.canSee({ characterId: APRESENTANDO, target: { characterId: OBSERVADOR } }), true);
+
+    // Depois que o alvo passa a conhecer, o botão some — apresentar-se de novo
+    // não é erro nem exploit, é um botão que não faz nada, e um menu de RP que
+    // oferece gestos vazios ensina o jogador a ignorá-lo.
+    identity.cacheKnownIdentity(OBSERVADOR, APRESENTANDO, 'Alvara Dawnmere', 'introduced');
+    assert.equal(entry.canSee({ characterId: APRESENTANDO, target: { characterId: OBSERVADOR } }), false);
+
+    // E é direcional: o apresentando continuar sem conhecer o alvo não muda nada.
+    assert.equal(entry.canSee({ characterId: OBSERVADOR, target: { characterId: APRESENTANDO } }), true);
+
+    identity.forgetKnownIdentities(OBSERVADOR);
+  });
+
+  it('getKnownDisplayName continua exportada — o canSee depende dela', () => {
+    assert.equal(typeof identity.getKnownDisplayName, 'function');
+  });
+});

@@ -22,50 +22,27 @@ test('governance command definitions are unique and usable by module registry', 
   }
 });
 
-test('interaction actions are empty when actor or target has no active character', async () => {
-  const result = await governance.getInteractionActions(0xff000001, 0xff000002);
-  assert.deepEqual(result, { sections: [] });
-});
+/*
+ * Os cinco testes do caminho legado de interacao sairam em 13/08/2026, junto
+ * com o codigo que eles cobriam: `getInteractionActions`,
+ * `handleInteractionAction` e `validateUiInteractionPayload`.
+ *
+ * O que eles verificavam continua verificado, e melhor, em
+ * `core/interaction-service.test.js` e `core/interaction-registry.test.js`:
+ *
+ *   | O que o teste antigo travava            | Onde esta agora                          |
+ *   |-----------------------------------------|------------------------------------------|
+ *   | acao malformada nao toca gameplay       | `ação desconhecida e ação indisponível    |
+ *   |                                         |  dão a MESMA resposta`                    |
+ *   | `amount: '12g'` recusado                | `int: recusa notação científica, espaço,  |
+ *   |                                         |  decimal e zero à esquerda`               |
+ *   | `sentenceMinutes: 1.5` recusado         | idem                                      |
+ *   | motivo longo demais recusado            | `string: apara, exige mínimo e tem teto`  |
+ *   | `requestId` curto recusado              | `ação idempotente exige requestId com     |
+ *   |                                         |  formato mínimo`                          |
+ *
+ * A diferenca que importa: o `requestId` agora e USADO. O teste antigo
+ * verificava o formato de um campo que a governanca validava e jogava fora — o
+ * novo verifica que o duplo clique cobra uma vez so.
+ */
 
-test('interaction action malformada e recusada antes de tocar em estado de gameplay', async () => {
-  await assert.doesNotReject(() => governance.handleInteractionAction(0xff000001, null, {}));
-  await assert.doesNotReject(() => governance.handleInteractionAction(0xff000001, 'guard.stop', []));
-  await assert.doesNotReject(() => governance.handleInteractionAction(0xff000001, 'guard.stop:extra', {}));
-});
-
-test('schema de interacao CEF rejeita campos tipados de forma permissiva', () => {
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('guard.fine', { targetActorId: '0xff000001', amount: '12g' }),
-    { ok: false, message: 'Valor de multa invalido.' }
-  );
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('guard.arrest', { targetActorId: '0xff000001', sentenceMinutes: 1.5 }),
-    { ok: false, message: 'Tempo de prisao invalido.' }
-  );
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('guard.stop', { targetActorId: '0xff000001', reason: 'x'.repeat(257) }),
-    { ok: false, message: 'Motivo invalido.' }
-  );
-});
-
-test('schema de interacao CEF aceita payload minimo de acao de guarda', () => {
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('guard.stop', { targetActorId: '0xff000001', reason: 'abordagem' }),
-    { ok: true, targetActorId: 0xff000001 }
-  );
-});
-
-test('schema de interacao CEF exige item valido e requestId bem formado na compra de barraca', () => {
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('stall.buy', { targetActorId: '0xff000001', itemId: '5g' }),
-    { ok: false, message: 'Item de barraca invalido.' }
-  );
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('stall.buy', { targetActorId: '0xff000001', itemId: 5, requestId: 'curto' }),
-    { ok: false, message: 'Solicitacao invalida.' }
-  );
-  assert.deepEqual(
-    governance.validateUiInteractionPayload('stall.buy', { targetActorId: '0xff000001', itemId: 5, count: 2, requestId: 'stall-buy-request-0001' }),
-    { ok: true, targetActorId: 0xff000001 }
-  );
-});

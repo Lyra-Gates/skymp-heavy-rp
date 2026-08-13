@@ -19,6 +19,7 @@ const characterState = require('./core/character-state');
 const actionPolicy = require('./core/action-policy');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 const moduleRegistry = require('./core/module-registry');
+const interactionRegistry = require('./core/interaction-registry');
 const transactionService = require('./core/transaction-service');
 const rangeUtils = require('./core/range-utils');
 const { actorRef } = require('./core/papyrus');
@@ -29,7 +30,6 @@ const MODULE = 'governance';
 const DEFAULT_RANGE = 450;
 const SEARCH_RANGE = 350;
 const ESCORT_RANGE = 650;
-const MAX_UI_ACTION_LENGTH = 64;
 const MAX_UI_REASON_LENGTH = 256;
 
 const SCOPE = Object.freeze({
@@ -130,18 +130,40 @@ function notify(actorId, message) {
   commands.sendNotification(actorId, message);
 }
 
-function sendBrowserModal(actorId, type, data) {
-  if (typeof mp === 'undefined') return;
-  try {
-    mp.set(actorId, 'browserModal', {
-      type,
-      data,
-      sentAt: Date.now()
-    });
-  } catch (err) {
-    console.error('[governance] Failed to send browser modal payload:', err.message);
-  }
-}
+/*
+ * O caminho legado de interacao foi REMOVIDO em 13/08/2026.
+ *
+ * Viviam aqui `isValidUiAction`, `validateUiInteractionPayload`,
+ * `getInteractionActions`, `handleInteractionAction`, `handleUiEvent` e
+ * `sendBrowserModal` - um menu de interacao completo dentro do modulo de
+ * governo. O fluxo estava certo (servidor monta, cliente escolhe, servidor
+ * revalida); o lugar, nao.
+ *
+ * O que saiu com eles:
+ *
+ *   - o `require('./market-stalls-service')` por nome fixo dentro de uma funcao
+ *     de dominio, num modulo que ja declarava `dependencies: ['governance']` -
+ *     a seta apontava para os dois lados;
+ *   - a regex `/^(guard|stall|npc)\.[a-z_]+$/`, que era o vocabulario de acoes
+ *     do servidor inteiro e matava `identity.introduce` e `medical.help` antes
+ *     de chegarem a qualquer lugar;
+ *   - um `validateUiInteractionPayload` que crescia com o servidor inteiro:
+ *     schema de multa, de prisao, de confisco e de compra de barraca num
+ *     encadeamento de `if`;
+ *   - um `requestId` validado no formato e descartado, entao duplo clique em
+ *     "Aplicar multa" cobrava duas vezes;
+ *   - um `notify(actorId, safeJson(sections))` que despejava a lista de
+ *     autorizacao no chat do jogador, alem do modal.
+ *
+ * O que ficou: as funcoes de dominio (`stopTarget`, `fineTarget`,
+ * `arrestTarget`, ...), intactas, e `registerGuardInteractions()`, que as
+ * declara no `core/interaction-registry.js`. Cada uma continua revalidando
+ * permissao e alcance por conta propria - redundante de proposito, para o dia
+ * em que alguem as chamar por outro caminho.
+ *
+ * Ver `docs/research/CORE_FRAMEWORK_AUDIT.md` 6 e
+ * `docs/technical/ADR_002_INTERACTION_FRAMEWORK.md`.
+ */
 
 function getCharacter(actorId) {
   return commands.getActiveCharacterData(actorId);
@@ -159,82 +181,9 @@ function parseActorId(raw) {
   return Number.parseInt(clean, 16);
 }
 
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isValidUiAction(action) {
-  return typeof action === 'string' &&
-    action.length > 0 &&
-    action.length <= MAX_UI_ACTION_LENGTH &&
-    /^(guard|stall|npc)\.[a-z_]+$/.test(action);
-}
-
-function isStrictPositiveInteger(raw) {
-  if (typeof raw === 'number') return Number.isSafeInteger(raw) && raw > 0;
-  if (typeof raw !== 'string' || !/^[1-9]\d*$/.test(raw)) return false;
-  const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed > 0;
-}
-
-/**
- * Valida somente a forma da intencao CEF. Limites de negocio (por exemplo,
- * teto de pena) continuam nas funcoes de dominio que aplicam a acao.
- * @param {string} action
- * @param {unknown} payload
- * @returns {{ok: true, targetActorId: number}|{ok: false, message: string}}
- */
-function validateUiInteractionPayload(action, payload) {
-  if (!isPlainObject(payload)) return { ok: false, message: 'Dados da acao invalidos.' };
-
-  /** @type {{targetActorId?: unknown, target?: unknown, actorId?: unknown, reason?: unknown, amount?: unknown, sentenceMinutes?: unknown, baseId?: unknown, itemId?: unknown, count?: unknown, requestId?: unknown}} */
-  const data = /** @type {any} */ (payload);
-
-  const targetRaw = data.targetActorId ?? data.target ?? data.actorId;
-  const targetActorId = parseActorId(targetRaw);
-  if (!Number.isFinite(targetActorId)) return { ok: false, message: 'Alvo invalido.' };
-
-  if (Object.hasOwn(data, 'reason') &&
-    (typeof data.reason !== 'string' || data.reason.length > MAX_UI_REASON_LENGTH)) {
-    return { ok: false, message: 'Motivo invalido.' };
-  }
-
-  if (action === 'guard.fine' && !isStrictPositiveInteger(data.amount)) {
-    return { ok: false, message: 'Valor de multa invalido.' };
-  }
-  if (action === 'guard.arrest' && Object.hasOwn(data, 'sentenceMinutes') &&
-    !isStrictPositiveInteger(data.sentenceMinutes)) {
-    return { ok: false, message: 'Tempo de prisao invalido.' };
-  }
-  if (action === 'guard.confiscate' &&
-    (!isStrictPositiveInteger(data.baseId) ||
-      (Object.hasOwn(data, 'count') && !isStrictPositiveInteger(data.count)))) {
-    return { ok: false, message: 'Item de confisco invalido.' };
-  }
-  if (action === 'stall.buy' &&
-    (!isStrictPositiveInteger(data.itemId) ||
-      (Object.hasOwn(data, 'count') && !isStrictPositiveInteger(data.count)))) {
-    return { ok: false, message: 'Item de barraca invalido.' };
-  }
-  if (Object.hasOwn(data, 'requestId') &&
-    (typeof data.requestId !== 'string' || data.requestId.trim().length < 8 || data.requestId.trim().length > 48)) {
-    return { ok: false, message: 'Solicitacao invalida.' };
-  }
-
-  return { ok: true, targetActorId };
-}
-
 function parsePositiveInt(raw, fallback = 0) {
   const value = Number.parseInt(raw, 10);
   return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-function safeJson(value) {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '{}';
-  }
 }
 
 function assertRange(sourceActorId, targetActorId, maxRange = DEFAULT_RANGE) {
@@ -845,159 +794,6 @@ async function releaseExpiredPrisoners() {
   }
 }
 
-async function getInteractionActions(actorId, targetActorId) {
-  const actor = getCharacter(actorId);
-  const target = getCharacter(targetActorId);
-  if (!actor || !target || actorId === targetActorId) return { sections: [] };
-
-  const sections = [];
-  const guardActions = [];
-
-  try {
-    const marketStalls = require('./market-stalls-service');
-    if (marketStalls && typeof marketStalls.getInteractionSections === 'function') {
-      const marketSections = await marketStalls.getInteractionSections(actorId, targetActorId);
-      if (marketSections && marketSections.length > 0) sections.push(...marketSections);
-    }
-  } catch (err) {
-    console.error('[governance] market-stalls hook failed:', err.message);
-  }
-
-  // `moduleRegistry.isEnabled` e nao `process.env.ENABLE_REGIONAL_ECONOMY`.
-  //
-  // A checagem direta de env era uma porta lateral pro registry: bastava a flag
-  // no .env pra este require carregar e EXECUTAR um modulo PARKED — sem passar
-  // pelo registry, sem resolucao de dependencia, sem registro de comando e sem
-  // shutdown. CONTRIBUTING.md 3.3 e explicito ("nunca importe um modulo PARKED
-  // direto"), e o `economy-regional` e justamente o que menos poderia rodar
-  // assim: ele chama `governance.getMembership`, que nao e exportado, e usa um
-  // `factionInfo` que nao existe (ver typecheck).
-  //
-  // `isEnabled` so responde `true` pra modulo que o registry inicializou de
-  // fato. Enquanto `economy-regional` nao tiver descriptor em phase0-basic.js,
-  // isto e permanentemente falso — que e o estado correto pra um modulo PARKED.
-  // Reativa-lo continua sendo o que sempre foi: escrever o descriptor.
-  if (moduleRegistry.isEnabled('economy-regional')) {
-    try {
-      const economyRegional = require('./economy-regional');
-      if (economyRegional && typeof economyRegional.getInteractionSections === 'function') {
-        const economySections = await economyRegional.getInteractionSections(actorId, targetActorId);
-        if (economySections && economySections.length > 0) sections.push(...economySections);
-      }
-    } catch (err) {
-      console.error('[governance] economy-regional hook failed:', err.message);
-    }
-  }
-  const guardPerms = [
-    [PERMISSIONS.GUARD_DETAIN, 'guard.stop', 'Abordar'],
-    [PERMISSIONS.GUARD_SEARCH, 'guard.search', 'Revistar'],
-    [PERMISSIONS.VIEW_RECORDS, 'guard.records', 'Ver ficha'],
-    [PERMISSIONS.GUARD_FINE, 'guard.fine', 'Aplicar multa'],
-    [PERMISSIONS.GUARD_DETAIN, 'guard.detain', 'Deter'],
-    [PERMISSIONS.GUARD_ARREST, 'guard.arrest', 'Prender'],
-    [PERMISSIONS.GUARD_CONFISCATE, 'guard.confiscate', 'Confiscar item'],
-    [PERMISSIONS.GUARD_RELEASE, 'guard.release', 'Liberar']
-  ];
-
-  for (const [permission, action, label] of guardPerms) {
-    const check = await hasPermission(actorId, permission);
-    if (check.allowed) guardActions.push({ action, label });
-  }
-
-  if (guardActions.length > 0) {
-    sections.push({ id: 'guard', label: 'Guarda', actions: guardActions });
-  }
-
-  return { targetActorId, sections };
-}
-
-async function handleInteractionAction(actorId, action, payload = {}) {
-  if (!isValidUiAction(action)) {
-    notify(actorId, 'Acao de governanca invalida.');
-    return;
-  }
-
-  const validation = validateUiInteractionPayload(action, payload);
-  if (!validation.ok) {
-    notify(actorId, /** @type {{message: string}} */ (validation).message);
-    return;
-  }
-  const { targetActorId } = validation;
-
-  if (action.startsWith('stall.')) {
-    try {
-      const marketStalls = require('./market-stalls-service');
-      return await marketStalls.handleInteractionAction(actorId, action, payload);
-    } catch (err) {
-      console.error('[governance] market-stalls interaction failed:', err.message);
-      return;
-    }
-  }
-
-  if (action.startsWith('npc.')) {
-    // Mesmo motivo do hook em getInteractionActions: quem decide se um modulo
-    // roda e o registry, nunca uma leitura solta de process.env.
-    if (!moduleRegistry.isEnabled('economy-regional')) {
-      notify(actorId, 'Economia regional desativada neste servidor.');
-      return;
-    }
-    try {
-      const economyRegional = require('./economy-regional');
-      return await economyRegional.handleInteractionAction(actorId, action, payload);
-    } catch (err) {
-      console.error('[governance] economy-regional interaction failed:', err.message);
-      return;
-    }
-  }
-
-  switch (action) {
-    case 'guard.stop':
-      return stopTarget(actorId, targetActorId, payload.reason || 'abordagem');
-    case 'guard.search':
-      return requestSearch(actorId, targetActorId, payload.reason || 'revista');
-    case 'guard.detain':
-      return detainTarget(actorId, targetActorId, payload.reason || 'detencao');
-    case 'guard.release':
-      return releaseTarget(actorId, targetActorId, payload.reason || 'liberado');
-    case 'guard.fine':
-      return fineTarget(actorId, targetActorId, payload.amount, payload.reason || 'multa');
-    case 'guard.arrest':
-      return arrestTarget(actorId, targetActorId, payload.sentenceMinutes || 10, payload.reason || 'prisao');
-    case 'guard.confiscate':
-      return confiscateItem(actorId, targetActorId, payload.baseId, payload.count || 1, payload.reason || 'confisco');
-    case 'guard.records':
-      return showCriminalRecord(actorId, targetActorId);
-    default:
-      notify(actorId, 'Acao de governanca desconhecida.');
-  }
-}
-
-async function handleUiEvent(actorId, uiEvent) {
-  if (!initialized || !uiEvent || typeof uiEvent !== 'object') return false;
-
-  const type = uiEvent.type;
-  const data = isPlainObject(uiEvent.data) ? uiEvent.data : {};
-  if (type === 'governance:interaction:actions') {
-    const targetActorId = parseActorId(data.targetActorId);
-    if (!Number.isFinite(targetActorId)) {
-      notify(actorId, 'Alvo invalido.');
-      return true;
-    }
-    const result = await getInteractionActions(actorId, targetActorId);
-    sendBrowserModal(actorId, 'governance:interaction:actions', result);
-    notify(actorId, `Acoes disponiveis: ${safeJson(result.sections)}`);
-    return true;
-  }
-  if (type === 'governance:interaction:execute') {
-    if (!isValidUiAction(data.action)) {
-      notify(actorId, 'Acao de governanca invalida.');
-      return true;
-    }
-    await handleInteractionAction(actorId, data.action, data);
-    return true;
-  }
-  return false;
-}
 
 async function showCriminalRecord(actorId, targetActorId) {
   if (!await requirePermission(actorId, PERMISSIONS.VIEW_RECORDS)) return;
@@ -1279,12 +1075,141 @@ function commandDefs() {
   ];
 }
 
+/**
+ * Declara as ações da guarda no Interaction Framework.
+ *
+ * ─── Por que isto vive aqui, e não no core ──────────────────────────────────
+ *
+ * Antes, para uma barraca aparecer no menu de interação, este arquivo precisava
+ * `require('./market-stalls-service')` por nome fixo dentro de
+ * `getInteractionActions` — e `market-stalls` já declara `dependencies:
+ * ['governance']` no registry, então a seta apontava para os dois lados. A
+ * governança tinha virado o lugar onde todo módulo com menu de interação
+ * precisava se anunciar (`CORE_FRAMEWORK_AUDIT.md` §6.1).
+ *
+ * Aqui a governança declara **só o que é dela**. Barraca é do
+ * `market-stalls-service`; `identity.introduce` será do módulo de identidade.
+ * Ninguém mais edita este arquivo para existir num menu.
+ *
+ * ─── O que muda em relação ao caminho antigo, e o que não muda ──────────────
+ *
+ * **Não muda a autoridade.** Cada `execute` abaixo chama a mesma função de
+ * domínio de sempre (`stopTarget`, `fineTarget`, …), e cada uma delas
+ * revalida permissão e alcance por conta própria. Isso é redundante de
+ * propósito: se um dia alguém chamar `fineTarget` por um caminho que não seja
+ * este, a checagem continua lá.
+ *
+ * **Muda a distância no `canSee`.** O menu antigo listava por permissão e mais
+ * nada, então um guarda via "Prender" no menu de alguém do outro lado do mapa e
+ * só descobria a recusa ao clicar. `distance` no descritor faz o pipeline
+ * medir antes de mostrar.
+ *
+ * **Muda a idempotência de multa e confisco.** As duas movem ouro ou item e
+ * eram vulneráveis a duplo clique — o `requestId` era validado no formato e
+ * jogado fora (§6.4 da auditoria). `idempotent: true` liga a deduplicação.
+ */
+function registerGuardInteractions() {
+  // Reinicializar o serviço re-declara o conjunto **deste** módulo, em vez de
+  // colidir com o que ele mesmo registrou antes. Ids de outro módulo continuam
+  // protegidos: `unregisterModule` só remove os próprios.
+  interactionRegistry.unregisterModule(MODULE);
+
+  /** `canSee` de uma ação de guarda: o cargo IC decide, não o staff tier. */
+  const podeGuarda = permission => async ctx => {
+    const check = await hasPermission(ctx.actorId, permission);
+    return { allowed: check.allowed, reason: check.reason || 'Voce nao tem autorizacao para isso.' };
+  };
+
+  const motivo = (label, placeholder) => ({
+    reason: { type: 'string', label, max: MAX_UI_REASON_LENGTH, placeholder }
+  });
+
+  const acoes = [
+    {
+      id: 'law.stop', label: 'Abordar', order: 10, distance: DEFAULT_RANGE,
+      permission: PERMISSIONS.GUARD_DETAIN, audit: 'SECURITY',
+      schema: motivo('Motivo', 'Ex: verificacao de identidade'),
+      execute: ctx => stopTarget(ctx.actorId, ctx.target.actorId, ctx.data.reason || 'abordagem')
+    },
+    {
+      id: 'law.search', label: 'Revistar', order: 20, distance: SEARCH_RANGE,
+      permission: PERMISSIONS.GUARD_SEARCH, audit: 'SECURITY',
+      schema: motivo('Motivo', 'Ex: suspeita de contrabando'),
+      execute: ctx => requestSearch(ctx.actorId, ctx.target.actorId, ctx.data.reason || 'revista')
+    },
+    {
+      id: 'law.records', label: 'Ver ficha', order: 30, distance: DEFAULT_RANGE,
+      permission: PERMISSIONS.VIEW_RECORDS, audit: 'SECURITY',
+      execute: ctx => showCriminalRecord(ctx.actorId, ctx.target.actorId)
+    },
+    {
+      id: 'law.fine', label: 'Aplicar multa', order: 40, distance: DEFAULT_RANGE,
+      permission: PERMISSIONS.GUARD_FINE, audit: 'ECONOMY', idempotent: true,
+      schema: {
+        amount: { type: 'int', label: 'Valor', min: 1, max: 100000, required: true, placeholder: '150' },
+        ...motivo('Motivo', 'Ex: desordem publica')
+      },
+      execute: ctx => fineTarget(ctx.actorId, ctx.target.actorId, ctx.data.amount, ctx.data.reason || 'multa')
+    },
+    {
+      id: 'law.detain', label: 'Deter', order: 50, distance: DEFAULT_RANGE,
+      permission: PERMISSIONS.GUARD_DETAIN, audit: 'SECURITY',
+      schema: motivo('Motivo', 'Ex: resistencia a abordagem'),
+      execute: ctx => detainTarget(ctx.actorId, ctx.target.actorId, ctx.data.reason || 'detencao')
+    },
+    {
+      // O alcance é o de escolta, não o de abordagem: prender exige estar do
+      // lado, e `arrestTarget` já usava `ESCORT_RANGE` internamente. O menu
+      // antigo mostrava a ação com o alcance de todas as outras.
+      id: 'law.arrest', label: 'Prender', order: 60, distance: ESCORT_RANGE,
+      permission: PERMISSIONS.GUARD_ARREST, audit: 'SECURITY', idempotent: true,
+      schema: {
+        sentenceMinutes: { type: 'int', label: 'Pena em minutos', min: 1, max: 180, default: 10 },
+        ...motivo('Crime', 'Ex: roubo e resistencia')
+      },
+      execute: ctx => arrestTarget(ctx.actorId, ctx.target.actorId, ctx.data.sentenceMinutes, ctx.data.reason || 'prisao')
+    },
+    {
+      id: 'law.confiscate', label: 'Confiscar item', order: 70, distance: DEFAULT_RANGE,
+      permission: PERMISSIONS.GUARD_CONFISCATE, audit: 'ECONOMY', idempotent: true,
+      schema: {
+        baseId: { type: 'formid', label: 'FormID do item', required: true, placeholder: '0x0000000F' },
+        count: { type: 'int', label: 'Quantidade', min: 1, default: 1 },
+        ...motivo('Motivo', 'Ex: item ilegal')
+      },
+      execute: ctx => confiscateItem(ctx.actorId, ctx.target.actorId, ctx.data.baseId, ctx.data.count, ctx.data.reason || 'confisco')
+    },
+    {
+      id: 'law.release', label: 'Liberar', order: 80, distance: DEFAULT_RANGE,
+      permission: PERMISSIONS.GUARD_RELEASE, audit: 'SECURITY',
+      schema: motivo('Motivo', 'Ex: sem irregularidades'),
+      execute: ctx => releaseTarget(ctx.actorId, ctx.target.actorId, ctx.data.reason || 'liberado')
+    }
+  ];
+
+  for (const acao of acoes) {
+    interactionRegistry.register({
+      module: MODULE,
+      target: interactionRegistry.TARGET_TYPES.PLAYER,
+      section: 'guarda',
+      // A permissão fica no `canSee` e NÃO em `descriptor.permission`: aquele
+      // campo cai no verificador injetado no core, que consulta `admin-service`
+      // (staff tier). Cargo de guarda depende de escopo e de plantão, e quem
+      // sabe disso é este arquivo.
+      canSee: podeGuarda(acao.permission),
+      ...acao,
+      permission: undefined
+    });
+  }
+}
+
 async function initGovernanceService() {
   actionPolicy.registerAction('guard_stop', ['gameplay'], 'Abordar pela guarda');
   actionPolicy.registerAction('guard_search', ['gameplay'], 'Revistar pela guarda');
   actionPolicy.registerAction('guard_detain', ['gameplay'], 'Deter pela guarda');
   actionPolicy.registerAction('guard_arrest', ['gameplay'], 'Prender pela guarda');
   actionPolicy.registerAction('governance_manage', ['gameplay'], 'Gerenciar governo');
+  registerGuardInteractions();
   await ensureDefaultRolesForExistingScopes();
   initialized = true;
   if (!sentenceTimer) {
@@ -1308,10 +1233,6 @@ module.exports = {
   commandDefs,
   initGovernanceService,
   shutdownGovernanceService,
-  handleUiEvent,
-  validateUiInteractionPayload,
-  getInteractionActions,
-  handleInteractionAction,
   getMyGovernanceSummary,
   getMembership,
   hasPermission,
