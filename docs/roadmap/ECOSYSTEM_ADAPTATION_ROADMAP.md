@@ -8,11 +8,13 @@ Já existem dois planos: [`FORK_RESEARCH_ROADMAP.md`](FORK_RESEARCH_ROADMAP.md) 
 
 **Este roadmap não os substitui e não reordena nada deles.** Ele acrescenta as tarefas que a rodada de 13/08 produziu e as encaixa nas fases existentes. Onde uma tarefa nova depende de uma antiga, a dependência está declarada. Se este documento e o `FORK_RESEARCH_ROADMAP` discordarem sobre prioridade, o outro vence — ele nasceu de uma auditoria mais profunda do nosso próprio código.
 
+> **Reconciliado contra `b7c929d` no fim de 13/08/2026.** Este roadmap foi escrito de manhã e, no mesmo dia, três commits (`c442d9b`, `cdf680b`, `326e1be`) entregaram oito das treze tarefas — incluindo `INT-001`, `INT-002` e os dois `CONTRACT`, que ele colocava depois da Fase 0. As seções trazem o estado real e o commit. Uma tarefa nova, `INV-002`, nasceu da reconciliação.
+
 ## A regra que governa tudo abaixo
 
-**Nada aqui entra na frente da Fase 0.** Quatro sistemas do gamemode foram testados só com `mp` mockado e ninguém nunca conectou dois clientes. Enquanto isso for verdade, toda tarefa deste roadmap é trabalho sobre uma fundação não verificada.
+**Nada aqui entra na frente da Fase 0**, e a entrega de 13/08 tornou isso mais verdadeiro, não menos. Ninguém nunca conectou dois clientes, e agora há ~15.700 linhas a mais esperando por essa sessão.
 
-Isso não é formalidade. O maior achado desta pesquisa — as APIs de montaria do Hijos — é código C++ que mexe em física do Havok. Portar isso antes de saber se dois jogadores conseguem se ver é a definição de otimização prematura.
+Isso não é formalidade. O maior achado ainda pendente — as APIs de montaria do Hijos — é código C++ que mexe em física do Havok. Portar isso antes de saber se dois jogadores conseguem se ver é a definição de otimização prematura.
 
 ---
 
@@ -101,39 +103,49 @@ Entrada listada no `.ccc` mas sem arquivo em `Data/` **não** é acusada: o jogo
 
 ---
 
-## P2 — Interação e inventário
+## P2 — Interação e inventário — ✅ entregue em 13/08/2026
 
-| ID | Tarefa | Origem | Classe | Depende de |
+| ID | Tarefa | Origem | Classe | Estado |
 |---|---|---|---|---|
-| `INT-001` | Interaction Registry: alvos, ações, permissão, resolução server-side | Red House + Frostfall | REIMPLEMENT | P0 |
-| `INT-002` | Módulos registram ações; menu montado no servidor | Red House | REIMPLEMENT | `INT-001` |
-| `INV-001` | Adapter de inventário com implementação falsa declarada | Crows | ADAPT | — |
+| `INT-001` | Interaction Registry: alvos, ações, permissão, resolução server-side | Red House + Frostfall | REIMPLEMENT | ✅ `c442d9b` |
+| `INT-002` | Módulos registram ações; menu montado no servidor | Red House | REIMPLEMENT | ✅ `c442d9b` |
+| `INV-001` | Inventário com donos declarados e razão que fecha | Crows (adapter) | ADAPT | ✅ `cdf680b` — ver ressalva |
 
-`INT-001` é a lacuna confirmada por convergência: três projetos independentes construíram menu de interação, nós não temos nenhum. É a fundação da §18 do briefing e pré-requisito de trade, crafting, propriedades e crime.
+**`INT-001`/`INT-002`.** `core/interaction-registry.js`, `interaction-targets.js` e `interaction-service.js`, com [`ADR-002`](../technical/ADR_002_INTERACTION_FRAMEWORK.md). A inversão de dependência era o ponto: a governança fazia `require('./market-stalls-service')` por nome fixo enquanto barracas declaravam `dependencies: ['governance']` — seta nos dois sentidos.
 
-Invariante desde o começo: **o cliente pede uma ação sobre um alvo; o servidor resolve o alvo por catálogo e distância observada, e decide.** O cliente nunca envia o alvo resolvido — é o blocker `PROP-01` da matriz de forks aplicado à interação inteira.
+A invariante que este roadmap pedia foi mantida e endurecida: **`canSee` não autoriza nada.** Ele decide um menu montado num instante anterior, na máquina de outra pessoa; `execute` refaz o pipeline inteiro — resolve o alvo, checa permissão e mede distância de novo. Era verdade por acidente do desenho antigo e virou contrato testado.
 
-`INV-001` é a resposta ao nosso problema real de testar com `mp` mockado. O Crows transformou o mock numa **fronteira arquitetural declarada** (`adapters/inventory/{protocol,skymp,fake}`) em vez de um artefato de teste espalhado. Não depende da Fase 0 e melhora a confiança em tudo que vier depois.
+Só `player` tem resolvedor. Os outros seis tipos falham fechados e nomeados, com `registerResolver` como extensão. **Escrever resolvedores contra APIs `[DOC]` nunca exercitadas seria pior que a ausência, porque pareceria pronto** — é o mesmo critério que esta pesquisa usa para marcar coluna como não verificada.
+
+**`INV-001` foi entregue por outro caminho, e a ressalva importa.** `core/inventory.js` + `core/inventory-owner.js` + migration v14: toda movimentação grava as duas pernas, e para todo `transfer_id` a soma dos `delta` é zero. Isso é mais forte que o adapter do Crows.
+
+Mas **o que o Crows resolve continua aberto**: lá o fake é uma implementação declarada da mesma interface (`adapters/inventory/{protocol,skymp,fake}`), e aqui `mp` segue mockado ad-hoc nos testes. O razão de duas pernas melhora a confiança no servidor; não substitui uma fronteira declarada contra o jogo. Fica como `INV-002`, e continua não dependendo da Fase 0.
+
+**Troca saiu junto**, reescrita como sessão autoritativa com máquina de estados. A regra que a organiza: **confirmação é sobre uma oferta específica, não sobre a sessão** — qualquer mudança incrementa a `version` e derruba as duas confirmações, o que fecha o golpe de trocar a oferta entre a confirmação do outro e a sua. Registrada como módulo `lab` atrás de `ENABLE_TRADE_SERVICE`, que nasce `false`, sem UI CEF.
 
 ---
 
-## P3 — Economia e contratos
+## P3 — Economia e contratos — ✅ entregue em 13/08/2026
 
-| ID | Tarefa | Origem | Classe | Depende de |
+| ID | Tarefa | Origem | Classe | Estado |
 |---|---|---|---|---|
-| `CONTRACT-001` | Máquina de 8 estados de contrato com escrow no post | Mereth | REIMPLEMENT | `ECON`, `INV-001` |
-| `CONTRACT-002` | Nota de dívida selada e legível | Mereth | REIMPLEMENT | `CONTRACT-001` |
+| `CONTRACT-001` | Máquina de estados de contrato com escrow no post | Mereth | REIMPLEMENT | ✅ `326e1be` — **sete** estados, não oito |
+| `CONTRACT-002` | Nota de dívida selada e legível | Mereth | REIMPLEMENT | ✅ `326e1be` |
 
-`contracts` é o domínio onde a distância entre nós e a melhor referência é maior — estamos em `MISSING`. Mas ele **depende** de inventário e economia transacionais, hoje PARKED sob o blocker `ECON-01`. Construir contratos antes disso é construir em cima do problema que os contratos expõem.
+`core/economy-service.js` (ativo), `contracts-service.js` e `debt-service.js` (ambos PARKED), migration v15, [`ADR-004`](../technical/ADR_004_ECONOMY_ACCOUNTS_AND_LEDGER.md).
 
-Invariantes que valem como teste desde já, mesmo antes da implementação:
+**Este roadmap pedia oito estados e a implementação entregou sete — a implementação estava certa.** Com escrow travado no post, o ouro sai antes de o contrato existir, então `defaulted` não pode acontecer. O Mereth precisa dele porque oferece contratos *unfunded*, em que o cliente paga na entrega; ao adotar só a modalidade funded, o estado morre junto. Copiar os oito teria trazido um estado inalcançável.
 
-- Escrow trava no post, não na entrega. Falha vira **sem contrato**, nunca contrato impagável.
-- Expiração **nunca** toca trabalho já entregue.
-- Entrega é contada pelo servidor, item a item. O cliente não afirma que entregou.
-- Inadimplência vira registro, não fila de staff.
+As quatro invariantes que este documento listou "como teste desde já" sobreviveram inteiras:
 
-Reimplementação a partir do conceito: Mereth não tem licença nem código público.
+- escrow trava no post — falha na criação produz *sem contrato*;
+- **expiração nunca toca trabalho entregue** — virou teste com o nome da regra;
+- entrega é contada pelo servidor, item a item;
+- inadimplência vira registro, nunca fila de staff. O ADR-004 §4.4 registra que abater automático foi considerado e rejeitado: remove a cena e põe o servidor no papel do agiota.
+
+Ganhou uma quinta que não estava aqui: **`disputed` não decide nada** — o escrow fica travado e resolver é papel de gente.
+
+**A dependência que este roadmap declarava não se materializou como bloqueio.** `ECON-01` exigia economia transacional antes de contratos; o mesmo commit entregou as duas, e o diagnóstico foi mais fundo que o previsto aqui: o problema nunca foi o `transaction-service`, e sim que ele **só sabia falar de patrimônio de um personagem**. Das sete colunas de saldo do projeto, duas nunca receberam uma linha de código.
 
 ---
 
@@ -202,28 +214,39 @@ Registrar rejeição evita que a mesma ideia volte daqui a três meses sem o con
 
 ## Ordem sugerida
 
+Reconciliada contra `b7c929d` no fim do dia 13/08.
+
 ```text
 Fase 0  ─────────────────────────────────────────►  (bloqueia tudo)
    │
-   ├─ ✅ feito       SEC-QS-01 · PATCH-001 · MOD-005 (detecção)
+   ├─ ✅ feito 13/08   SEC-QS-01 · PATCH-001 · MOD-005 (detecção)
+   │                   INT-001 · INT-002 · INV-001 · CONTRACT-001 · CONTRACT-002
    │
-   ├─ não bloqueado  RES-001 · RES-002 · INV-001
+   ├─ não bloqueado    RES-001 · RES-002 · INV-002
    │
    └─ depois da Fase 0
         MOD-006 → MOD-007
-        INT-001 → INT-002 → (trade, crafting, propriedades)
-        ECON → CONTRACT-001 → CONTRACT-002
         MOUNT-001 → MOUNT-002        (PATCH-001 já é pré-requisito atendido)
+        RES-002 → RBAC-001
 ```
 
-Três das tarefas não bloqueadas foram feitas em 13/08. Sobram `RES-001`, `RES-002` e `INV-001`, que podem andar em paralelo com a preparação da sessão de teste — nenhuma delas mexe em gameplay.
+**Oito das treze tarefas deste roadmap foram feitas no mesmo dia em que ele foi escrito.** Isso diz menos sobre o roadmap e mais sobre o ritmo do projeto — e é a razão de ele carregar a data de reconciliação em vez de fingir que nasceu assim.
+
+Sobram três não bloqueadas: as duas de pesquisa e a `INV-002`, que é o pedaço do `INV-001` que o commit `cdf680b` não cobriu.
 
 O que **não** foi implementado, e por quê:
 
 | Tarefa | Por que não agora |
 |---|---|
 | `MOUNT-001` | ~700 linhas de C++ em física do Havok. Exige clonar o SkyrimPlatform, compilar e um spike com rollback. Não cabe junto de outras mudanças, e a Fase 0 vem antes |
-| `CONTRACT-001/002` | Depende de economia e inventário transacionais, hoje PARKED sob `ECON-01`. Construir contratos antes disso é construir sobre o problema que eles expõem |
-| `INT-001/002` | Domínio novo e fundação de trade, crafting e propriedades. Merece ADR antes de código, e validação na Fase 0 antes do ADR |
+| `INV-002` | Fronteira declarada contra `mp`, no modelo `adapters/inventory/{protocol,skymp,fake}` do Crows. O razão de duas pernas resolveu o lado do servidor; o lado do jogo continua mockado ad-hoc. Não depende da Fase 0 |
 | `RBAC-001` | Depende de `RES-002`: não lemos uma linha do RBAC do Crows, só nomes de arquivo |
 | `MOD-006/007` | Dependem da decisão de produto de `MOD-005` e de `MOD-001..004` |
+
+## O que a entrega de 13/08 não mudou
+
+Vale registrar porque é o risco de ler este documento e achar que o projeto avançou mais do que avançou.
+
+Interação, inventário, economia, troca, contratos e dívida somam ~15.700 linhas com testes e duas migrations. **Nenhuma linha rodou numa sessão com jogadores.** Os três CHANGELOGs carregam a mesma advertência, e a CEF do menu de interação é hoje a maior superfície não exercitada do projeto: passa em `node --check` e nunca rodou dentro de um CEF.
+
+Contratos e dívida entram PARKED, troca entra atrás de flag que nasce desligada. Isso é a disciplina funcionando, não uma ressalva. Mas significa que **a Fase 0 continua sendo o único item que vale mais que todos os outros somados** — e que ela ficou maior, porque agora há mais superfície a validar do que quando este roadmap foi escrito de manhã.

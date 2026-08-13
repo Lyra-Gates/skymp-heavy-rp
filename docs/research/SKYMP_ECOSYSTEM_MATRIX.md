@@ -2,6 +2,8 @@
 
 Data de corte: **2026-08-13**. Cobre os sete projetos de referência nomeados no briefing de pesquisa do ecossistema.
 
+> **Coluna Heavy RP reconciliada contra `b7c929d` (13/08/2026, mesmo dia).** A matriz nasceu marcando Interaction e Contracts como `MISSING`; horas depois, três commits entregaram os frameworks de Interação, Inventário e Economia. As linhas afetadas foram corrigidas e trazem ✅ com a data. **As colunas dos projetos de referência não mudaram** — o que envelheceu foi o nosso lado, não a leitura deles.
+
 > **Esta matriz não substitui [`SKYMP_FORKS_SYSTEM_MATRIX.md`](SKYMP_FORKS_SYSTEM_MATRIX.md).** Aquela cobre oito forks *diferentes* (SkyrimRoleplay/skyrp, enricomalta, F02K, NirnRP, theZebco, FusRoBra, DonAthelion, Pepsiplaya) e continua válida. As duas se somam; nenhum projeto aparece nas duas com veredito conflitante. Onde há sobreposição, esta matriz aponta para lá.
 
 ## Procedência: quanto cada coluna foi realmente verificada
@@ -34,13 +36,15 @@ A regra §14 do briefing: sem licença compatível, não se copia código. Reimp
 | **Mereth** | **Ausente** | ⛔ Todos os direitos reservados. **Só conceito.** Não copiar linha |
 | Planet Nirn | Herdada do upstream | Irrelevante: não há código próprio |
 
-Três dos sete não têm licença. Não é detalhe: são justamente os que têm os sistemas que mais nos faltam (contratos, economia regional, launcher). **Tudo que vier deles precisa ser reimplementado a partir da ideia, com registro de origem.**
+Três dos sete não têm licença. Não é detalhe: são justamente os que têm os sistemas que mais nos faltavam. **Tudo que vier deles precisa ser reimplementado a partir da ideia, com registro de origem** — foi exatamente o que aconteceu com contratos e dívida, reimplementados do conceito do Mereth sem uma linha copiada.
 
 ## Matriz
 
-Legenda de estado: `ACTIVE` registrado e utilizável · `PARTIAL` incompleto · `PARKED` existe mas não deve ser ligado · `WEAK` insuficiente · `MISSING` ausente · `DEAD` removido de propósito · `—` não existe no projeto · `?` não verificado.
+Legenda de estado: `ACTIVE` registrado e utilizável · `lab` registrado atrás de flag que nasce desligada · `PARTIAL` incompleto · `PARKED` existe mas não deve ser ligado · `WEAK` insuficiente · `MISSING` ausente · `DEAD` removido de propósito · `—` não existe no projeto · `?` não verificado.
 
-Coluna Heavy RP vem de [`HEAVY_RP_GAP_ANALYSIS.md`](HEAVY_RP_GAP_ANALYSIS.md) e do código em `skymp/gamemode/`.
+Coluna Heavy RP vem do código em `skymp/gamemode/` no commit `b7c929d`. ⚠️ **O [`HEAVY_RP_GAP_ANALYSIS.md`](HEAVY_RP_GAP_ANALYSIS.md) é de 12/08 e está desatualizado** para inventário, economia, contratos, troca e interação — onde os dois divergirem, esta matriz é a mais nova.
+
+`ACTIVE` aqui significa o mesmo que na auditoria anterior: código registrado e utilizável quando sua flag é deliberadamente ligada. **Nenhum destes sistemas rodou numa sessão com jogadores.**
 
 | Sistema | Heavy RP | Red House | Divine Comedy | Crows | Frostfall | Planet Nirn | Mereth | Hijos | Recomendação |
 |---|---|---|---|---|---|---|---|---|---|
@@ -50,16 +54,16 @@ Coluna Heavy RP vem de [`HEAVY_RP_GAP_ANALYSIS.md`](HEAVY_RP_GAP_ANALYSIS.md) e 
 | Commands | ACTIVE (`command-registry`) | sim | — | — | `commands.js`+sugestões | — | — | — | **ADAPT** sugestão de comando |
 | Identity | PARTIAL | — | — | — | `identityOverlay.js` | — | conexão = identidade | — | **KEEP** |
 | Characters | PARTIAL | — | seleção + UI | `characters.py` | — | — | — | — | **ADAPT** |
-| Inventory | PARTIAL | sim | — | domínio + adapters | `inventory.js` | — | contagem server-side | — | **REIMPLEMENT** |
-| Trade | PARKED | **sim** | — | — | `commodityExchange.js` | — | escrow | — | **REIMPLEMENT** |
-| Crafting | PARKED | **sim** | `recipes/`+doc | — | `crafting.js` | — | wiki | — | **REIMPLEMENT** |
-| Economy | PARTIAL | — | — | — | `economy.js`+`treasury.js` | — | **ledger + dívida** | — | **ADAPT** |
-| Contracts | **MISSING** | — | — | — | `courier.js` | — | **completo** | — | **REIMPLEMENT** ⭐ |
+| Inventory | **ACTIVE** (`core/inventory.js`, v14) | sim | — | domínio + adapters | `inventory.js` | — | contagem server-side | — | ✅ **feito 13/08** |
+| Trade | **lab** (`ENABLE_TRADE_SERVICE`, nasce `false`) | **sim** | — | — | `commodityExchange.js` | — | escrow | — | ✅ **feito 13/08** |
+| Crafting | PARKED (já sobre `core/inventory`) | **sim** | `recipes/`+doc | — | `crafting.js` | — | wiki | — | **REIMPLEMENT** |
+| Economy | **ACTIVE** (`core/economy-service.js`, v15) | — | — | — | `economy.js`+`treasury.js` | — | **ledger + dívida** | — | ✅ **feito 13/08** |
+| Contracts | **PARKED** (`contracts-service.js`, 7 estados) | — | — | — | `courier.js` | — | **completo** | — | ✅ **feito 13/08**, com divergência |
 | Jobs | PARKED | — | mineração | — | `production.js`+`training.js` | — | contratos | — | **RESEARCH** |
 | Factions | DEAD | — | — | RBAC | `factions.js`+`college.js` | — | — | — | **REIMPLEMENT** |
-| Properties | PARKED | — | — | — | `housing.js` | — | — | — | **ADAPT** (ver outra matriz) |
-| Containers | PARTIAL | sim | — | — | `inventory.js` | — | — | — | **REIMPLEMENT** |
-| Interaction | **MISSING** | **interactionMenu** | `onActivate` | — | `interactionState.js` | — | — | — | **REIMPLEMENT** ⭐ |
+| Properties | PARKED (já sobre `core/inventory`) | — | — | — | `housing.js` | — | — | — | **ADAPT** (ver outra matriz) |
+| Containers | **ACTIVE** (dono `container` na v14) | sim | — | — | `inventory.js` | — | — | — | ✅ **feito 13/08** |
+| Interaction | **ACTIVE** (`core/interaction-*`, ADR-002) | **interactionMenu** | `onActivate` | — | `interactionState.js` | — | — | — | ✅ **feito 13/08** |
 | Nametags | ACTIVE | — | — | — | `identityOverlay.js` | — | — | — | **KEEP** |
 | Chat | ACTIVE | sim | — | — | `chat.js`+`chatLog.js` | — | — | — | **KEEP** |
 | VOIP | PARTIAL (helper nativo) | — | — | — | — | — | — | **flags CEF + LiveKit** | **KEEP** — ver §Segurança |
@@ -78,7 +82,7 @@ Coluna Heavy RP vem de [`HEAVY_RP_GAP_ANALYSIS.md`](HEAVY_RP_GAP_ANALYSIS.md) e 
 | Deploy | WEAK | — | — | **Docker Compose** | — | — | — | — | **ADAPT** |
 | Monitoring | WEAK | — | — | métricas | `engineProbes.js` | — | — | — | **ADAPT** |
 | CI/CD | PARTIAL | — | — | **Actions + Velopack** | — | — | — | build SP em CI | **ADAPT** |
-| Patching | **MISSING** | fork próprio | **`patches/` + README** | — | — | — | — | fork disciplinado | **ADAPT** ⭐ |
+| Patching | **ACTIVE** (`patches/` + validador na CI) | fork próprio | **`patches/` + README** | — | — | — | — | fork disciplinado | ✅ **feito 13/08** |
 | SkyrimPlatform | consumidor | fork | 1 patch | — | — | espelho | — | **APIs de montaria** | **PORT** ⭐ |
 | Papyrus | não usamos | **sim, pesado** | — | — | `papyrusBridge.js` | — | — | — | **REJECT** |
 
@@ -88,9 +92,9 @@ Coluna Heavy RP vem de [`HEAVY_RP_GAP_ANALYSIS.md`](HEAVY_RP_GAP_ANALYSIS.md) e 
 
 1. **`SkyrimPlatform` de montaria (Hijos) — `PORT`.** `setMountedPairKinematicTransform(horse, rider, lease, serial, …)` e `setCharacterControllerCollisionProfile(actor, profile, lease)` resolvem exatamente o bloqueio que mantém `horse-service.js` em PARKED ("estado compartilhado e ownership não resolvidos"). E chegaram sozinhos ao padrão *lease + serial* que nossa auditoria já tinha recomendado. GPL-3.0, portável.
 
-2. **Contratos (Mereth) — `REIMPLEMENT`.** É o único domínio da matriz onde estamos em `MISSING` e existe uma referência madura. Máquina de estados de oito estados, escrow atômico no post, e dívida como registro selado em vez de fila de staff. Sem licença: reimplementar do conceito.
+2. **Contratos (Mereth) — `REIMPLEMENT`. ✅ Feito no mesmo dia, e a implementação corrigiu a recomendação.** O desenho aqui saiu com **sete** estados, não oito: `contracts-service.js` derruba o `defaulted`, e a justificativa é boa. Com escrow travado no post, o ouro sai *antes* de o contrato existir — então não há como um contrato ficar impagável, e o estado deixa de poder acontecer. O Mereth precisa dele porque oferece contratos *unfunded*, onde o cliente paga na entrega; nós escolhemos só os funded. **A leitura de referência estava certa sobre o mecanismo e errada sobre o número de estados** — copiar os oito teria trazido um estado morto. Dívida saiu junto, em `debt-service.js`, como registro selado sem cobrança automática. Ambos `PARKED`.
 
-3. **Interaction (Red House + Frostfall) — `REIMPLEMENT`.** Dois projetos independentes construíram menu de interação. Nós não temos nenhum, e é a fundação de §18 do briefing. Red House é GPL-3.0 e legível.
+3. **Interaction (Red House + Frostfall) — `REIMPLEMENT`. ✅ Feito no mesmo dia.** `core/interaction-registry.js`, `interaction-targets.js` e `interaction-service.js`, com [`ADR-002`](../technical/ADR_002_INTERACTION_FRAMEWORK.md). Módulos declaram as próprias ações e a governança deixou de conhecer o módulo de barracas. Só `player` tem resolvedor; os outros seis tipos de alvo são vocabulário reservado que falha fechado — pelo mesmo critério que esta matriz usa para marcar `?`: parecer pronto é pior que faltar.
 
 4. **Índice de plugin (Divine Comedy) — já sabíamos, e sabíamos melhor.** Ver seção abaixo.
 
