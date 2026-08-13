@@ -355,8 +355,53 @@ function commandDefs() {
         );
         console.log(`[fauna-census] ${relatorio.atoresSemPerfil} atores, ${relatorio.recordsDistintos} records. Arquivo: ${destino}`);
       }
+    },
+    {
+      name: ['/ondestou'],
+      description: 'Mostra CELL, posicao e rotacao exatas conhecidas pelo servidor',
+      usage: '/ondestou',
+      handler: (actorId) => {
+        if (!admin.hasPermission(actorId, 'run_world_probe')) {
+          commands.sendNotification(actorId, 'Sem permissao.');
+          return;
+        }
+
+        const leitura = capturarLocalizacao(actorId);
+        if (!leitura.ok) {
+          commands.sendNotification(actorId, `Localizacao indisponivel (${leitura.code}).`);
+          return;
+        }
+
+        console.log('[fauna-census] Ponto de spawn capturado:', JSON.stringify(leitura));
+        commands.sendNotification(actorId, `CELL: ${leitura.cellOrWorldDesc}`);
+        commands.sendNotification(actorId, `POS: ${leitura.pos.join(', ')} ROT-Z: ${leitura.rot[2]}`);
+        commands.sendNotification(actorId, 'O JSON completo foi gravado no log do servidor.');
+      }
     }
   ];
+}
+
+function capturarLocalizacao(actorId) {
+  if (typeof mp === 'undefined') return { ok: false, code: 'mp_indisponivel' };
+
+  const loc = mp.get(actorId, 'locationalData');
+  if (!loc || !Array.isArray(loc.pos) || loc.pos.length !== 3 || !loc.cellOrWorldDesc) {
+    return { ok: false, code: 'localizacao_indisponivel' };
+  }
+
+  const pos = loc.pos.map(Number);
+  const rot = Array.isArray(loc.rot) && loc.rot.length === 3 ? loc.rot.map(Number) : [0, 0, 0];
+  if (![...pos, ...rot].every(Number.isFinite)) {
+    return { ok: false, code: 'localizacao_invalida' };
+  }
+
+  return {
+    ok: true,
+    cellOrWorldDesc: String(loc.cellOrWorldDesc),
+    pos,
+    rot,
+    startPoint: { pos, worldOrCell: String(loc.cellOrWorldDesc), angleZ: rot[2] }
+  };
 }
 
 function initFaunaCensus() {
@@ -372,6 +417,7 @@ module.exports = {
   levantarCenso,
   gravarRelatorio,
   inspecionarAtor,
+  capturarLocalizacao,
   FAIXAS,
   ARTIFACTS_DIR
 };

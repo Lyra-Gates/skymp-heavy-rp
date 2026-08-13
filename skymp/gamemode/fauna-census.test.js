@@ -79,6 +79,40 @@ after(() => {
   else global.mp = originalMp;
 });
 
+describe('fauna-census - captura de ponto de spawn', () => {
+  it('devolve CELL, posicao e rotacao no formato de startPoint', () => {
+    posicoes.set(JOGADOR, {
+      pos: [273.63, 827.70, 397.34],
+      rot: [0, 0, 91.5],
+      cellOrWorldDesc: '95a39:Skyrim.esm'
+    });
+
+    assert.deepStrictEqual(censo.capturarLocalizacao(JOGADOR), {
+      ok: true,
+      cellOrWorldDesc: '95a39:Skyrim.esm',
+      pos: [273.63, 827.70, 397.34],
+      rot: [0, 0, 91.5],
+      startPoint: {
+        pos: [273.63, 827.70, 397.34],
+        worldOrCell: '95a39:Skyrim.esm',
+        angleZ: 91.5
+      }
+    });
+  });
+
+  it('recusa localizacao incompleta em vez de inventar celula', () => {
+    posicoes.set(JOGADOR, { pos: [273.63, 827.70, 397.34] });
+    assert.deepStrictEqual(censo.capturarLocalizacao(JOGADOR), {
+      ok: false,
+      code: 'localizacao_indisponivel'
+    });
+  });
+
+  it('registra /ondestou junto dos comandos do laboratorio', () => {
+    assert.ok(censo.commandDefs().some(def => def.name.includes('/ondestou')));
+  });
+});
+
 const emCelula = (x, celula = CELULA) => ({ pos: [x, 0, 0], cellOrWorldDesc: celula });
 
 beforeEach(() => {

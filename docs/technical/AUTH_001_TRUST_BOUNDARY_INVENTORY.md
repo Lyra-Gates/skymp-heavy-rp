@@ -72,7 +72,7 @@ Transforma launch ticket em admissão e game session. É autoridade temporária 
 
 - Em online mode, profileId vem da resposta do Master API e representa accountId.
 - `connection-monitor` procura actor por profileId via polling e evita que uma promise antiga aprove/rejeite uma reconexão nova.
-- `whitelist.checkWhitelist` hoje consulta `discord_identities.discord_id = profileId.toString()`. Isso conflita semanticamente com o Master API, que retorna `accountId` como profileId. O código só funciona de modo robusto se o valor retornado também corresponder a um `discord_id`, o que não é garantido.
+- `whitelist.checkWhitelist` normaliza o `profileId` online para `accountId` e consulta `accounts.id`. `discord_id` continua sendo somente a identidade externa de login.
 - Depois da resolução, gameplay deve usar `commands.getActiveCharacterData(actorId)`, nunca characterId/profileId enviado em UI packet.
 
 ## Security blockers
@@ -83,11 +83,11 @@ Transforma launch ticket em admissão e game session. É autoridade temporária 
 
 **Gate:** CI/config doctor deve reprovar `offlineMode=true` fora de ambiente local; o launcher não deve gravar profileId no fluxo online.
 
-### SECURITY-BLOCKER AUTH-02 — semântica divergente de profileId
+### SECURITY-BLOCKER AUTH-02 — semântica divergente de profileId (**RESOLVIDO em 2026-08-12**)
 
-Master API retorna `accountId`, mas `whitelist.js` busca esse valor na coluna `discord_identities.discord_id`. Account ID e Discord ID são namespaces diferentes.
+O Master API retorna `accountId` e a whitelist agora consulta `accounts.id`. Account ID e Discord ID permanecem namespaces separados.
 
-**Gate:** decidir e testar um único significado: online `profileId === accountId`; whitelist deve consultar `accounts.id`. Discord ID é atributo, não chave de gameplay.
+**Evidência:** online `profileId === accountId`; `whitelist.test.js` cobre a consulta por `accounts.id`. Discord ID é atributo, não chave de gameplay.
 
 ### SECURITY-BLOCKER AUTH-03 — personagem não vinculado à sessão
 
