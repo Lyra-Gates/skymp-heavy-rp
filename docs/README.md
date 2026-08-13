@@ -105,12 +105,24 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 
 ---
 
+## Plataforma: launcher, game-api e distribuição
+
+| Documento | Sobre |
+|---|---|
+| [research/PLATFORM_INFRASTRUCTURE_AUDIT.md](research/PLATFORM_INFRASTRUCTURE_AUDIT.md) | **Auditoria de 13/08.** O caminho login→fila→sessão auditado linha a linha: 27 achados, o desenho da máquina de estados do launcher, o manifesto v2, e o que fazer (e o que **não** fazer) de infraestrutura antes da Fase 0. |
+| [platform/MOD_DISTRIBUTION_POLICY.md](platform/MOD_DISTRIBUTION_POLICY.md) | O que pode ser redistribuído e o que só pode ser verificado. Quatro categorias, e como o manifesto as codifica. |
+| [testing/LAUNCHER_PLATFORM_TEST_MATRIX.md](testing/LAUNCHER_PLATFORM_TEST_MATRIX.md) | Instalação limpa, update, repair, manifesto adversário, backend fora do ar, fila, tickets. O que já é coberto, o que só uma máquina com Skyrim prova, e onde investir primeiro. |
+| [technical/LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | O que o código faz **hoje** — canais, manifestos, login, assinatura do instalador. |
+
+---
+
 ## Modding
 
 | Documento | Sobre |
 |---|---|
 | [MODDING_GUIDELINES.md](MODDING_GUIDELINES.md) | Política de mods: regra de ouro, perfis, fases de QA, lista negra. |
 | [MODPACK.md](MODPACK.md) | Composição do modpack. |
+| [platform/MOD_DISTRIBUTION_POLICY.md](platform/MOD_DISTRIBUTION_POLICY.md) | Permissão de redistribuição, mod a mod. |
 | [technical/MODS_AND_GAMEMODE_CONTRACT.md](technical/MODS_AND_GAMEMODE_CONTRACT.md) | O lado técnico da mesma questão. |
 
 ---
