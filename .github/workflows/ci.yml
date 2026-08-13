@@ -129,6 +129,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # O registro de patches ao SkyMP. Sem dependências, então roda aqui e não
+      # na matriz com `npm ci`. Um patch registrado pela metade parece controle
+      # e não é — ver patches/README.md.
+      - name: Registro de patches é válido
+        run: |
+          node patches/validate.js
+          node --test patches/validate.test.js
+
       # O .gitignore cobre .env, mas um arquivo já rastreado antes da regra
       # continuaria versionado. Esta checagem é barata e o custo de errar é alto.
       - name: Nenhum .env versionado

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "upstream": {
+    "skymp": "https://github.com/skyrim-multiplayer/skymp",
+    "skyrim-platform": "https://github.com/skyrim-multiplayer/skymp/tree/main/skyrim-platform"
+  },
+  "patches": []
+}

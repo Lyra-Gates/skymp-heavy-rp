@@ -11,6 +11,56 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 
+- **Segunda rodada de pesquisa do ecossistema (13/08/2026) — e o primeiro achado foi que metade dela já estava feita.** O briefing pedia sete projetos de referência; a auditoria de 12/08 já cobria oito forks, mas **outros**. Antes de pesquisar, verificou-se a sobreposição: quatro projetos nunca tinham sido vistos (The Divine Comedy, Crows RP, Mereth, Hijos de las Nieves), um estava pesquisado sob outro nome, um tinha estudo dedicado desde antes, e **um se revelou vazio**.
+
+  O Planet Nirn não tem commit próprio nenhum: o histórico recente é inteiramente upstream (PRs `#26xx` do `skyrim-multiplayer`), e o repositório é um `skyrim-roleplay/skymp` rebrandado — que já estava pesquisado. A frente de "sync multiplayer" que o briefing pedia ali **não tem onde acontecer**, e registrar isso economiza uma rodada inteira.
+
+  Três documentos novos: [`SKYMP_ECOSYSTEM_MATRIX.md`](docs/research/SKYMP_ECOSYSTEM_MATRIX.md), [`SKYMP_ECOSYSTEM_DEEP_DIVE.md`](docs/research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) e [`ECOSYSTEM_ADAPTATION_ROADMAP.md`](docs/roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md). Nenhum substitui a rodada de 12/08; a matriz nova aponta para a antiga onde há sobreposição.
+
+  **A matriz declara quanto cada coluna foi verificada, e duas colunas estão rasas.** Frostfall tem 57 módulos de gameplay Heavy RP — o acervo mais denso do ecossistema — e **um** foi lido. Crows tem a stack de operação mais completa e **nenhum** arquivo de lógica foi aberto. As linhas dessas colunas dizem o que existe, não se presta. Está escrito assim no documento, e virou `RES-001`/`RES-002`.
+
+  **Três dos sete projetos não têm licença** — Frostfall, Crows e Mereth —, e são justamente os que têm os sistemas que mais faltam aqui (contratos, economia regional, launcher). Tudo que vier deles é reimplementação a partir do conceito, nunca cópia.
+
+  **Dois achados mudam decisão.** O fork Hijos de las Nieves expõe `setMountedPairKinematicTransform(horse, rider, lease, serial, …)` — o *native spike* que o gate do `horse-service.js` PARKED pede, em GPL-3.0 compatível. E chegou sozinho ao padrão *lease + serial* que a auditoria de 12/08 tinha recomendado de forma independente para estado compartilhado. O Mereth documenta contratos jogador-a-jogador com escrow travado na publicação e inadimplência virando registro selado em vez de fila de staff.
+
+  **E um achado valida uma decisão nossa por caminho independente.** Os flags CEF que o Hijos usa para o microfone (`auto-accept-camera-and-microphone-capture`, `use-fake-ui-for-media-stream`, `allow-running-insecure-content`, `allow-file-access-from-files`, `AudioServiceSandbox` desligado) removem consentimento e isolamento de origem: qualquer conteúdo no overlay passa a poder capturar áudio em silêncio. Tirar a captura do CEF para WASAPI nativo evita a classe inteira. `REJECT` registrado com a justificativa.
+
+  **Nenhuma tarefa entrou em P0.** O maior achado é C++ mexendo em física do Havok; portá-lo antes de saber se dois jogadores se enxergam seria otimização prematura. A Fase 0 continua bloqueando tudo.
+
+- **`AUTH-04b` — o ticket de fila saiu da query string (13/08/2026).** `GET /api/queue/status?ticket=…` lia a credencial de `req.query.ticket` enquanto `POST /api/queue/join`, **catorze linhas acima no mesmo arquivo**, sempre leu do corpo. Dois tratamentos do mesmo segredo, a poucos metros um do outro.
+
+  **Achado ao verificar se estávamos expostos a um problema de outro projeto — e não estávamos.** O `SensitiveArgumentMasker.cs` do Crows RP denuncia que eles passam credencial por argumento de linha de comando, que vaza em process listing. Aqui não: o ticket vai para `clientSettings.gameData.launcherTicket`, em arquivo. A verificação passou, mas achou esta outra porta.
+
+  **O impacto era menor do que parece, e vale dizer.** O transporte já é HTTP puro, então a query string não acrescentava exposição no fio; o `queue_grant` rotaciona e é de uso único, então um ticket que aparecesse num log provavelmente já estaria consumido. O que justificou corrigir foi o custo — **não há launcher em produção, porque a Fase 0 nunca rodou, e isso nunca vai ser mais barato** — e a inconsistência, que convidava o próximo endpoint a copiar o lado errado.
+
+  A rota virou `POST` lendo `(req.body || {}).ticket`, com `req.query` deliberadamente ignorado; `poll-queue` passou a usar `postJsonToUrl`, igual ao `join`. `ARCHITECTURE` atualizado nos quatro idiomas.
+
+  **Junto veio `apps/game-api/server.http.test.js` — o primeiro teste em nível HTTP deste serviço, e a ausência dele é o que deixou o problema passar.** `queue.test.js` sempre testou o módulo de fila, nunca as rotas. 18 testes, rodando **sem MariaDB**: `consumeLaunchTicket` recusa ticket ausente, não-string ou com menos de 32 caracteres antes de tocar o banco, e toda a suíte cai nessa recusa antecipada.
+
+  Mutação aplicada e executada: revertendo `app.post` para `app.get`, **nove testes falham**. O rodapé do arquivo declara o que a suíte não prova — nada do caminho feliz, que continua exigindo banco e sessão real.
+
+  Registrado como `AUTH-04b` no [`AUTH_001_TRUST_BOUNDARY_INVENTORY.md`](docs/technical/AUTH_001_TRUST_BOUNDARY_INVENTORY.md). O `AUTH-04` já nomeava a classe "segredo em URL", mas registrava só a ocorrência do `masterKey` — que **continua aberta**, agora como `AUTH-04a`.
+
+- **`patches/` — a política escrita antes do primeiro patch (13/08/2026).** O diretório está vazio de patches e **essa é a situação preferida**. Ele existe porque todo projeto do ecossistema que acabou mantendo um fork pesado começou com um patch sem registro.
+
+  Traz a escada de decisão — SkyMP puro → adapter → PR upstream → patch registrado → fork —, um `manifest.json` vazio e `validate.js` sem dependências, com 38 testes, rodando na CI pelo job `higiene` (sem `npm ci`).
+
+  **O campo que justifica o validador é `loss_condition`, e ele veio do The Divine Comedy** — o único projeto do ecossistema que documenta isso. Eles anotam que o patch de `spawn.ts` some num reclone do SkyMP e que o `Skyrim.ccc` esvaziado volta se o Steam verificar os arquivos. **Um patch cuja perda é silenciosa é pior que patch nenhum:** você passa a confiar num comportamento que pode sumir sem aviso, e o sintoma reaparece meses depois como bug novo sem ninguém ligar uma coisa à outra.
+
+  O validador aceita `test: null` e `upstream_pr: null`, mas exige `notes` explicando nos dois casos. Patch sem teste e sem justificativa é o que a regra de contribuição proíbe; patch que deveria virar PR e nunca vira é um fork começando devagar.
+
+- **`MOD-005` — a paridade passou a enxergar o que o jogo carrega fora de `Data/` (13/08/2026).** `analyzePlugins` compara o `plugins.txt` do jogador com a ordem do servidor, e **conteúdo Creation Club nunca aparece no `plugins.txt`**. O Skyrim AE lê o `Skyrim.ccc` — na raiz do jogo, ao lado do executável — e carrega sozinho o que estiver listado e presente. Eram plugins ocupando índice de load order, invisíveis à verificação.
+
+  **O efeito é a falha do QA 2.15, pela porta que ninguém estava olhando:** o primeiro byte de todo FormID é o índice de load order, então o `base_id` do banco passa a apontar para outro record na tela daquele jogador. Sem erro, sem log — um baú com outra coisa dentro.
+
+  **O que torna isto pior que um mod extra é que o jogador não escolheu nada.** O conteúdo do `Skyrim.ccc` varia conforme o que aquela conta Steam possui; não é o mesmo arquivo para dois testadores.
+
+  `parseCccTxt` e `analyzeCreationClub` em `parity.mjs`, puros como o resto do módulo, 13 testes novos. A checagem é bidirecional, como o resto: CC que o jogador carrega e o servidor não declara desloca índice; CC que o servidor exige e o jogador não carrega falta record. Entrada listada no `.ccc` **sem arquivo em `Data/` não é acusada** — o jogo não a carrega, nenhum índice se move, e reprová-la barraria toda instalação que não comprou tudo.
+
+  **Detectar não é resolver, e a decisão de produto está aberta.** O [`MODPACK.md`](docs/MODPACK.md) lista cinco plugins de Creation Club como masters obrigatórios, o que faz o modpack depender de todo jogador ter as mesmas licenças — e pelo menos uma das entradas parece vir do upgrade pago do AE, o que precisa ser conferido uma a uma. As saídas são exigir CC e aceitar barrar quem não tem, ou remover aquelas entradas junto com os mods que dependem delas. Registrado no próprio `MODPACK.md`, com aviso.
+
+  Nada disso afeta a Fase 0, que exige os cinco masters do jogo base e nada mais.
+
 - **Fronteiras de runtime e transações consolidadas no commit `c23179d` (11/08/2026).** Eventos CEF agora entram por `core/ui-event-gateway.js`, com envelope validado e rate limiting configurável; `core/connection-monitor.js` protege polling, reconexão e respostas antigas da whitelist; `core/opaque-credential.js` centraliza geração, hash e redação de credenciais. Tesouros institucionais e mercado regional ganharam serviços transacionais com ledger (migrations v11–v12), e compras em barracas passaram a ser idempotentes por `requestId` (migration v13). A suíte do gamemode fechou esta entrega com **547 testes aprovados e zero falhas**. Os módulos PARKED continuam fora do boot e a homologação com clientes reais permanece pendente.
 
 - **A pergunta que decidia se o mundo é compartilhado subiu a `[DOC]` — e a resposta veio do código do upstream, não da wiki.** O Skyrim vanilla escala encontros ao nível do jogador. Se o SkyMP herdasse isso por cliente, dois jogadores lado a lado veriam o mesmo lobo com forças diferentes, e **realidade compartilhada é pré-requisito de Heavy RP, não detalhe de balanceamento** — a §7.4 do [`HOSTILE_MOB_ACTIVATION_DECISION.md`](docs/technical/HOSTILE_MOB_ACTIVATION_DECISION.md) registrava isso como risco que podia derrubar o desenho inteiro da rodada.

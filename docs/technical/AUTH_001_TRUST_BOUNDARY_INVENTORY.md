@@ -97,9 +97,23 @@ Whitelist seleciona `ORDER BY id DESC LIMIT 1` entre personagens aprovados. A se
 
 ### SECURITY-BLOCKER AUTH-04 — segredo em URL
 
-O Master API usa `masterKey` no path. URLs aparecem com facilidade em access logs, traces e proxies.
+URLs aparecem com facilidade em access logs, traces e proxies. Duas ocorrências desta classe foram identificadas.
+
+**AUTH-04a — `masterKey` no path do Master API.** Aberto.
 
 **Gate:** redaction imediata em observabilidade e ADR para autenticação por header/mTLS ou chave derivada, preservando compatibilidade SkyMP.
+
+**AUTH-04b — ticket de fila na query string. RESOLVIDO em 2026-08-13.**
+
+`GET /api/queue/status?ticket=…` lia a credencial de `req.query.ticket`, enquanto `POST /api/queue/join`, catorze linhas acima, sempre leu do corpo. Dois tratamentos do mesmo segredo no mesmo arquivo.
+
+Encontrado ao verificar se estávamos expostos ao problema que o `SensitiveArgumentMasker` do Crows RP revela — **não estávamos** por aquele caminho (o launcher não passa credencial por argumento de linha de comando; o ticket vai para `clientSettings.gameData.launcherTicket`, em arquivo), mas a verificação achou esta outra porta. Ver [`ECOSYSTEM_DEEP_DIVE`](../research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) §10.
+
+Impacto real era menor que o da AUTH-04a: o transporte já é HTTP puro, e o `queue_grant` rotaciona e é de uso único — um ticket que aparecesse num log provavelmente já estaria consumido. O que justificou corrigir foi o custo (não há launcher em produção, porque a Fase 0 nunca rodou) e a inconsistência, que convidava o próximo endpoint a copiar o lado errado.
+
+Correção: a rota virou `POST /api/queue/status` lendo `(req.body || {}).ticket`; `req.query` é ignorado. `poll-queue` no launcher passou a usar `postJsonToUrl`, igual ao `join-queue`.
+
+**Regressão travada por teste.** `apps/game-api/server.http.test.js` — primeiro teste em nível HTTP deste serviço, criado junto. Exige 404 no `GET /api/queue/status` e 401 quando o ticket vem só pela query. Verificado por mutação: revertendo `app.post` para `app.get`, nove testes falham.
 
 ## Caracterizações que viram testes/gates
 
@@ -110,6 +124,7 @@ O Master API usa `masterKey` no path. URLs aparecem com facilidade em access log
 5. Configuração staging/production deve ter `offlineMode=false`.
 6. Launcher online deve remover profileId legado antes da Fase AUTH-003.
 7. Staff role é resolvido por accountId server-side e removido no disconnect.
+8. Nenhuma credencial viaja em query string ou path — coberto para a fila por `server.http.test.js` (AUTH-04b); o `masterKey` (AUTH-04a) segue descoberto.
 
 ## Decisão para AUTH-002
 

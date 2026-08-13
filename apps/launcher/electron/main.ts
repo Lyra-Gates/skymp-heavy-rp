@@ -6,7 +6,7 @@ import http from 'http';
 import https from 'https';
 import crypto from 'crypto';
 import { URL } from 'url';
-import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins } from './parity.mjs';
+import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
 
 // ─── Constants & Env ───
 // Estes valores são substituídos em tempo de build pelo `define` do
@@ -811,28 +811,22 @@ ipcMain.handle('join-queue', async () => {
   return rememberQueueTicket(response.data);
 });
 
+// O ticket vai no corpo do POST, igual ao `join-queue` acima. Já foi query
+// string de um GET: query string entra em log de acesso e de proxy, e o ticket
+// é credencial — quem o tem consulta a fila como aquela conta. Ver
+// `SEC-QS-01` em docs/roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md.
 ipcMain.handle('poll-queue', async () => {
   const ticket = nextQueueTicket();
   if (!ticket) return { status: 'error', message: 'not_authenticated' };
 
-  try {
-    return await new Promise((resolve) => {
-      const url = `http://${SERVER_IP}:${API_PORT}/api/queue/status?ticket=${encodeURIComponent(ticket)}`;
-      http.get(url, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve(rememberQueueTicket(JSON.parse(data)));
-          } catch {
-            resolve({ status: 'error', message: 'invalid_response' });
-          }
-        });
-      }).on('error', () => resolve({ status: 'error', message: 'connection_failed' }));
-    });
-  } catch {
-    return { status: 'error', message: 'connection_failed' };
-  }
+  const response = await postJsonToUrl(
+    `http://${SERVER_IP}:${API_PORT}/api/queue/status`,
+    { ticket }
+  );
+
+  if (response.status === 0) return { status: 'error', message: 'connection_failed' };
+  if (!response.data) return { status: 'error', message: 'invalid_response' };
+  return rememberQueueTicket(response.data);
 });
 
 // ─── Mod Manager ───
@@ -938,12 +932,35 @@ ipcMain.handle('analyze-plugins', async (_event, folderPath, serverLoadOrder) =>
       ? parsePluginsTxt(fs.readFileSync(pluginsTxtPath, 'utf8')).filter(p => p.enabled).map(p => p.name)
       : undefined;
 
-    return analyzePlugins({
-      localPlugins: listDataPlugins(folderPath),
+    const localPlugins = listDataPlugins(folderPath);
+
+    const resultado = analyzePlugins({
+      localPlugins,
       serverLoadOrder,
       enabledPlugins,
       readHeader: (nome: string) => readPluginHeader(path.join(dataPath, nome))
     });
+
+    // Creation Club nao passa pelo plugins.txt: o Skyrim AE le o Skyrim.ccc e
+    // carrega sozinho o que estiver listado e presente em Data/. Sao plugins
+    // que ocupam indice de load order e que a checagem acima nao enxerga.
+    //
+    // O arquivo fica na raiz do jogo, ao lado do executavel — nao em Data/. E
+    // o conteudo dele varia conforme o que a conta Steam possui, entao dois
+    // testadores podem carregar listas diferentes sem ter escolhido nada.
+    const cccPath = path.join(folderPath, 'Skyrim.ccc');
+    const cccEntries = fs.existsSync(cccPath)
+      ? parseCccTxt(fs.readFileSync(cccPath, 'utf8'))
+      : [];
+
+    const cc = analyzeCreationClub({ cccEntries, localPlugins, serverLoadOrder });
+
+    return {
+      ...resultado,
+      ok: resultado.ok && cc.ok,
+      problems: [...resultado.problems, ...cc.problems],
+      creationClub: cc.effective
+    };
   } catch (e: any) {
     return { ok: false, problems: [e.message], plugins: [] };
   }

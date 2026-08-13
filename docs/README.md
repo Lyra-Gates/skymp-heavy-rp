@@ -13,6 +13,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | 0 | [CONSTITUICAO.md](CONSTITUICAO.md) | **A constituição de design.** O que o projeto é, o que nunca criar, e por que toda mecânica precisa responder "como isso gera histórias?". O Anexo A traz as tensões conhecidas dela. |
 | 1 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | **O estado real de cada componente**, incluindo o que não está pronto e o plano priorizado. É o documento mais honesto do projeto. |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | Como banco, painel web, bot, API do jogo, launcher e gamemode conversam. |
+| 2.1 | [skyadmin/README.md](skyadmin/README.md) | Centro de orientação do painel de staff: escopo, arquitetura, plano, segurança, operação e referências. |
 | 3 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | As regras que não são óbvias lendo o código. Quase todas existem porque alguém já quebrou aquilo. |
 | 4 | [../CHANGELOG.md](../CHANGELOG.md) | O que mudou em cada versão — e o que sabidamente não está pronto. |
 
@@ -90,9 +91,14 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 ### Pesquisa de forks
 
+As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/08 auditou oito forks do SkyMP; a de 13/08 cobriu os sete projetos de referência do briefing de ecossistema, dos quais quatro nunca tinham sido vistos.
+
 | Documento | Sobre |
 |---|---|
-| [research/SKYMP_FORK_RESEARCH_EXECUTIVE_SUMMARY.md](research/SKYMP_FORK_RESEARCH_EXECUTIVE_SUMMARY.md) | Síntese executiva da pesquisa do ecossistema e lacunas Heavy RP. |
+| [research/SKYMP_ECOSYSTEM_MATRIX.md](research/SKYMP_ECOSYSTEM_MATRIX.md) | **Rodada de 13/08.** Matriz de 37 sistemas contra sete projetos, com licença e profundidade de verificação de cada um — três deles não têm licença, e são justamente os que têm o que nos falta. |
+| [research/SKYMP_ECOSYSTEM_DEEP_DIVE.md](research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) | Relatório por projeto. Traz os quatro achados acionáveis, os dois resultados negativos, e onde nós estamos à frente. |
+| [roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md](roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md) | P0–P7 derivado da rodada de 13/08. Não reordena o roadmap de forks; acrescenta e declara dependência. Cinco tarefas não dependem da Fase 0. |
+| [research/SKYMP_FORK_RESEARCH_EXECUTIVE_SUMMARY.md](research/SKYMP_FORK_RESEARCH_EXECUTIVE_SUMMARY.md) | **Rodada de 12/08.** Síntese executiva da pesquisa do ecossistema e lacunas Heavy RP. |
 | [research/SKYMP_ECOSYSTEM_SYSTEM_MAP.md](research/SKYMP_ECOSYSTEM_SYSTEM_MAP.md) | Mapa dos sistemas encontrados nos forks estudados. |
 | [research/SKYMP_FORKS_SYSTEM_MATRIX.md](research/SKYMP_FORKS_SYSTEM_MATRIX.md) | Matriz comparativa dos forks. |
 | [technical/REFERENCE_STUDY_SKYMP_FORKS_2026-08-11.md](technical/REFERENCE_STUDY_SKYMP_FORKS_2026-08-11.md) | Estudo técnico consolidado e rastreável. |

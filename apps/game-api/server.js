@@ -9,7 +9,7 @@
  * Endpoints públicos (chamados pelo launcher do jogador):
  *   GET  /mods.json             → manifesto de paridade { mods, loadOrder }
  *   POST /api/queue/join        → { ticket } → entra na fila
- *   GET  /api/queue/status      → posição ou ticket de sessão
+ *   POST /api/queue/status      → { ticket } → posição ou ticket de sessão
  *   GET  /health                → diagnóstico
  *
  * Endpoints internos (X-Internal-Secret, chamados pelo gamemode):
@@ -234,14 +234,30 @@ app.post('/api/queue/join', async (req, res) => {
   }
 });
 
-app.get('/api/queue/status', async (req, res) => {
+/**
+ * POST e não GET, e o ticket vem no corpo e não na query string.
+ *
+ * O ticket é credencial: quem o tem entra na fila como aquela conta. Query
+ * string entra em log de acesso de servidor e de proxy; corpo de POST não.
+ * O `join` ao lado sempre leu do corpo — isto aqui lia da query, e eram dois
+ * tratamentos diferentes pro mesmo segredo a catorze linhas de distância.
+ *
+ * O impacto era menor do que parece (o transporte já é HTTP puro, e os tickets
+ * rotacionam e são de uso único), mas a inconsistência convidava a erro: o
+ * próximo endpoint copiaria um dos dois, e metade das chances era a errada.
+ *
+ * `req.query` é deliberadamente ignorado. O teste de regressão em
+ * `server.http.test.js` manda um ticket pela query e exige 401 — se alguém
+ * reintroduzir a leitura por lá, aquele teste quebra.
+ */
+app.post('/api/queue/status', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`queue-status:${ip}`, 120, 60 * 1000)) {
     return res.status(429).json({ status: 'error', message: 'rate_limited' });
   }
 
   try {
-    const identity = await consumeLaunchTicket(req.query.ticket);
+    const identity = await consumeLaunchTicket((req.body || {}).ticket);
     if (!identity) return res.status(401).json({ status: 'error', message: 'invalid_ticket' });
 
     const result = await persistAdmission(

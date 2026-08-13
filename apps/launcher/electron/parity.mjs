@@ -212,3 +212,108 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
 
   return { ok: problems.length === 0, problems, plugins };
 }
+
+/**
+ * Interpreta o `Skyrim.ccc`.
+ *
+ * Formato: um nome de plugin por linha, sem `*` — diferente do `plugins.txt`,
+ * porque aqui não existe "desativado". O que está listado e presente no disco
+ * carrega, ponto.
+ *
+ * @param {string} content
+ * @returns {string[]}
+ */
+export function parseCccTxt(content) {
+  if (typeof content !== 'string') return [];
+  return content
+    .split(/\r?\n/)
+    .map(linha => linha.trim())
+    .filter(linha => linha.length > 0 && !linha.startsWith('#'));
+}
+
+/**
+ * Confere a paridade do conteúdo Creation Club — o buraco que `analyzePlugins`
+ * não cobre.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Por que esta função existe
+ * ─────────────────────────────────────────────────────────────────────────────
+ * `analyzePlugins` compara o `plugins.txt` do jogador com a ordem do servidor.
+ * **Conteúdo Creation Club nunca aparece no `plugins.txt`.** O Skyrim AE lê o
+ * `Skyrim.ccc`, carrega o que estiver listado *e presente em `Data/`*, e
+ * encaixa esses plugins logo depois dos masters vanilla — ocupando índices que
+ * o servidor não conhece.
+ *
+ * Como o primeiro byte de todo FormID é o índice de load order, o efeito é o
+ * mesmo do "plugin extra": o `base_id` do banco passa a apontar pra outro
+ * record na tela daquele jogador. Sem erro e sem log — o sintoma é um baú com
+ * outra coisa dentro (a falha do QA 2.15).
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * O que torna isto pior que um mod extra
+ * ─────────────────────────────────────────────────────────────────────────────
+ * O conteúdo do `Skyrim.ccc` **varia conforme o que aquela conta Steam
+ * possui**. Não é o mesmo arquivo para dois testadores, e o jogador não
+ * escolheu nada disso. Um verificador que só olha `Data/` contra o manifesto
+ * não enxerga a diferença, porque os arquivos até podem estar lá — o que muda
+ * é o que o executável decide carregar.
+ *
+ * Por isso a checagem é bidirecional, como em `analyzePlugins`:
+ *
+ * - CC que o jogador carrega e o servidor não declara → desloca índice;
+ * - CC que o servidor declara e o jogador não carrega → falta record.
+ *
+ * A segunda direção é o risco de exigir Creation Club no modpack oficial: ela
+ * só passa se **todo** jogador tiver exatamente as mesmas licenças de CC.
+ *
+ * @param {Object} params
+ * @param {string[]} params.cccEntries        linhas do `Skyrim.ccc` (via `parseCccTxt`)
+ * @param {string[]} params.localPlugins      arquivos de plugin presentes em `Data/`
+ * @param {string[]} params.serverLoadOrder   ordem canônica do servidor
+ * @returns {{ok: boolean, problems: string[], effective: string[]}}
+ */
+export function analyzeCreationClub({ cccEntries, localPlugins, serverLoadOrder }) {
+  const problems = [];
+
+  if (!Array.isArray(serverLoadOrder) || serverLoadOrder.length === 0) {
+    return {
+      ok: false,
+      problems: ['Servidor nao informou load order: impossivel verificar paridade de Creation Club.'],
+      effective: []
+    };
+  }
+
+  const presentes = new Set((localPlugins || []).map(f => String(f).toLowerCase()));
+  const naOrdem = new Set(serverLoadOrder.map(f => String(f).toLowerCase()));
+
+  // Listado no .ccc *e* presente no disco. Entrada sem arquivo não carrega e
+  // não desloca nada — tratá-la como problema seria falso positivo em toda
+  // instalação que não comprou tudo.
+  const effective = (cccEntries || [])
+    .filter(nome => presentes.has(String(nome).toLowerCase()));
+
+  for (const cc of effective) {
+    if (!naOrdem.has(String(cc).toLowerCase())) {
+      problems.push(
+        `Creation Club ativo fora da load order do servidor: ${cc}. O jogo carrega ` +
+        `este plugin sozinho, pelo Skyrim.ccc, mesmo sem estar no plugins.txt — ` +
+        `e ele desloca os FormIDs de todos os plugins seguintes.`
+      );
+    }
+  }
+
+  // Direção inversa: o servidor conta com um CC que este jogador não carrega.
+  const efetivosMinusculo = new Set(effective.map(n => String(n).toLowerCase()));
+  for (const declarado of serverLoadOrder) {
+    const nome = String(declarado);
+    if (!/^cc[a-z0-9]/i.test(nome)) continue; // só conteúdo Creation Club
+    if (!efetivosMinusculo.has(nome.toLowerCase())) {
+      problems.push(
+        `Creation Club exigido pelo servidor e ausente: ${nome}. Ou a conta Steam ` +
+        `nao possui este conteudo, ou ele nao esta listado no Skyrim.ccc.`
+      );
+    }
+  }
+
+  return { ok: problems.length === 0, problems, effective };
+}
