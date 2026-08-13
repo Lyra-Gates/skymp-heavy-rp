@@ -227,10 +227,15 @@ Duas armadilhas do `check-schema-drift.js` registradas no arquivo da migration:
 
 1. `MODIFY COLUMN` não é lido — a nulabilidade de `gold_transactions.character_id`
    não aparece como drift se a migration não for aplicada. Conferir à mão.
-2. **Um `;` dentro de um `COMMENT '...'` corta o corpo do `ALTER`** e faz as
-   cláusulas `ADD INDEX` seguintes sumirem da declaração esperada, em silêncio.
-   Isso aconteceu ao escrever esta v15 — três índices ficaram invisíveis até a
-   causa ser encontrada. Nenhum `COMMENT` do arquivo usa ponto e vírgula.
+2. ~~Um `;` dentro de um `COMMENT '...'` corta o corpo do `ALTER`~~ — **consertado
+   em 13/08/2026.** O parser delimitava a instrução no primeiro `;` do texto, sem
+   saber que strings existem, e as cláusulas `ADD INDEX` seguintes sumiam da
+   declaração esperada em silêncio, com o comando saindo em código 0. Aconteceu
+   ao escrever esta v15: três índices de `gold_transactions` ficaram invisíveis.
+   `instrucoesSql` e `semComentarios` passaram a percorrer o SQL cientes de
+   aspas, e os dois `COMMENT` com ponto e vírgula continuam na migration **de
+   propósito** — são a regressão que `scripts/check-schema-drift.test.js`
+   verifica.
 
 ### 4.6 Serviços PARKED com o padrão antigo
 

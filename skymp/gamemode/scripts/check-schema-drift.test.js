@@ -87,6 +87,57 @@ describe('parser, contra as migrations reais do repositório', () => {
     const sql = drift.semComentarios('-- CREATE TABLE `fantasma` (\nSELECT 1;');
     assert.ok(!/fantasma/.test(sql));
   });
+
+  it('os índices da v15 sobrevivem ao ponto e vírgula dentro de COMMENT', () => {
+    // Regressão real de 13/08/2026. O parser cortava o `ALTER TABLE` no
+    // primeiro `;` do texto, sem saber que strings existem — e o `COMMENT` de
+    // `character_id` na v15 continha um. Os três `ADD INDEX` que vinham depois
+    // sumiam da declaração esperada, **em silêncio**, com o comando saindo em
+    // código 0: o checador passava a aprovar um banco sem aqueles índices.
+    const gold = esperado.get('gold_transactions');
+    for (const indice of ['idx_gold_tx_owner_date', 'idx_gold_tx_transfer', 'idx_gold_tx_actor_date']) {
+      assert.ok(gold.indices.has(indice), `indice '${indice}' (v15) nao foi extraido`);
+    }
+    for (const coluna of ['owner_type', 'owner_ref', 'counterparty_type', 'counterparty_ref', 'transfer_id', 'actor_character_id']) {
+      assert.ok(gold.colunas.has(coluna), `coluna '${coluna}' (v15) nao foi extraida`);
+    }
+  });
+});
+
+describe('parser, ciente de aspas', () => {
+  it('um `;` dentro de COMMENT não corta o ALTER TABLE', () => {
+    // Mutação que reprova aqui: voltar a delimitar a instrução com
+    // /ALTER\s+TABLE\s+`([^`]+)`([\s\S]*?);/ em vez de `instrucoesSql`.
+    const sql = [
+      'ALTER TABLE `t`',
+      "  ADD COLUMN IF NOT EXISTS `a` INT NULL COMMENT 'vale x; senao y',",
+      '  ADD INDEX IF NOT EXISTS `idx_depois_do_ponto_e_virgula` (`a`);'
+    ].join('\n');
+
+    const instrucoes = drift.instrucoesSql(sql);
+    assert.equal(instrucoes.length, 1, 'o ; da string nao pode terminar a instrucao');
+    assert.ok(/idx_depois_do_ponto_e_virgula/.test(instrucoes[0]));
+  });
+
+  it('divide em instruções de verdade quando o `;` está fora de string', () => {
+    const instrucoes = drift.instrucoesSql("USE `db`;\nALTER TABLE `t` ADD COLUMN `a` INT;\n");
+    assert.equal(instrucoes.length, 2);
+    assert.ok(/USE/.test(instrucoes[0]));
+    assert.ok(/ALTER/.test(instrucoes[1]));
+  });
+
+  it('`--` dentro de string não é comentário', () => {
+    // O mesmo cegueira, na outra função: `linha.replace(/--.*$/, '')` comia
+    // metade de um COMMENT que contivesse dois hifens.
+    const sql = drift.semComentarios("ADD COLUMN `faixa` INT COMMENT 'de 10--20 septims'");
+    assert.ok(/10--20 septims/.test(sql), 'o texto dentro da string precisa sobreviver');
+  });
+
+  it('aspas escapadas não confundem o fim da string', () => {
+    const instrucoes = drift.instrucoesSql("SELECT 'o''brien; nao termina aqui'; SELECT 2");
+    assert.equal(instrucoes.length, 2);
+    assert.ok(/o''brien; nao termina aqui/.test(instrucoes[0]));
+  });
 });
 
 describe('comparação', () => {

@@ -72,12 +72,89 @@ function versaoDe(nomeArquivo) {
   return m ? Number(m[1]) : 0;
 }
 
-/** Remove comentários de linha para não casar padrões dentro de explicação. */
+/**
+ * Devolve o índice do caractere seguinte ao fechamento da string que começa em
+ * `inicio` — que precisa ser `'`, `"` ou uma crase.
+ *
+ * Trata `''` e `\'` como escape, que é o que o MySQL aceita dentro de string.
+ * Identificador entre crases não usa `\`, só a crase dobrada. String não
+ * fechada consome o resto do arquivo, que é o comportamento seguro: melhor o
+ * parser enxergar de menos e o `--list` mostrar isso do que ele enxergar SQL
+ * onde há texto.
+ */
+function fimDaString(sql, inicio) {
+  const aspas = sql[inicio];
+  for (let i = inicio + 1; i < sql.length; i++) {
+    const c = sql[i];
+    if (c === '\\' && aspas !== '`') { i++; continue; }
+    if (c === aspas) {
+      if (sql[i + 1] === aspas) { i++; continue; }
+      return i + 1;
+    }
+  }
+  return sql.length;
+}
+
+/**
+ * Remove comentários de linha para não casar padrões dentro de explicação.
+ *
+ * ─── Por que isto percorre caractere a caractere ────────────────────────────
+ *
+ * A versão anterior era `linha.replace(/--.*$/, '')`, que não sabe que strings
+ * existem: `COMMENT 'faixa 10--20'` perdia metade do texto. Isso não quebrava
+ * nada sozinho, mas é a mesma cegueira que quebrava a leitura de `ALTER TABLE`
+ * (ver `instrucoesSql`), e consertar uma sem a outra deixaria a armadilha de pé
+ * com outra forma.
+ */
 function semComentarios(sql) {
-  return sql
-    .split('\n')
-    .map(linha => linha.replace(/--.*$/, ''))
-    .join('\n');
+  let saida = '';
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+    if (c === "'" || c === '"' || c === '`') {
+      const fim = fimDaString(sql, i);
+      saida += sql.slice(i, fim);
+      i = fim - 1;
+      continue;
+    }
+    if (c === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      saida += '\n';
+      continue;
+    }
+    saida += c;
+  }
+  return saida;
+}
+
+/**
+ * Divide o SQL em instruções, cortando no `;` que **não** está dentro de string.
+ *
+ * ─── O bug que isto conserta ───────────────────────────────────────────────
+ *
+ * A leitura de `ALTER TABLE` usava `/ALTER\s+TABLE\s+`([^`]+)`([\s\S]*?);/`, que
+ * para no primeiro `;` do texto. Um ponto e vírgula dentro de um `COMMENT '...'`
+ * cortava a instrução no meio, e as cláusulas `ADD INDEX` que viessem depois
+ * sumiam da declaração esperada — **em silêncio**, com o comando saindo em
+ * código 0. O checador passava a aprovar um banco sem aqueles índices, que é
+ * exatamente a falha calada que ele existe para não ter.
+ *
+ * Encontrado em 13/08/2026 ao escrever a `migration-v15-economy-framework.sql`:
+ * três índices de `gold_transactions` ficaram invisíveis porque um comentário de
+ * coluna dizia `'... = character; NULL para os demais'`.
+ */
+function instrucoesSql(sql) {
+  const instrucoes = [];
+  let inicio = 0;
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+    if (c === "'" || c === '"' || c === '`') { i = fimDaString(sql, i) - 1; continue; }
+    if (c === ';') {
+      instrucoes.push(sql.slice(inicio, i));
+      inicio = i + 1;
+    }
+  }
+  if (sql.slice(inicio).trim()) instrucoes.push(sql.slice(inicio));
+  return instrucoes;
 }
 
 /**
@@ -116,10 +193,16 @@ function extrairEsperado(arquivos) {
     }
 
     // ALTER TABLE `nome` ... (ADD COLUMN / ADD INDEX / ADD KEY)
-    const reAlter = /ALTER\s+TABLE\s+`([^`]+)`([\s\S]*?);/gi;
-    while ((m = reAlter.exec(sql)) !== null) {
-      const tabela = garante(m[1], origem);
-      const corpo = m[2];
+    //
+    // O corpo vem de `instrucoesSql`, que corta no `;` fora de string. Um regex
+    // não-guloso até o primeiro `;` truncava a instrução quando um `COMMENT`
+    // continha ponto e vírgula — ver o cabeçalho daquela função.
+    for (const instrucao of instrucoesSql(sql)) {
+      const alter = /^\s*ALTER\s+TABLE\s+`([^`]+)`([\s\S]*)$/i.exec(instrucao);
+      if (!alter) continue;
+
+      const tabela = garante(alter[1], origem);
+      const corpo = alter[2];
 
       const reCol = /ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?`([^`]+)`/gi;
       let c;
@@ -299,6 +382,7 @@ module.exports = {
   listarArquivosSql,
   versaoDe,
   semComentarios,
+  instrucoesSql,
   extrairEsperado,
   compararSchemas,
   houveFalta

@@ -23,13 +23,13 @@
 -- runtime com "Column 'character_id' cannot be null". Conferir à mão:
 --     SHOW COLUMNS FROM gold_transactions LIKE 'character_id';
 --
--- ⚠️ Segunda armadilha do mesmo checador, descoberta ao escrever esta migration:
--- ele delimita o corpo de um `ALTER TABLE` no PRIMEIRO `;` do texto, sem saber
--- que strings existem. Um `;` dentro de um `COMMENT '...'` corta o resto da
--- instrucao, e as clausulas `ADD INDEX` que vierem depois somem da declaracao
--- esperada — silenciosamente, porque o comando continua saindo com codigo 0.
--- Por isso nenhum COMMENT deste arquivo usa ponto e virgula. Se voce acrescentar
--- um e os indices sumirem do `npm run check:schema:list`, a causa e essa.
+-- Nota historica: escrever esta migration expos um segundo defeito do mesmo
+-- checador — ele delimitava o corpo de um `ALTER TABLE` no PRIMEIRO `;` do
+-- texto, sem saber que strings existem, entao os tres `ADD INDEX` abaixo
+-- sumiam da declaracao esperada por causa do `;` no COMMENT de `character_id`.
+-- Silenciosamente, com o comando saindo em codigo 0. O parser foi consertado
+-- (`instrucoesSql`), e os dois COMMENT com ponto e virgula ficaram aqui de
+-- proposito: sao a regressao que `check-schema-drift.test.js` verifica.
 -- =============================================================================
 USE `skymp_rp`;
 
@@ -51,7 +51,7 @@ USE `skymp_rp`;
 -- -----------------------------------------------------------------------------
 ALTER TABLE `gold_transactions`
   MODIFY COLUMN `character_id` INT NULL
-    COMMENT 'Preenchido quando owner_type = character. NULL para os demais titulares';
+    COMMENT 'Preenchido quando owner_type = character; NULL para os demais titulares';
 
 ALTER TABLE `gold_transactions`
   ADD COLUMN IF NOT EXISTS `owner_type` VARCHAR(16) NOT NULL DEFAULT 'character'
@@ -73,7 +73,7 @@ ALTER TABLE `gold_transactions`
   -- campo `actor` do briefing §5, e sem ele "quem mandou tirar esse ouro" so
   -- existe no `audit_logs`, que e outro banco de dados conceitual.
   ADD COLUMN IF NOT EXISTS `actor_character_id` INT DEFAULT NULL
-    COMMENT 'Personagem que originou o movimento. NULL quando foi o servidor',
+    COMMENT 'Personagem que originou o movimento; NULL quando foi o servidor',
   ADD INDEX IF NOT EXISTS `idx_gold_tx_owner_date` (`owner_type`, `owner_ref`, `created_at`),
   ADD INDEX IF NOT EXISTS `idx_gold_tx_transfer` (`transfer_id`),
   ADD INDEX IF NOT EXISTS `idx_gold_tx_actor_date` (`actor_character_id`, `created_at`);
