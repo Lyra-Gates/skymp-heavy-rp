@@ -57,13 +57,22 @@ function novaConexao() {
       if (/FROM market_stall_items msi[\s\S]*INNER JOIN market_stalls/i.test(sql)) {
         return [itemDoBanco ? [itemDoBanco] : []];
       }
-      if (/SELECT gold FROM characters WHERE id = \? FOR UPDATE/i.test(sql)) {
+      // `SELECT gold AS balance` é a trava canônica do `core/economy-service`
+      // (ela existe para ordenar os locks); `SELECT gold` é a do
+      // `transaction-service`, que aplica o delta. As duas leem a mesma linha.
+      if (/SELECT gold(?: AS balance)? FROM characters WHERE id = \? FOR UPDATE/i.test(sql)) {
         const id = params[0];
-        return [saldos[id] === undefined ? [] : [{ gold: saldos[id] }]];
+        return [saldos[id] === undefined ? [] : [{ gold: saldos[id], balance: saldos[id] }]];
       }
       if (/UPDATE characters SET gold = gold \+ \?/i.test(sql)) {
         saldos[params[1]] = (saldos[params[1]] || 0) + params[0];
         return [{}];
+      }
+      if (/SELECT treasury AS balance FROM cities WHERE id = \? FOR UPDATE/i.test(sql)) {
+        return [[{ balance: tesouro.reduce((soma, t) => soma + (t.cidade === params[0] ? t.valor : 0), 0) }]];
+      }
+      if (/FROM gold_transactions WHERE idempotency_key = \? FOR UPDATE/i.test(sql)) {
+        return [[]];
       }
       if (/SELECT count FROM character_inventory/i.test(sql)) return [[]];
       if (/INSERT INTO character_inventory/i.test(sql)) return [{}];
@@ -71,16 +80,31 @@ function novaConexao() {
         const sale = vendas.find(venda => venda.requestId === params[0]);
         return [sale ? [{ id: sale.id, stall_id: sale.stallId, buyer_character_id: sale.comprador, count: 1, unit_price: PRECO, tax_amount: sale.imposto }] : []];
       }
-      if (/UPDATE cities SET treasury/i.test(sql)) {
+      if (/UPDATE cities SET treasury = treasury \+ \?/i.test(sql)) {
         tesouro.push({ valor: params[0], cidade: params[1] });
-        return [{}];
+        return [{ affectedRows: 1 }];
       }
       if (/INSERT INTO gold_transactions/i.test(sql)) {
-        ledgerOuro.push({ characterId: params[1], delta: params[2], reason: params[3] });
+        // Posições mudaram na migration v15: o razão de ouro passou a nomear os
+        // dois lados do movimento, como o de item já fazia desde a v14.
+        // (transaction_id, character_id, owner_type, owner_ref,
+        //  counterparty_type, counterparty_ref, transfer_id, actor_character_id,
+        //  delta, reason, module, idempotency_key)
+        ledgerOuro.push({ characterId: params[1], delta: params[8], reason: params[9] });
         return [{}];
       }
       if (/INSERT INTO inventory_transactions/i.test(sql)) {
-        ledgerItem.push({ characterId: params[1], baseId: params[2], delta: params[3], reason: params[4] });
+        // Posições mudaram na migration v14: o razão passou a nomear os dois
+        // lados do movimento (owner_*/counterparty_*/transfer_id) entre o
+        // `character_id` e o `base_id`.
+        // (transaction_id, character_id, owner_type, owner_ref,
+        //  counterparty_type, counterparty_ref, transfer_id,
+        //  base_id, delta, reason, module, idempotency_key)
+        ledgerItem.push({
+          characterId: params[1], ownerType: params[2], ownerRef: params[3],
+          counterpartyType: params[4], counterpartyRef: params[5],
+          baseId: params[7], delta: params[8], reason: params[9]
+        });
         return [{}];
       }
       if (/INSERT INTO market_stall_sales/i.test(sql)) {
@@ -168,18 +192,36 @@ describe('buyItem — tudo numa transacao so', () => {
     assert.deepEqual(tesouro, [{ valor: imposto, cidade: CIDADE }]);
   });
 
-  it('registra as duas pontas do ouro no ledger', async () => {
+  it('registra o pagamento E o imposto no ledger', async () => {
     await marketStalls.buyItem(COMPRADOR_ACTOR, STALL_ID, ITEM_ID, 2);
 
-    assert.equal(ledgerOuro.length, 2, 'compra e venda sao dois lancamentos');
+    // Eram 2 linhas até 13/08/2026: comprador `-200` e vendedor `+180`. O
+    // imposto de 20 entrava em `cities.treasury` com `UPDATE` solto e não
+    // aparecia em lugar nenhum do ledger — Achado 2 de
+    // `ECONOMY_FRAMEWORK_AUDIT.md`. Agora são quatro, e a soma fecha em zero.
+    assert.equal(ledgerOuro.length, 4, 'pagamento (2 pernas) + imposto (2 pernas)');
+    assert.equal(
+      ledgerOuro.reduce((soma, l) => soma + l.delta, 0), 0,
+      'a soma dos deltas de uma venda inteira tem que dar zero — nenhum septim entra ou sai do mundo numa compra'
+    );
 
     const compra = ledgerOuro.find(l => l.characterId === COMPRADOR_CHAR);
-    const venda = ledgerOuro.find(l => l.characterId === VENDEDOR_CHAR);
+    const venda = ledgerOuro.find(l => l.characterId === VENDEDOR_CHAR && l.delta > 0);
+    const impostoPago = ledgerOuro.find(l => l.characterId === VENDEDOR_CHAR && l.delta < 0);
+    const impostoRecebido = ledgerOuro.find(l => l.characterId === null);
 
     assert.equal(compra.delta, -200, 'saldo que muda sem linha no ledger e ouro sem rastro');
     assert.equal(compra.reason, 'stall_purchase');
-    assert.equal(venda.delta, 180);
-    assert.equal(venda.reason, 'stall_sale');
+    assert.equal(venda.delta, 200, 'o vendedor ganha o total cheio e paga o imposto separado');
+    assert.equal(impostoPago.delta, -20);
+    assert.ok(impostoRecebido, 'o tesouro da cidade precisa da propria linha');
+    assert.equal(impostoRecebido.delta, 20);
+    assert.equal(impostoRecebido.reason, 'stall_tax');
+    // As duas pernas de uma transferência compartilham o `reason`, porque são o
+    // mesmo evento. Antes eram `stall_purchase` e `stall_sale` — dois nomes
+    // para um fato, e nada dizendo que eram o mesmo. Quem é comprador e quem é
+    // vendedor agora está no sinal do delta e em `owner`/`counterparty`.
+    assert.equal(venda.reason, 'stall_purchase');
   });
 
   it('registra o item entregue no ledger de inventario', async () => {
@@ -197,7 +239,7 @@ describe('buyItem — tudo numa transacao so', () => {
     assert.equal(vendas.length, 1);
     assert.equal(vendas[0].comprador, COMPRADOR_CHAR);
     assert.equal(vendas[0].vendedor, VENDEDOR_CHAR);
-    assert.equal(vendas[0].imposto, 20, 'o imposto e o unico rastro do que foi pro tesouro da cidade');
+    assert.equal(vendas[0].imposto, 20, 'o historico do mercado guarda o imposto alem do ledger');
   });
 
   it('repete o mesmo requestId sem cobrar, entregar ou registrar uma segunda vez', async () => {
@@ -208,7 +250,7 @@ describe('buyItem — tudo numa transacao so', () => {
     assert.deepEqual(eventos, ['begin', 'commit', 'begin', 'commit']);
     assert.equal(saldos[COMPRADOR_CHAR], 800);
     assert.equal(saldos[VENDEDOR_CHAR], 180);
-    assert.equal(ledgerOuro.length, 2);
+    assert.equal(ledgerOuro.length, 4, 'o replay nao grava um segundo conjunto de pernas');
     assert.equal(ledgerItem.length, 1);
     assert.equal(vendas.length, 1);
     assert.ok(notificacoes.some(n => /ja havia sido confirmada/i.test(n.message)));

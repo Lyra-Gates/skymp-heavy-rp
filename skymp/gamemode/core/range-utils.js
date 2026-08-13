@@ -42,13 +42,27 @@ function distanceBetween(a, b) {
 }
 
 /**
+ * Sem `mp`, esta função deixa passar — e é preciso que deixe: é o que permite
+ * exercitar `fineTarget`, `arrestTarget` e o pipeline de interação sem subir o
+ * jogo, e mudar isso quebraria dezenas de testes por motivo nenhum.
+ *
+ * O que mudou em 13/08/2026 foi só a honestidade do retorno. `{ok: true}` é uma
+ * **afirmação positiva sobre o mundo** — "o alvo está perto" —, e este caminho
+ * não mediu nada. O resto do projeto falha para o lado neutro quando não sabe
+ * (`safe-zones.zoneOf` devolve `null`, `espm.pareceItem` responde `ok` marcando
+ * `indisponivel`); aqui a marca é `unverified`.
+ *
+ * Quem chama continua livre para ignorá-la. O `core/interaction-service.js` a
+ * usa para não gravar "distância validada" numa auditoria em que ninguém mediu
+ * distância — ver `docs/research/CORE_FRAMEWORK_AUDIT.md` §5.
+ *
  * @param {number} sourceActorId
  * @param {number} targetActorId
  * @param {number} maxRange
- * @returns {{ok: boolean, reason?: string}}
+ * @returns {{ok: boolean, reason?: string, unverified?: boolean}}
  */
 function assertRange(sourceActorId, targetActorId, maxRange) {
-  if (typeof mp === 'undefined') return { ok: true };
+  if (typeof mp === 'undefined') return { ok: true, unverified: true };
   const distance = distanceBetween(sourceActorId, targetActorId);
   if (distance === null) return { ok: false, reason: 'Nao foi possivel validar proximidade.' };
   if (distance > maxRange) return { ok: false, reason: 'Alvo fora de alcance.' };

@@ -4,9 +4,20 @@
  *
  * Funciona 100% server-side:
  * - O cliente envia a intenção de craftar (/craft [recipeId]).
- * - O servidor valida ingredientes, station proximity e perks.
- * - Consome os ingredientes do inventário seguro.
- * - Entrega o resultado.
+ * - O servidor consome os ingredientes e entrega o resultado numa transação só.
+ *
+ * ⚠️ **O que este cabeçalho afirmava e não era verdade.** Até 13/08/2026 esta
+ * lista dizia *"o servidor valida ingredientes, station proximity e perks"*.
+ * Ingrediente sim, pelo `FOR UPDATE`. **Proximidade de estação: nunca** — o
+ * `craftItem` sequer carregava a estação, então `/craft` funcionava do outro
+ * lado do mapa. **Perk: nunca** — `requires_perk` é lido em `listRecipes` e
+ * nunca comparado com nada.
+ *
+ * Hoje o `craftItem` confere que a estação **declarada** é a da receita, que é
+ * uma regra de verdade e não é proximidade. Perk e proximidade continuam sem
+ * validação, e agora estão escritos como ausentes em vez de anunciados como
+ * presentes. Ver `docs/research/INVENTORY_TRADE_CRAFTING_AUDIT.md` §11 e
+ * `docs/gameplay/CRAFTING_SYSTEM.md` §5.
  *
  * ⚠️ PARKED: não é registrado no `core/module-registry.js` e não roda em
  * produção. A migração abaixo é de segurança interna — reativar é outra
@@ -27,13 +38,18 @@
  * transação) com outro substantivo — o mesmo defeito que motivou apagar aquele
  * arquivo, transposto de ouro para item.
  *
- * Agora é uma transação só, pelas primitivas `tx.*`, no mesmo formato que a
- * compra em barraca usa desde que ela deixou de escrever o próprio SQL.
+ * A Fase 3 (07/08/2026) juntou tudo numa transação pelas primitivas `tx.*`. Em
+ * 13/08/2026 o mesmo fluxo passou a ser **uma chamada** de
+ * `core/inventory.exchange`, com duas pernas: o consumo (personagem →
+ * `system:consume`) e a entrega (`system:craft` → personagem). O ganho sobre a
+ * versão anterior não é atomicidade — aquela já estava certa — e sim que o
+ * outro lado de cada movimento passa a ter nome no razão, e que a chave de
+ * idempotência deixou de ser inútil (ver o passo 4 do `craftItem`).
  */
 
 const db = require('./database');
 const commands = require('./commands');
-const transactionService = require('./core/transaction-service');
+const inventory = require('./core/inventory');
 const MODULE = 'crafting';
 
 // Tipos de estação e seus formDescs (objetos de referência do Skyrim)
@@ -65,9 +81,16 @@ async function listRecipes(actorId, stationType) {
 }
 
 /**
- * Executa um craft. /craft [recipeId].
+ * Executa um craft. /craft [recipeId] [estacao].
+ *
+ * @param {number} actorId
+ * @param {number} characterId
+ * @param {number|string} recipeId
+ * @param {object} [opts]
+ * @param {string} [opts.stationType] estação em que o jogador diz estar
+ * @param {string} [opts.requestId]   chave de idempotência vinda de quem pediu
  */
-async function craftItem(actorId, characterId, recipeId) {
+async function craftItem(actorId, characterId, recipeId, opts = {}) {
   // 1. Carrega a receita
   const recipeRows = await db.query('SELECT * FROM crafting_recipes WHERE id = ?', [recipeId]);
   if (recipeRows.length === 0) {
@@ -76,7 +99,26 @@ async function craftItem(actorId, characterId, recipeId) {
   }
   const recipe = recipeRows[0];
 
-  // 2. Carrega os ingredientes
+  // 2. A estacao declarada precisa ser a da receita.
+  //
+  // Isto NAO e proximidade: o servidor nao sabe onde estao as forjas do mundo,
+  // e nenhuma tabela guarda isso. O que esta checagem impede e forjar uma
+  // espada no caldeirao de cozinha — e ela existe agora porque o cabecalho
+  // deste arquivo afirmava, desde julho, que o servidor validava "station
+  // proximity", e nada no `craftItem` chegava perto de fazer isso
+  // (auditoria §11). Proximidade real depende do resolvedor de alvo `object`,
+  // que o Interaction Framework ainda nao tem — ver
+  // docs/gameplay/CRAFTING_SYSTEM.md §5.
+  if (opts.stationType && opts.stationType !== recipe.station_type) {
+    if (typeof mp !== 'undefined') {
+      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
+        `Esta receita e feita em: ${recipe.station_type}.`
+      ]);
+    }
+    return false;
+  }
+
+  // 3. Carrega os ingredientes
   const ingredients = await db.query('SELECT base_id, count FROM crafting_ingredients WHERE recipe_id = ?', [recipeId]);
   if (ingredients.length === 0) {
     // Receita sem ingrediente cadastrado criaria item do nada. `addRecipe` e
@@ -86,61 +128,61 @@ async function craftItem(actorId, characterId, recipeId) {
     return false;
   }
 
-  // 3. Uma chave por (personagem, receita, instante) — se o comando for
-  // reenviado, o ledger recusa a segunda gravacao em vez de craftar duas vezes.
-  const idempotencyKey = `craft_${characterId}_${recipeId}_${Date.now()}`;
-
-  // 4. Consome ingredientes e entrega o resultado — UMA transacao.
+  // 4. A chave de idempotencia.
   //
-  // A checagem de estoque nao precisa de passo proprio: `applyInventoryDelta`
-  // le com `FOR UPDATE` e lanca se faltar, o que e estritamente melhor que o
+  // Ela continha `Date.now()`, e por isso nunca deduplicou nada: dois `/craft`
+  // seguidos produziam duas chaves diferentes, o `UNIQUE` nao era violado e o
+  // craft acontecia duas vezes — enquanto o comentario ali afirmava o
+  // contrario (auditoria §5). Uma chave de idempotencia vem de QUEM PEDE, ou
+  // de um estado estavel. Nunca do relogio de quem executa.
+  const requestId = opts.requestId || inventory.newRequestId(`craft.${characterId}.${recipeId}`);
+
+  // 5. Consome ingredientes e entrega o resultado — UMA transacao, duas pernas.
+  //
+  // A checagem de estoque nao precisa de passo proprio: o `applyStackDelta` le
+  // com `FOR UPDATE` e lanca se faltar, o que e estritamente melhor que o
   // `hasItem` que existia antes. Aquele lia fora da transacao, entao entre a
   // checagem e o consumo o item podia ter saido por outro caminho (venda em
   // barraca, /removeitem da staff) e o craft consumia o que nao existia mais.
-  const conn = await db.getConnection();
-  try {
-    await conn.beginTransaction();
+  //
+  // As duas pernas nomeiam a contraparte `system`: o ingrediente vai para o
+  // nada e o resultado vem do nada. E o que faz a soma dos deltas do razao
+  // fechar em zero por `transfer_id`, e o que torna respondivel a pergunta
+  // "de onde saiu este item?" que a auditoria §2 nao conseguia responder.
+  const resultado = await inventory.exchange({
+    legs: [
+      {
+        from: inventory.character(characterId, actorId),
+        to: inventory.system(inventory.SYSTEM_SOURCES.CONSUME),
+        items: ingredients.map(ing => ({ baseId: ing.base_id, quantity: ing.count }))
+      },
+      {
+        from: inventory.system(inventory.SYSTEM_SOURCES.CRAFT),
+        to: inventory.character(characterId, actorId),
+        items: [{ baseId: recipe.result_base_id, quantity: recipe.result_count }]
+      }
+    ],
+    reason: 'craft',
+    module: MODULE,
+    requestId
+  });
 
-    for (const ing of ingredients) {
-      await transactionService.tx.applyInventoryDelta(conn, characterId, ing.base_id, -ing.count);
-      await transactionService.tx.recordInventoryLedger(conn, {
-        characterId, baseId: ing.base_id, delta: -ing.count,
-        reason: 'craft_consume', module: MODULE,
-        idempotencyKey: `${idempotencyKey}_in_${ing.base_id}`
-      });
-    }
-
-    await transactionService.tx.applyInventoryDelta(conn, characterId, recipe.result_base_id, recipe.result_count);
-    await transactionService.tx.recordInventoryLedger(conn, {
-      characterId, baseId: recipe.result_base_id, delta: recipe.result_count,
-      reason: 'craft_result', module: MODULE,
-      idempotencyKey: `${idempotencyKey}_out`
-    });
-
-    await conn.commit();
-  } catch (err) {
-    await conn.rollback();
-    // `err.message` das primitivas carrega nome de tabela e coluna quando o
-    // erro e de SQL — mesma correcao que a compra em barraca ja levou. As
-    // mensagens de regra ("Estoque insuficiente") o jogador precisa ver.
-    console.error(`[crafting] Craft falhou (char=${characterId} recipe=${recipeId}):`, err.message);
+  if (!resultado.ok) {
+    console.error(`[crafting] Craft falhou (char=${characterId} recipe=${recipeId}): ${resultado.code} ${resultado.reason}`);
     if (typeof mp !== 'undefined') {
-      const regra = /insuficiente|nao possui|não possui/i.test(err.message);
-      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
-        regra ? `Craft cancelado: ${err.message}` : 'Nao foi possivel concluir o craft.'
-      ]);
+      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [`Craft cancelado: ${resultado.reason}`]);
     }
     return false;
-  } finally {
-    conn.release();
   }
 
-  // 5. Cliente APOS o commit — o banco ja e a fonte de verdade, e uma falha
-  // aqui e reconciliada no proximo login pelo inventory-service.
-  for (const ing of ingredients) {
-    transactionService.tx.applyToClient(actorId, ing.base_id, -ing.count);
+  if (resultado.duplicate) {
+    // Reenvio do mesmo pedido. Nao craftou de novo, e dizer "voce criou" seria
+    // mentir sobre um item que o jogador ja tem.
+    if (typeof mp !== 'undefined') {
+      mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Este craft ja havia sido concluido.']);
+    }
+    return true;
   }
-  transactionService.tx.applyToClient(actorId, recipe.result_base_id, recipe.result_count);
 
   if (typeof mp !== 'undefined') {
     mp.callPapyrusFunction('global', 'Debug', 'notification', null, [

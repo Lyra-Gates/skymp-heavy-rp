@@ -32,12 +32,13 @@ O erro periódico de conexão a `127.0.0.1:3001` é o Master API não iniciado e
 ## Passos dentro do jogo
 
 1. Entrar com personagem autorizado a executar `run_world_probe`.
-2. Usar `/censofauna` numa área exterior com fauna.
-3. Usar `/censofauna alvo <actorId>` para fixar uma criatura observada por dois clientes.
-4. Matar uma criatura de teste.
-5. Executar `/sondacadaver <actorId>` no cadáver.
-6. Guardar o relatório produzido e o veredito `LE_E_ESCREVE`, `LE_MAS_NAO_ESCREVE` ou `NAO_LE_NAO_ESVAZIA`.
-7. Encerrar o servidor; as flags não ficam persistidas pelo script.
+2. No ponto escolhido dentro do Red Wave, ao lado da cama, usar `/ondestou` para registrar a CELL, posição e rotação completas do spawn inicial.
+3. Usar `/censofauna` numa área exterior com fauna.
+4. Usar `/censofauna alvo <actorId>` para fixar uma criatura observada por dois clientes.
+5. Matar uma criatura de teste.
+6. Executar `/sondacadaver <actorId>` no cadáver.
+7. Guardar o relatório produzido e o veredito `LE_E_ESCREVE`, `LE_MAS_NAO_ESCREVE` ou `NAO_LE_NAO_ESVAZIA`.
+8. Encerrar o servidor; as flags não ficam persistidas pelo script.
 
 ## Gate do próximo desenvolvimento
 

@@ -72,7 +72,7 @@ Transforma launch ticket em admissão e game session. É autoridade temporária 
 
 - Em online mode, profileId vem da resposta do Master API e representa accountId.
 - `connection-monitor` procura actor por profileId via polling e evita que uma promise antiga aprove/rejeite uma reconexão nova.
-- `whitelist.checkWhitelist` hoje consulta `discord_identities.discord_id = profileId.toString()`. Isso conflita semanticamente com o Master API, que retorna `accountId` como profileId. O código só funciona de modo robusto se o valor retornado também corresponder a um `discord_id`, o que não é garantido.
+- `whitelist.checkWhitelist` normaliza o `profileId` online para `accountId` e consulta `accounts.id`. `discord_id` continua sendo somente a identidade externa de login.
 - Depois da resolução, gameplay deve usar `commands.getActiveCharacterData(actorId)`, nunca characterId/profileId enviado em UI packet.
 
 ## Security blockers
@@ -83,11 +83,11 @@ Transforma launch ticket em admissão e game session. É autoridade temporária 
 
 **Gate:** CI/config doctor deve reprovar `offlineMode=true` fora de ambiente local; o launcher não deve gravar profileId no fluxo online.
 
-### SECURITY-BLOCKER AUTH-02 — semântica divergente de profileId
+### SECURITY-BLOCKER AUTH-02 — semântica divergente de profileId (**RESOLVIDO em 2026-08-12**)
 
-Master API retorna `accountId`, mas `whitelist.js` busca esse valor na coluna `discord_identities.discord_id`. Account ID e Discord ID são namespaces diferentes.
+O Master API retorna `accountId` e a whitelist agora consulta `accounts.id`. Account ID e Discord ID permanecem namespaces separados.
 
-**Gate:** decidir e testar um único significado: online `profileId === accountId`; whitelist deve consultar `accounts.id`. Discord ID é atributo, não chave de gameplay.
+**Evidência:** online `profileId === accountId`; `whitelist.test.js` cobre a consulta por `accounts.id`. Discord ID é atributo, não chave de gameplay.
 
 ### SECURITY-BLOCKER AUTH-03 — personagem não vinculado à sessão
 
@@ -97,9 +97,23 @@ Whitelist seleciona `ORDER BY id DESC LIMIT 1` entre personagens aprovados. A se
 
 ### SECURITY-BLOCKER AUTH-04 — segredo em URL
 
-O Master API usa `masterKey` no path. URLs aparecem com facilidade em access logs, traces e proxies.
+URLs aparecem com facilidade em access logs, traces e proxies. Duas ocorrências desta classe foram identificadas.
+
+**AUTH-04a — `masterKey` no path do Master API.** Aberto.
 
 **Gate:** redaction imediata em observabilidade e ADR para autenticação por header/mTLS ou chave derivada, preservando compatibilidade SkyMP.
+
+**AUTH-04b — ticket de fila na query string. RESOLVIDO em 2026-08-13.**
+
+`GET /api/queue/status?ticket=…` lia a credencial de `req.query.ticket`, enquanto `POST /api/queue/join`, catorze linhas acima, sempre leu do corpo. Dois tratamentos do mesmo segredo no mesmo arquivo.
+
+Encontrado ao verificar se estávamos expostos ao problema que o `SensitiveArgumentMasker` do Crows RP revela — **não estávamos** por aquele caminho (o launcher não passa credencial por argumento de linha de comando; o ticket vai para `clientSettings.gameData.launcherTicket`, em arquivo), mas a verificação achou esta outra porta. Ver [`ECOSYSTEM_DEEP_DIVE`](../research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) §10.
+
+Impacto real era menor que o da AUTH-04a: o transporte já é HTTP puro, e o `queue_grant` rotaciona e é de uso único — um ticket que aparecesse num log provavelmente já estaria consumido. O que justificou corrigir foi o custo (não há launcher em produção, porque a Fase 0 nunca rodou) e a inconsistência, que convidava o próximo endpoint a copiar o lado errado.
+
+Correção: a rota virou `POST /api/queue/status` lendo `(req.body || {}).ticket`; `req.query` é ignorado. `poll-queue` no launcher passou a usar `postJsonToUrl`, igual ao `join-queue`.
+
+**Regressão travada por teste.** `apps/game-api/server.http.test.js` — primeiro teste em nível HTTP deste serviço, criado junto. Exige 404 no `GET /api/queue/status` e 401 quando o ticket vem só pela query. Verificado por mutação: revertendo `app.post` para `app.get`, nove testes falham.
 
 ## Caracterizações que viram testes/gates
 
@@ -110,6 +124,7 @@ O Master API usa `masterKey` no path. URLs aparecem com facilidade em access log
 5. Configuração staging/production deve ter `offlineMode=false`.
 6. Launcher online deve remover profileId legado antes da Fase AUTH-003.
 7. Staff role é resolvido por accountId server-side e removido no disconnect.
+8. Nenhuma credencial viaja em query string ou path — coberto para a fila por `server.http.test.js` (AUTH-04b); o `masterKey` (AUTH-04a) segue descoberto.
 
 ## Decisão para AUTH-002
 

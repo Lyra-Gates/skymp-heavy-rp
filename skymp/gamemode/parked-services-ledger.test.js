@@ -40,6 +40,8 @@ const VENDEDOR_CHAR = 7102;
 
 let saldos = {};
 let inventario = {};        // `${characterId}:${baseId}` -> count
+let containerInventario = {}; // `${containerId}:${baseId}` -> count
+let containersExistentes = new Set([1]);
 let eventos = [];           // 'begin' | 'commit' | 'rollback'
 let ledgerOuro = [];
 let ledgerItem = [];
@@ -71,7 +73,42 @@ function responder(sql, params) {
     return [{}];
   }
   if (/INSERT INTO gold_transactions/i.test(sql)) {
-    ledgerOuro.push({ characterId: params[1], delta: params[2], reason: params[3], module: params[4] });
+    // Posições mudaram na migration v15 (Economy Framework):
+    // (transaction_id, character_id, owner_type, owner_ref,
+    //  counterparty_type, counterparty_ref, transfer_id, actor_character_id,
+    //  delta, reason, module, idempotency_key, status)
+    ledgerOuro.push({ characterId: params[1], delta: params[8], reason: params[9], module: params[10] });
+    return [{}];
+  }
+
+  // ── Inventory Framework (core/inventory.js) ───────────────────────────────
+  // O replay de `exchange` é conferido DENTRO da transação, com FOR UPDATE
+  // sobre a chave única — auditoria §7. O mock devolve o que já foi gravado.
+  if (/SELECT transfer_id FROM inventory_transactions WHERE idempotency_key/i.test(sql)) {
+    const achado = ledgerItem.find(l => l.idempotencyKey === params[0]);
+    return achado ? [{ transfer_id: achado.transferId }] : [];
+  }
+  if (/SELECT id FROM containers WHERE id = \?/i.test(sql)) {
+    return containersExistentes.has(Number(params[0])) ? [{ id: Number(params[0]) }] : [];
+  }
+  if (/SELECT count FROM container_inventory/i.test(sql)) {
+    const atual = containerInventario[chaveInv(params[0], params[1])];
+    return atual === undefined ? [] : [{ count: atual }];
+  }
+  if (/INSERT INTO container_inventory/i.test(sql)) {
+    containerInventario[chaveInv(params[0], params[1])] = params[2];
+    return [{}];
+  }
+  if (/UPDATE container_inventory SET count = count \+ \?/i.test(sql)) {
+    containerInventario[chaveInv(params[1], params[2])] += params[0];
+    return [{}];
+  }
+  if (/UPDATE container_inventory SET count = \?/i.test(sql)) {
+    containerInventario[chaveInv(params[1], params[2])] = params[0];
+    return [{}];
+  }
+  if (/DELETE FROM container_inventory/i.test(sql)) {
+    delete containerInventario[chaveInv(params[0], params[1])];
     return [{}];
   }
 
@@ -97,7 +134,17 @@ function responder(sql, params) {
     return [{}];
   }
   if (/INSERT INTO inventory_transactions/i.test(sql)) {
-    ledgerItem.push({ characterId: params[1], baseId: params[2], delta: params[3], reason: params[4], module: params[5] });
+    // Posições mudaram na migration v14: o razão passou a nomear os dois lados
+    // do movimento. Ver `core/transaction-service._recordInventoryLedger`.
+    // (transaction_id, character_id, owner_type, owner_ref,
+    //  counterparty_type, counterparty_ref, transfer_id,
+    //  base_id, delta, reason, module, idempotency_key)
+    ledgerItem.push({
+      characterId: params[1], ownerType: params[2], ownerRef: params[3],
+      counterpartyType: params[4], counterpartyRef: params[5], transferId: params[6],
+      baseId: params[7], delta: params[8], reason: params[9], module: params[10],
+      idempotencyKey: params[11]
+    });
     return [{}];
   }
 
@@ -177,6 +224,8 @@ after(() => {
 beforeEach(() => {
   saldos = { [COMPRADOR_CHAR]: 1000, [VENDEDOR_CHAR]: 0 };
   inventario = {};
+  containerInventario = {};
+  containersExistentes = new Set([1]);
   eventos = [];
   ledgerOuro = [];
   ledgerItem = [];
@@ -332,11 +381,34 @@ describe('crafting-service — consumo e entrega numa transação só', () => {
   it('toda movimentação de item vira linha em inventory_transactions', async () => {
     await crafting.craftItem(COMPRADOR_ACTOR, COMPRADOR_CHAR, 9);
 
-    assert.strictEqual(ledgerItem.length, 3, 'dois consumos e uma entrega');
-    assert.ok(ledgerItem.find(l => l.baseId === INGREDIENTE_A && l.delta === -2));
-    assert.ok(ledgerItem.find(l => l.baseId === INGREDIENTE_B && l.delta === -1));
-    assert.ok(ledgerItem.find(l => l.baseId === RESULTADO && l.delta === 2 && l.reason === 'craft_result'));
-    for (const linha of ledgerItem) assert.strictEqual(linha.module, 'crafting');
+    // Seis, e não três: desde a migration v14 o razão grava **as duas pontas**
+    // de cada movimento. O craft tem três movimentos (dois consumos e uma
+    // entrega) e seis pontas, porque a contraparte de cada um é o dono
+    // `system` — `consume` no que some, `craft` no que nasce.
+    //
+    // A linha do lado do nada é o que torna a conservação verificável: sem
+    // ela, "item criado" e "erro de contabilidade" ficam indistinguíveis. Ver
+    // INVENTORY_TRADE_CRAFTING_AUDIT.md §2.
+    assert.strictEqual(ledgerItem.length, 6, 'três movimentos, duas pontas cada');
+
+    const doPersonagem = ledgerItem.filter(l => l.ownerType === 'character');
+    assert.strictEqual(doPersonagem.length, 3);
+    assert.ok(doPersonagem.find(l => l.baseId === INGREDIENTE_A && l.delta === -2));
+    assert.ok(doPersonagem.find(l => l.baseId === INGREDIENTE_B && l.delta === -1));
+    assert.ok(doPersonagem.find(l => l.baseId === RESULTADO && l.delta === 2));
+
+    // A soma por transferência fecha em zero — o invariante que o razão não
+    // tinha como sustentar antes de nomear o outro lado.
+    const porTransferencia = {};
+    for (const l of ledgerItem) porTransferencia[l.transferId] = (porTransferencia[l.transferId] || 0) + l.delta;
+    for (const [id, soma] of Object.entries(porTransferencia)) {
+      assert.strictEqual(soma, 0, `transfer ${id} não fecha`);
+    }
+
+    for (const linha of ledgerItem) {
+      assert.strictEqual(linha.module, 'crafting');
+      assert.strictEqual(linha.reason, 'craft');
+    }
   });
 
   it('falta de ingrediente reverte tudo — não consome o que já tinha passado', async () => {

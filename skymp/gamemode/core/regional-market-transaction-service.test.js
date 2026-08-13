@@ -29,7 +29,25 @@ function harness(options = {}) {
     recordInventoryLedger: async () => state.events.push('inventory-ledger'),
     applyToClient: (_actor, _base, delta) => state.events.push(`client:${delta}`)
   };
-  return { state, deps: { db: { getConnection: async () => conn }, tx } };
+  // O ouro deixou de passar pelas primitivas `tx.*` e passou pelo
+  // `core/economy-service` (ADR 004 §2.3). O falso abaixo tem a MESMA semantica
+  // de resultado do real: recusa devolve `{ok:false, code}`, infra lanca — e e
+  // isso que os testes de rollback abaixo exercitam.
+  const economy = {
+    transferInTransaction: async (_conn, req) => {
+      if (options.failGold) throw new Error('ouro insuficiente');
+      if (options.refuseGold) return { ok: false, code: 'insufficient_funds', balance: 0 };
+      const delta = req.from.type === 'character' ? -req.amount : req.amount;
+      if (req.from.type === 'hold' || req.to.type === 'hold') {
+        state.holdTreasury += req.to.type === 'hold' ? req.amount : -req.amount;
+        state.events.push('tax');
+      } else {
+        state.events.push(`gold:${delta}`);
+      }
+      return { ok: true, replayed: false, transferId: 'transfer-1', amount: req.amount };
+    }
+  };
+  return { state, deps: { db: { getConnection: async () => conn }, tx, economy } };
 }
 
 const request = (extra = {}) => ({ actorId: 500, characterId: 101, holdId: 'whiterun', baseId: 99, count: 2, idempotencyKey: 'regional-market-0001', ...extra });
@@ -40,7 +58,9 @@ describe('regional-market-transaction-service', () => {
     const result = await market.buy(request(), h.deps);
     assert.deepStrictEqual({ ok: result.ok, replayed: result.replayed, gross: result.gross }, { ok: true, replayed: false, gross: 50 });
     assert.strictEqual(h.state.marketStock, 8);
-    assert.deepStrictEqual(h.state.events, ['begin', 'gold:-50', 'inventory:2', 'stock-minus', 'gold-ledger', 'inventory-ledger', 'market-ledger', 'commit', 'client:2', 'release']);
+    // `gold-ledger` saiu da lista: as duas pernas do ouro agora sao gravadas
+    // dentro do `transferInTransaction`, com `transfer_id` ligando-as.
+    assert.deepStrictEqual(h.state.events, ['begin', 'gold:-50', 'inventory:2', 'stock-minus', 'inventory-ledger', 'market-ledger', 'commit', 'client:2', 'release']);
   });
 
   it('faz rollback de uma compra se o debito de ouro falhar', async () => {
@@ -54,7 +74,11 @@ describe('regional-market-transaction-service', () => {
     const result = await market.sell(request({ idempotencyKey: 'regional-market-0002' }), h.deps);
     assert.deepStrictEqual({ ok: result.ok, gross: result.gross, tax: result.tax, net: result.net }, { ok: true, gross: 8, tax: 1, net: 7 });
     assert.strictEqual(h.state.holdTreasury, 1);
-    assert.deepStrictEqual(h.state.events, ['begin', 'inventory:-2', 'gold:7', 'tax', 'stock-plus', 'inventory-ledger', 'gold-ledger', 'market-ledger', 'commit', 'client:-2', 'release']);
+    // A venda virou duas transferencias: `system:regional_market` paga o BRUTO
+    // ao vendedor (`gold:8`) e o vendedor paga o imposto ao Hold (`tax`). O
+    // saldo liquido do jogador e o mesmo 7 de antes; o que muda e que os dois
+    // movimentos existem no ledger em vez de o liquido chegar sem origem.
+    assert.deepStrictEqual(h.state.events, ['begin', 'inventory:-2', 'gold:8', 'tax', 'stock-plus', 'inventory-ledger', 'market-ledger', 'commit', 'client:-2', 'release']);
   });
 
   it('replay retorna o registro e não exige estoque atual nem move saldo', async () => {

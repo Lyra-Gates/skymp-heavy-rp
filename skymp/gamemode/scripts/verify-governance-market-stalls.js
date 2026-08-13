@@ -149,8 +149,9 @@ addCheck('exports dos servicos', () => {
   assertServiceExports(governance, [
     'commandDefs',
     'initGovernanceService',
-    'handleUiEvent',
-    'getInteractionActions',
+    // `handleUiEvent` e `getInteractionActions` sairam em 13/08/2026: a
+    // governanca nao tem mais UI propria, tem acoes registradas no
+    // `core/interaction-registry.js`. Ver ADR_002.
     'hasPermission',
     'stopTarget',
     'requestSearch',
@@ -325,9 +326,11 @@ addCheck('registro no phase0', () => {
     "enabledBy: 'ENABLE_GOVERNANCE_SERVICE'",
     "id: 'market-stalls'",
     "enabledBy: 'ENABLE_MARKET_STALLS_SERVICE'",
-    "dependencies: ['governance']",
+    "dependencies: ['governance', 'interaction']",
+    "id: 'interaction'",
+    "enabledBy: 'ENABLE_INTERACTION_FRAMEWORK'",
     'browserModal',
-    'governance.handleUiEvent'
+    'createInteractionService'
   ]);
 });
 

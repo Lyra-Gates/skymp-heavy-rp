@@ -34,6 +34,18 @@ que o servidor exige. São verificados por hash MD5 para garantir a versão corr
 | 9 | `ccbgssse025-advdsgs.esm` | ESM | CC: The Cause (Adventure) |
 | 10 | `_ResourcePack.esl` | ESL | CC: Resource Pack (texturas/meshes base) |
 
+> ⚠️ **Decisão pendente: exigir Creation Club custa caro, e o custo não é óbvio.**
+>
+> As entradas 6 a 10 não se comportam como as outras cinco. Conteúdo Creation Club **não passa pelo `plugins.txt`**: o Skyrim AE lê o `Skyrim.ccc` — na raiz do jogo, ao lado do executável, não em `Data/` — e carrega sozinho o que estiver listado e presente. E o conteúdo desse arquivo **varia conforme o que aquela conta Steam possui**.
+>
+> Consequência prática: exigir CC no modpack só funciona se **todo** jogador tiver exatamente as mesmas licenças. Nem todas as entradas acima vêm da atualização gratuita do AE — pelo menos uma parece depender do upgrade pago, o que precisa ser conferido entrada por entrada antes de fechar esta lista. Quem não tiver carrega uma lista diferente, e cada plugin a mais ou a menos desloca o índice de load order. O primeiro byte de todo FormID é esse índice: o `base_id` do banco passa a apontar pra outro record na tela daquele jogador, sem erro e sem log. É a falha do QA 2.15 — um baú com outra coisa dentro.
+>
+> **O launcher agora detecta isso** (`analyzeCreationClub` em `apps/launcher/electron/parity.mjs`), nas duas direções: CC que o jogador carrega e o servidor não declara, e CC que o servidor exige e o jogador não tem. Detectar não é resolver — quem não tiver o conteúdo simplesmente não entra.
+>
+> As saídas são exigir CC e aceitar barrar quem não tem, ou não exigir CC e remover as entradas 6 a 10 junto com os mods que dependem delas. **A segunda parece a mais barata e ainda não foi decidida.** Ver `MOD-005` em [`ECOSYSTEM_ADAPTATION_ROADMAP.md`](roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md).
+>
+> Nada disso afeta a Fase 0, que exige os cinco masters do jogo base e nada mais — ver [`plugins.fase0.txt`](../apps/game-api/plugins.fase0.txt).
+
 ---
 
 ## Mods de Conteúdo

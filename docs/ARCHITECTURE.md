@@ -59,7 +59,7 @@ Desenvolvido em **discord.js**.
 ### 1.3.1 API do Jogo (`apps/game-api`)
 Express, porta `GAME_API_PORT` (7758) — a porta que o launcher sempre chamou e para a qual não havia servidor. Detalhes em `docs/technical/LAUNCHER_DISTRIBUTION.md`.
 - **`GET /mods.json`**: manifesto de paridade de modpack (`{mods, loadOrder}`), gerado offline por `scripts/generate-mods-manifest.js` a partir da pasta `Data/` de referência. Manifesto ausente ou corrompido responde **503**, nunca lista vazia — lista vazia passaria na verificação do launcher e deixaria qualquer modpack entrar.
-- **Fila** (`POST /api/queue/join`, `GET /api/queue/status`): capacidade fixa, FIFO, com expiração de reserva pra que quem fecha o launcher depois de admitido não segure o slot para sempre. Autenticada por ticket de uso único emitido pelo painel (`launch_tickets`, migration v6) — `discordId` é público e não serve como prova de identidade.
+- **Fila** (`POST /api/queue/join`, `POST /api/queue/status`): capacidade fixa, FIFO, com expiração de reserva pra que quem fecha o launcher depois de admitido não segure o slot para sempre. Autenticada por ticket de uso único emitido pelo painel (`launch_tickets`, migration v6) — `discordId` é público e não serve como prova de identidade.
 - **Sessão de jogo**: ao admitir alguém, grava uma linha em `game_sessions` (migration v8) e devolve o token ao launcher, que o escreve como `session` no `skymp_config.json`. É esse token que o servidor SkyMP resolve contra o master API (ver 1.2.1) — é assim que a identidade deixa de ser uma declaração do cliente.
 - **`POST /internal/session/resolve` / `/release`** (`X-Internal-Secret`): liberação de slot na desconexão. O `resolve` virou redundante depois que o caminho nativo de sessão passou a existir — mantido só enquanto o teste in-game não confirma o fluxo do master API.
 
@@ -76,10 +76,27 @@ Localizado em `skymp/gamemode/`.
 
 #### 1.4.1 Bridge de UI (CEF)
 A comunicação entre o gamemode e a UI CEF (`skymp/ui/`) usa duas properties SkyMP registradas em `phase0-basic.js`:
-- **`browserModal`**: canal de modais pontuais (ex: menu de interação da governança). `updateOwner` executa `ctx.sp.browser.executeJavaScript('window.handleServerModal(...)')` no cliente.
+- **`browserModal`**: canal de modais pontuais (menu de interação, toasts de notificação). `updateOwner` executa `ctx.sp.browser.executeJavaScript('window.handleServerModal(...)')` no cliente.
 - **`panelData`**: canal dedicado do Painel do Jogador, no formato `{ channel, data }` — o cliente despacha para `window.handlePanelData(...)` e cada aba (`status`, `governance`, `economy`, `social`) renderiza seu próprio bloco.
 
 No sentido UI→servidor, `mp.onUiEvent` despacha todo evento através de `core/ui-event-router.js`, que roteia pelo prefixo do `uiEvent.type` (ex: `governance:*` → `governance-service.js`, `panel:*` → `player-panel-service.js`). Novos módulos que precisem de UI só chamam `uiEventRouter.register('<prefixo>', handler)` no seu `initialize()` — não é preciso editar `phase0-basic.js` para cada novo tipo de evento.
+
+**Desde 13/08/2026 o roteamento é só isso.** Até então o `dispatch` chamava o handler do prefixo e **depois todos os outros, incondicionalmente** — então `panel:social:rename` chegava ao `governance-service` e `governance:interaction:execute` chegava ao `player-panel-service`. Nenhum dos dois agia sobre evento alheio (os dois recusam o que não reconhecem), mas a proteção era a boa educação de cada handler e não o roteador, e o custo de cada evento crescia com o número de módulos em vez do de eventos. Um evento sem dono agora é registrado uma vez por prefixo — o `type` é escolhido pelo cliente, e um log por ocorrência seria um jeito de encher o disco do servidor de fora.
+
+#### 1.4.1.1 Interaction Framework (`core/interaction-*.js`)
+Três módulos `core/` que formam o pipeline de ações contextuais — o menu de "o que dá para fazer com este alvo". Contrato completo em [`framework/INTERACTION_FRAMEWORK.md`](framework/INTERACTION_FRAMEWORK.md); a decisão e as alternativas recusadas em [`technical/ADR_002_INTERACTION_FRAMEWORK.md`](technical/ADR_002_INTERACTION_FRAMEWORK.md).
+
+- **`core/interaction-registry.js`** — o catálogo. Função pura: não toca `mp`, banco, ator nem permissão. Um módulo chama `register({id, target, canSee, canExecute, execute, ...})` no `initialize()` dele.
+- **`core/interaction-targets.js`** — traduz o `targetId` que o cliente manda no registro que o servidor já tinha. Só `player` tem resolvedor; os outros seis tipos são vocabulário reservado e falham fechados, com `registerResolver` como ponto de extensão.
+- **`core/interaction-service.js`** — o pipeline: rate limit → alvo → schema → permissão → `action-policy` → distância → `canSee` → `canExecute` → deduplicação por `requestId` → `execute` → auditoria.
+
+**A inversão é o ponto.** Antes, para uma barraca aparecer no menu, o `governance-service.js` precisava `require('./market-stalls-service')` por nome fixo dentro de `getInteractionActions` — e `market-stalls` já declarava `dependencies: ['governance']`, então a seta apontava para os dois lados. Hoje quem tem a ação a declara, e a governança não conhece mais o módulo de barracas.
+
+**`canSee` não autoriza nada**: ele decide um menu montado num instante anterior, na máquina de outra pessoa. `execute` refaz o pipeline inteiro. Isso já era verdade por acidente do desenho antigo (as funções de domínio revalidam sozinhas) e virou contrato testado.
+
+**É o único caminho desde 13/08/2026.** O legado saiu inteiro na mesma frente: `governance-service.js` perdeu `getInteractionActions`, `handleInteractionAction`, `validateUiInteractionPayload` e o próprio `handleUiEvent` — a governança **não registra mais prefixo nenhum** no roteador de eventos, porque deixou de ter UI própria. `market-stalls-service.js` perdeu os hooks equivalentes. As funções de domínio (`stopTarget`, `fineTarget`, `arrestTarget`, `buyItem`, …) ficaram intactas e continuam revalidando permissão e alcance por conta própria.
+
+⚠️ **Nunca rodou numa sessão real** — 96 testes verdes, zero jogadores. Mesmo peso que *"ninguém ouviu ainda"* tem na voz (1.4.4). A CEF foi reescrita para `interaction:*` e passa em `node --check`; nenhuma linha dela rodou dentro de um CEF.
 
 Desde 11/08/2026, `core/ui-event-gateway.js` possui o callback global e valida o envelope antes de rotear; `core/ui-event-rate-limiter.js` mede e, quando configurado, limita volume por ator e tipo. `core/connection-monitor.js` controla polling, reconexão e invalidação de respostas antigas da whitelist. Credenciais opacas são geradas, hasheadas e redigidas por `core/opaque-credential.js`. Na economia, `core/institutional-treasury-service.js` e `core/regional-market-transaction-service.js` executam saldo, estoque e ledger na mesma transação; a migration v13 torna retries de barracas idempotentes. Essas fronteiras estão testadas, mas os módulos PARKED continuam fora do boot.
 

@@ -38,3 +38,15 @@ export function analyzePlugins(params: {
   enabledPlugins?: string[];
   readHeader: (name: string) => PluginHeader;
 }): { ok: boolean; problems: string[]; plugins: Array<{ name: string } & PluginHeader> };
+
+export function parseCccTxt(content: string | null | undefined): string[];
+
+/**
+ * `effective` são os plugins de Creation Club que o jogo realmente carrega:
+ * listados no `Skyrim.ccc` **e** presentes em `Data/`.
+ */
+export function analyzeCreationClub(params: {
+  cccEntries: string[] | null | undefined;
+  localPlugins: string[] | null | undefined;
+  serverLoadOrder: string[] | null | undefined;
+}): { ok: boolean; problems: string[]; effective: string[] };

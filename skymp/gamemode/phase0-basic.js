@@ -48,6 +48,11 @@ const whitelist     = require(path.join(gamemodeDir, 'whitelist'));
 const commands      = require(path.join(gamemodeDir, 'commands'));
 const moduleRegistry = require(path.join(gamemodeDir, 'core', 'module-registry'));
 const uiEventRouter  = require(path.join(gamemodeDir, 'core', 'ui-event-router'));
+const interactionRegistry = require(path.join(gamemodeDir, 'core', 'interaction-registry'));
+const { createTargetResolvers } = require(path.join(gamemodeDir, 'core', 'interaction-targets'));
+const { createInteractionService } = require(path.join(gamemodeDir, 'core', 'interaction-service'));
+const actionPolicy   = require(path.join(gamemodeDir, 'core', 'action-policy'));
+const admin          = require(path.join(gamemodeDir, 'admin-service'));
 const { installUiEventGateway } = require(path.join(gamemodeDir, 'core', 'ui-event-gateway'));
 const { createUiEventRateLimiter } = require(path.join(gamemodeDir, 'core', 'ui-event-rate-limiter'));
 const { createConnectionMonitor } = require(path.join(gamemodeDir, 'core', 'connection-monitor'));
@@ -61,6 +66,7 @@ const soulService   = require(path.join(gamemodeDir, 'soul-service'));
 const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
 const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
 const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
+const tradeService  = require(path.join(gamemodeDir, 'trade-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -69,6 +75,90 @@ console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 // Módulos CORE e LAB são registrados aqui.
 // Módulos PARKED permanecem no disco mas não são registrados nem inicializados.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate limiter da CEF
+//
+// Criado aqui, e não lá embaixo junto do gateway, porque dois consumidores
+// precisam do MESMO contador: o `ui-event-gateway` (que vê todo evento) e o
+// `interaction` (que aplica política própria a `interaction:query` e
+// `interaction:execute`). Dois limitadores dariam dois orçamentos ao mesmo
+// jogador e a soma não apareceria em nenhuma métrica.
+//
+// O teto global continua desligado por padrão — a disciplina de medir antes de
+// limitar, que o `ui-event-rate-limiter.js` documenta, não mudou.
+// ─────────────────────────────────────────────────────────────────────────────
+const configuredRateLimit = Number(process.env.UI_EVENT_RATE_LIMIT_MAX_EVENTS);
+const configuredRateWindow = Number(process.env.UI_EVENT_RATE_LIMIT_WINDOW_MS);
+const configuredInteractionExecuteLimit = Number(process.env.INTERACTION_EXECUTE_RATE_LIMIT);
+const uiEventRateLimiter = createUiEventRateLimiter({
+  maxEvents: Number.isSafeInteger(configuredRateLimit) && configuredRateLimit > 0 ? configuredRateLimit : 0,
+  windowMs: Number.isSafeInteger(configuredRateWindow) && configuredRateWindow > 0 ? configuredRateWindow : undefined,
+  policies: Number.isSafeInteger(configuredInteractionExecuteLimit) && configuredInteractionExecuteLimit > 0
+    ? { 'interaction:execute': { maxEvents: configuredInteractionExecuteLimit } }
+    : {}
+});
+
+// CORE: Interaction Framework — o pipeline que separa "o cliente pediu" de
+// "o servidor fez". Não tem gameplay nenhum: ele só existe para que outros
+// módulos registrem ações contextuais sem que o core precise conhecê-los.
+//
+// Sobe cedo e sem dependências de propósito — os módulos que registram
+// interações precisam dele PRONTO no `initialize()` deles, e a ordenação
+// topológica do registry garante isso a partir do `dependencies: ['interaction']`
+// que cada um declara.
+const interactionTargets = createTargetResolvers({ getCharacter: commands.getCharacterData });
+const interactionService = createInteractionService({
+  registry: interactionRegistry,
+  targets: interactionTargets,
+  getCharacter: commands.getCharacterData,
+  actionPolicy,
+  rateLimiter: uiEventRateLimiter,
+  notify: commands.sendNotification,
+  sendModal: (actorId, type, data) => {
+    if (typeof mp === 'undefined') return;
+    try {
+      mp.set(actorId, 'browserModal', { type, data, sentAt: Date.now() });
+    } catch (err) {
+      console.error('[interaction] Falha ao enviar modal:', err.message);
+    }
+  },
+  // A permissão é resolvida por quem registrou a interação, via `canSee`. Este
+  // adaptador existe para o caso `descriptor.permission`, que hoje só o staff
+  // usa: cargo de governança depende de escopo e de plantão, e quem sabe disso
+  // é o `governance-service`, não o core.
+  checkPermission: async (actorId, permission) => ({
+    allowed: admin.hasPermission(actorId, permission),
+    reason: 'Voce nao tem autorizacao para isso.'
+  }),
+  audit: async (entrada) => {
+    const alvo = entrada.target || {};
+    await admin.auditLog(
+      entrada.accountId || null,
+      alvo.accountId || null,
+      `interaction:${entrada.interactionId}`,
+      `level=${entrada.level} outcome=${entrada.outcome} target=${alvo.id || '?'}` +
+      `${entrada.distanceVerified ? '' : ' distancia=NAO_VERIFICADA'}` +
+      `${entrada.detail ? ` detalhe=${String(entrada.detail).slice(0, 180)}` : ''}`
+    );
+  }
+});
+
+moduleRegistry.register({
+  id: 'interaction',
+  enabledBy: 'ENABLE_INTERACTION_FRAMEWORK',
+  phase: 'core',
+  version: '1.0.0',
+  dependencies: [],
+  commands: [],
+  initialize: async () => {
+    uiEventRouter.register('interaction', interactionService.handleUiEvent);
+  },
+  shutdown: async () => {
+    uiEventRouter.unregister('interaction');
+  },
+  healthCheck: () => uiEventRouter.list().includes('interaction')
+});
 
 // CORE: Limpeza de NPCs
 moduleRegistry.register({
@@ -98,14 +188,25 @@ moduleRegistry.register({
   id: 'governance',
   enabledBy: 'ENABLE_GOVERNANCE_SERVICE',
   phase: 'lab',
-  dependencies: [],
+  version: '1.1.0',
+  // Registra as acoes da guarda no Interaction Framework durante o initialize,
+  // entao o framework precisa estar pronto antes. A ordenacao topologica do
+  // registry garante isso mesmo que este bloco mude de lugar no arquivo.
+  dependencies: ['interaction'],
+  // Consultada quando existe; nao impede o boot quando nao existe. Substitui a
+  // leitura solta de `isEnabled('economy-regional')` no meio de uma funcao de
+  // dominio.
+  optionalDependencies: ['economy-regional'],
   commands: governance.commandDefs(),
   initialize: async () => {
     await governance.initGovernanceService();
-    uiEventRouter.register('governance', governance.handleUiEvent);
+    // O `uiEventRouter.register('governance', ...)` saiu em 13/08/2026 junto com
+    // o `handleUiEvent` do modulo: as unicas duas coisas que ele tratava eram
+    // `governance:interaction:actions` e `:execute`, e as duas viraram
+    // `interaction:*` no framework. A governanca deixou de ter UI propria — o
+    // que ela tem agora sao acoes registradas, declaradas no initialize acima.
   },
   shutdown: async () => {
-    uiEventRouter.unregister('governance');
     governance.shutdownGovernanceService();
   }
 });
@@ -114,7 +215,8 @@ moduleRegistry.register({
   id: 'market-stalls',
   enabledBy: 'ENABLE_MARKET_STALLS_SERVICE',
   phase: 'lab',
-  dependencies: ['governance'],
+  version: '1.1.0',
+  dependencies: ['governance', 'interaction'],
   commands: marketStalls.commandDefs(),
   initialize: async () => {
     await marketStalls.initMarketStallsService();
@@ -239,12 +341,41 @@ moduleRegistry.register({
   }
 });
 
+// LAB: Troca entre jogadores.
+//
+// Reescrito em 13/08/2026 sobre o Inventory Framework — antes era um convite
+// sem troca (nenhuma transferência, nenhum timeout, nenhuma limpeza em
+// desconexão; ver INVENTORY_TRADE_CRAFTING_AUDIT.md §12). Ganhou descritor
+// porque agora tem o que registrar: uma interação e cinco comandos.
+//
+// Nasce com a flag em `false`, como todo `lab`. **Não tem UI CEF** — os
+// comandos de chat são a interface inteira. E, como tudo neste servidor, nunca
+// rodou numa sessão real.
+moduleRegistry.register({
+  id: 'trade',
+  enabledBy: 'ENABLE_TRADE_SERVICE',
+  phase: 'lab',
+  version: '2.0.0',
+  dependencies: ['interaction'],
+  commands: tradeService.commandDefs(),
+  initialize: async () => {
+    tradeService.registerInteractions();
+    // A desconexão precisa derrubar a sessão do lado que ficou — senão o
+    // outro fica preso numa troca com um ausente até o TTL. O gancho é
+    // assinado aqui, e não no `commands.js`, para que ele não conheça um
+    // módulo que pode estar desligado.
+    commands.onCharacterRemoved(tradeService.onDisconnect);
+  },
+  shutdown: async () => {
+    tradeService.sweep();
+  }
+});
+
 // PARKED — Existem no disco e NÃO são registrados até passarem por reengenharia:
 // - economy-regional  (ENABLE_REGIONAL_ECONOMY)
 // - jobs-service      (ENABLE_WOODCUTTING / ENABLE_MINING / ENABLE_FISHING)
 // - crafting-service  (ENABLE_CRAFTING)
 // - housing-service   (ENABLE_HOUSING)
-// - trade-service     (ENABLE_TRADE)
 // - horse-service     (ENABLE_HORSES)
 //
 // APAGADOS em 06/08/2026 (ver docs/technical/PARKED_SERVICES_DECISION.md):
@@ -375,12 +506,8 @@ if (typeof mp !== "undefined") {
     updateNeighbor: ''
   });
 
-  const configuredRateLimit = Number(process.env.UI_EVENT_RATE_LIMIT_MAX_EVENTS);
-  const configuredRateWindow = Number(process.env.UI_EVENT_RATE_LIMIT_WINDOW_MS);
-  const uiEventRateLimiter = createUiEventRateLimiter({
-    maxEvents: Number.isSafeInteger(configuredRateLimit) && configuredRateLimit > 0 ? configuredRateLimit : 0,
-    windowMs: Number.isSafeInteger(configuredRateWindow) && configuredRateWindow > 0 ? configuredRateWindow : undefined
-  });
+  // O limitador é o mesmo criado lá em cima, compartilhado com o Interaction
+  // Framework — ver a nota naquele bloco.
   installUiEventGateway(mp, {
     uiEventRouter,
     handleChatInput: commands.handleChatInput,

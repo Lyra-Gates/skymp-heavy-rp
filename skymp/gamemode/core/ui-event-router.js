@@ -13,14 +13,40 @@
  *   ...
  *   uiEventRouter.dispatch(actorId, uiEvent); // despacha para todos os handlers registrados
  *
- * Um handler retorna true se tratou o evento. dispatch() chama TODOS os handlers
- * registrados (não para no primeiro match) para preservar o comportamento atual,
- * onde múltiplos módulos podem reagir ao mesmo evento.
+ * Um handler retorna true se tratou o evento.
+ *
+ * ─── O despacho a todos os handlers foi removido (13/08/2026) ───────────────
+ *
+ * Até aqui, `dispatch` chamava o handler do prefixo e **depois todos os
+ * outros**, incondicionalmente. O comentário original chamava isso de
+ * compatibilidade com eventos `governance:interaction:*` tratados por handlers
+ * que não seguiam o próprio prefixo.
+ *
+ * Aquele caso não existe mais: os dois handlers registrados hoje
+ * (`governance-service` e `player-panel-service`) só agem sobre o próprio
+ * prefixo, e os dois recusam o resto com `return false` — a proteção era a boa
+ * educação de cada handler, não o roteador. O custo era real: **todo módulo com
+ * UI via o payload de todo evento de UI de todo jogador**, e o preço de cada
+ * evento crescia com o número de módulos, não com o de eventos.
+ *
+ * Foi o que a auditoria classificou como REFACTOR
+ * (`docs/research/CORE_FRAMEWORK_AUDIT.md` §3): não era falha de segurança —
+ * nenhum handler agia sobre evento alheio —, era a superfície onde a próxima
+ * nasceria, e o acoplamento que o Interaction Framework existe para eliminar.
+ *
+ * Um evento sem dono agora é registrado uma vez por tipo, e não a cada
+ * ocorrência: o `type` é escolhido pelo cliente, e um log por evento seria um
+ * jeito de encher o disco do servidor de fora.
  */
 
 // Mapa de prefixo → handler(actorId, uiEvent) => boolean | Promise<boolean>
 const _handlers = new Map();
 const MAX_EVENT_TYPE_LENGTH = 128;
+
+// Tipos já reportados como sem dono. Limitado para que um cliente hostil não
+// transforme o diagnóstico em vazamento de memória.
+const _semDono = new Set();
+const MAX_TIPOS_SEM_DONO_REPORTADOS = 64;
 
 /**
  * Valida o envelope minimo que cruza a fronteira CEF -> gamemode.
@@ -67,43 +93,36 @@ function unregister(prefix) {
 
 /**
  * Despacha um uiEvent para o handler cujo prefixo bate com uiEvent.type.
- * Se nenhum prefixo específico bater, tenta todos os handlers registrados
- * (compatibilidade com módulos que escutam múltiplos namespaces).
+ *
+ * Só para ele. Um evento sem handler registrado para o seu prefixo não é
+ * oferecido a mais ninguém — ver a nota no topo deste arquivo.
  *
  * @param {number} actorId
  * @param {object} uiEvent - { type: string, data?: object }
- * @returns {Promise<boolean>} true se algum handler tratou o evento
+ * @returns {Promise<boolean>} true se o handler tratou o evento
  */
 async function dispatch(actorId, uiEvent) {
   if (!isValidEventEnvelope(uiEvent)) return false;
 
   const prefix = uiEvent.type.split(':')[0];
-  const targeted = _handlers.get(prefix);
+  const handler = _handlers.get(prefix);
 
-  let handled = false;
-
-  if (targeted) {
-    try {
-      handled = Boolean(await targeted(actorId, uiEvent)) || handled;
-    } catch (err) {
-      console.error(`[ui-event-router] Erro no handler '${prefix}':`, err.message);
+  if (!handler) {
+    if (!_semDono.has(prefix) && _semDono.size < MAX_TIPOS_SEM_DONO_REPORTADOS) {
+      _semDono.add(prefix);
+      console.warn(`[ui-event-router] Nenhum handler registrado para o prefixo '${prefix}' (primeira ocorrência).`);
     }
+    return false;
   }
 
-  // Fallback: alguns eventos (ex: governance:interaction:*) já eram tratados
-  // por handlers que não seguem estritamente o prefixo do próprio módulo.
-  // Chama os demais handlers registrados também, ignorando erros.
-  for (const [otherPrefix, handler] of _handlers.entries()) {
-    if (otherPrefix === prefix) continue;
-    try {
-      const result = await handler(actorId, uiEvent);
-      handled = Boolean(result) || handled;
-    } catch (err) {
-      console.error(`[ui-event-router] Erro no handler '${otherPrefix}':`, err.message);
-    }
+  try {
+    // A exceção de um handler não sobe até o gateway: lá em cima ela viraria um
+    // `return false` genérico e o nome do módulo culpado se perderia.
+    return Boolean(await handler(actorId, uiEvent));
+  } catch (err) {
+    console.error(`[ui-event-router] Erro no handler '${prefix}':`, err.message);
+    return false;
   }
-
-  return handled;
 }
 
 function list() {

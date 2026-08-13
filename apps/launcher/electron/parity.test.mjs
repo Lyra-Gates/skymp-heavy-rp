@@ -21,7 +21,9 @@ import {
   parsePluginsTxt,
   parsePluginHeader,
   compareMods,
-  analyzePlugins
+  analyzePlugins,
+  parseCccTxt,
+  analyzeCreationClub
 } from './parity.mjs';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -296,5 +298,140 @@ describe('load order', () => {
     });
     assert.equal(r.ok, false);
     assert.ok(r.problems.some(p => /master ausente Skyrim\.esm/.test(p)));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Creation Club (MOD-005)
+//
+// O buraco que estes testes fecham: conteúdo Creation Club nunca aparece no
+// `plugins.txt`, então `analyzePlugins` é cego pra ele. O jogo carrega o que
+// está no `Skyrim.ccc` sozinho, e cada plugin desses desloca índice de load
+// order — mesmo efeito do "plugin extra", mesma falha silenciosa do QA 2.15.
+//
+// Achado ao estudar o The Divine Comedy, que tropeçou nisto e respondeu
+// esvaziando o `Skyrim.ccc` — solução que o Steam desfaz ao verificar os
+// arquivos. Ver docs/research/SKYMP_ECOSYSTEM_DEEP_DIVE.md §2.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('parseCccTxt', () => {
+  it('lê um nome por linha, sem asterisco', () => {
+    const r = parseCccTxt('ccBGSSSE001-Fish.esm\nccQDRSSE001-SurvivalMode.esl');
+    assert.deepEqual(r, ['ccBGSSSE001-Fish.esm', 'ccQDRSSE001-SurvivalMode.esl']);
+  });
+
+  it('ignora linhas vazias, espaços e comentários', () => {
+    const r = parseCccTxt('  ccA.esm  \n\n# comentario\n\r\nccB.esl\n');
+    assert.deepEqual(r, ['ccA.esm', 'ccB.esl']);
+  });
+
+  it('aceita CRLF', () => {
+    assert.deepEqual(parseCccTxt('ccA.esm\r\nccB.esl'), ['ccA.esm', 'ccB.esl']);
+  });
+
+  it('entrada não-string vira lista vazia, não exceção', () => {
+    assert.deepEqual(parseCccTxt(undefined), []);
+    assert.deepEqual(parseCccTxt(null), []);
+  });
+});
+
+describe('analyzeCreationClub', () => {
+  const CINCO_MASTERS = ['Skyrim.esm', 'Update.esm', 'Dawnguard.esm', 'HearthFires.esm', 'Dragonborn.esm'];
+
+  it('aprova quando não há Creation Club nenhum', () => {
+    const r = analyzeCreationClub({
+      cccEntries: [],
+      localPlugins: CINCO_MASTERS,
+      serverLoadOrder: CINCO_MASTERS
+    });
+    assert.equal(r.ok, true, r.problems.join('; '));
+    assert.deepEqual(r.effective, []);
+  });
+
+  it('acusa CC que o jogo carrega e o servidor não declara', () => {
+    const r = analyzeCreationClub({
+      cccEntries: ['ccBGSSSE001-Fish.esm'],
+      localPlugins: [...CINCO_MASTERS, 'ccBGSSSE001-Fish.esm'],
+      serverLoadOrder: CINCO_MASTERS
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.problems.some(p => /ccBGSSSE001-Fish\.esm/.test(p)));
+    assert.ok(r.problems.some(p => /desloca os FormIDs/.test(p)));
+  });
+
+  it('entrada no .ccc sem o arquivo em Data/ não é problema: não carrega', () => {
+    // O jogador não comprou aquele CC. O nome está listado, o arquivo não
+    // existe, o jogo não carrega nada e nenhum índice se move.
+    const r = analyzeCreationClub({
+      cccEntries: ['ccBGSSSE001-Fish.esm'],
+      localPlugins: CINCO_MASTERS,
+      serverLoadOrder: CINCO_MASTERS
+    });
+    assert.equal(r.ok, true, r.problems.join('; '));
+    assert.deepEqual(r.effective, []);
+  });
+
+  it('acusa CC exigido pelo servidor que este jogador não carrega', () => {
+    // O risco de exigir Creation Club no modpack: só passa se todo jogador
+    // tiver exatamente as mesmas licenças.
+    const r = analyzeCreationClub({
+      cccEntries: [],
+      localPlugins: CINCO_MASTERS,
+      serverLoadOrder: [...CINCO_MASTERS, 'ccBGSSSE001-Fish.esm']
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.problems.some(p => /exigido pelo servidor e ausente/.test(p)));
+  });
+
+  it('aprova quando os dois lados carregam o mesmo CC', () => {
+    const r = analyzeCreationClub({
+      cccEntries: ['ccBGSSSE001-Fish.esm'],
+      localPlugins: [...CINCO_MASTERS, 'ccBGSSSE001-Fish.esm'],
+      serverLoadOrder: [...CINCO_MASTERS, 'ccBGSSSE001-Fish.esm']
+    });
+    assert.equal(r.ok, true, r.problems.join('; '));
+    assert.deepEqual(r.effective, ['ccBGSSSE001-Fish.esm']);
+  });
+
+  it('plugin normal fora da ordem não é acusado como CC ausente', () => {
+    // A direção inversa só vale pra nomes `cc*`; um mod comum já é coberto
+    // por analyzePlugins, e acusar duas vezes confundiria o jogador.
+    const r = analyzeCreationClub({
+      cccEntries: [],
+      localPlugins: CINCO_MASTERS,
+      serverLoadOrder: [...CINCO_MASTERS, 'HeavyRP.esp']
+    });
+    assert.equal(r.ok, true, r.problems.join('; '));
+  });
+
+  it('comparação é insensível a maiúsculas, como o resto do módulo', () => {
+    const r = analyzeCreationClub({
+      cccEntries: ['CCBGSSSE001-FISH.ESM'],
+      localPlugins: [...CINCO_MASTERS, 'ccbgsssE001-fish.esm'],
+      serverLoadOrder: [...CINCO_MASTERS, 'ccBGSSSE001-Fish.esm']
+    });
+    assert.equal(r.ok, true, r.problems.join('; '));
+  });
+
+  it('sem load order do servidor, reprova em vez de aprovar por omissão', () => {
+    for (const ordem of [undefined, null, []]) {
+      const r = analyzeCreationClub({
+        cccEntries: ['ccA.esm'],
+        localPlugins: ['ccA.esm'],
+        serverLoadOrder: ordem
+      });
+      assert.equal(r.ok, false, `load order ${JSON.stringify(ordem)} nao pode ser aprovada`);
+      assert.match(r.problems[0], /impossivel verificar paridade/);
+    }
+  });
+
+  it('acusa vários CC de uma vez em vez de parar no primeiro', () => {
+    const r = analyzeCreationClub({
+      cccEntries: ['ccA.esm', 'ccB.esl'],
+      localPlugins: [...CINCO_MASTERS, 'ccA.esm', 'ccB.esl'],
+      serverLoadOrder: CINCO_MASTERS
+    });
+    assert.equal(r.ok, false);
+    assert.equal(r.problems.length, 2);
   });
 });

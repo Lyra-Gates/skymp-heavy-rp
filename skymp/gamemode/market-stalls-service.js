@@ -26,9 +26,24 @@ const actionPolicy = require('./core/action-policy');
 const admin = require('./admin-service');
 const governance = require('./governance-service');
 const transactionService = require('./core/transaction-service');
+const economyService = require('./core/economy-service');
+const interactionRegistry = require('./core/interaction-registry');
 const { actorRef } = require('./core/papyrus');
 
 const MODULE = 'market_stalls';
+
+/**
+ * Alcance para interagir com uma barraca, em unidades do Skyrim.
+ *
+ * O mesmo de `chat.localRange` (fala normal): quem consegue conversar com o
+ * vendedor consegue comprar dele. Vem de `core/proximity-ranges.js` porque
+ * inventar um quarto número aqui repetiria o bug que aquele arquivo existe
+ * para ter consertado — três tabelas de raio que discordavam entre si.
+ *
+ * O menu antigo não checava distância nenhuma na montagem: a vitrine de uma
+ * barraca aparecia para quem estivesse na mesma célula, a qualquer distância.
+ */
+const STALL_INTERACTION_RANGE = require('./core/proximity-ranges').RANGES.say;
 const MAX_STALLS_PER_CHARACTER = 2;
 const MIN_STALL_DISTANCE = 250;
 const DEFAULT_TAX_RATE = 0.05;
@@ -474,8 +489,32 @@ async function packStall(actorId, stallIdRaw) {
     );
     items = itemRows;
 
+    // ── A devolucao acontece AQUI DENTRO ────────────────────────────────────
+    //
+    // Ela ficava depois do commit, num laco de `inventory.giveItem()` — N
+    // transacoes independentes com os N itens ja marcados `removed`. Uma
+    // barraca de dez itens com falha no quinto devolvia quatro e perdia seis,
+    // sem caminho automatico de volta (auditoria §4.2).
+    //
+    // O comentario que estava aqui explicava corretamente por que a devolucao
+    // vinha depois do commit — evitar que outra chamada reivindicasse o mesmo
+    // item — e nao percebia que trocava uma janela de duplicacao por uma janela
+    // de perda. Dentro da mesma transacao nao existe nenhuma das duas: os itens
+    // ja estao travados por `FOR UPDATE` desde o SELECT acima.
+    const chavePack = `stall.pack.${stallId}.${crypto.randomUUID().slice(0, 18)}`;
+    let indice = 0;
     for (const item of items) {
       await conn.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', item.id]);
+
+      await transactionService.tx.applyInventoryDelta(conn, stall.owner_character_id, item.base_id, item.count);
+      await transactionService.tx.recordInventoryLedger(conn, {
+        characterId: stall.owner_character_id,
+        ownerType: 'character', ownerRef: String(stall.owner_character_id),
+        counterpartyType: 'market', counterpartyRef: String(stallId),
+        baseId: item.base_id, delta: item.count,
+        reason: 'stall_pack_return', module: MODULE,
+        idempotencyKey: `${chavePack}#${indice++}`
+      });
     }
     await conn.query('UPDATE market_stalls SET status = ?, updated_at = NOW() WHERE id = ?', ['packed', stallId]);
 
@@ -489,12 +528,15 @@ async function packStall(actorId, stallIdRaw) {
     conn.release();
   }
 
-  // Devolve os itens DEPOIS do commit — a barraca e os itens ja estao marcados
-  // como recolhidos/removidos de forma atomica, entao nao ha mais janela pra
-  // outra chamada concorrente reivindicar o mesmo item.
-  for (const item of items) {
-    await inventory.giveItem(actorId, character.characterId, item.base_id, item.count, 'stall_pack_return', MODULE);
+  // Cliente APOS o commit. O dono pode ser outro ator que nao quem recolheu
+  // (staff com `manage_staff` recolhe barraca alheia), e pode estar offline —
+  // por isso a projecao so acontece quando o dono e quem esta na frente.
+  if (stall.owner_character_id === character.characterId) {
+    for (const item of items) {
+      transactionService.tx.applyToClient(actorId, item.base_id, item.count);
+    }
   }
+
   if (typeof mp !== 'undefined' && stall.visual_ref_id) {
     try {
       mp.set(stall.visual_ref_id, 'isDisabled', true);
@@ -555,16 +597,26 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     return;
   }
 
-  // Remover item do inventario ANTES da transacao de barraca
-  // (inventory-service ja usa transaction-service internamente)
-  const removed = await inventory.removeItem(actorId, character.characterId, baseId, count, 'stall_list_item', MODULE);
-  if (!removed) {
-    notify(actorId, 'Item insuficiente no inventario persistente.');
-    return;
-  }
-
-  // Transacao para validar barraca e inserir item atomicamente
+  // ── Uma transacao: o item sai do inventario E vira anuncio, ou nada ──────
+  //
+  // Ate 13/08/2026 isto eram tres transacoes: `inventory.removeItem()` (que
+  // commita a propria), depois o INSERT do anuncio na transacao de baixo, e um
+  // `giveItem()` compensatorio no `catch`. Compensacao so cobre falha que ESTE
+  // processo chega a observar: se o servidor morresse entre o commit da
+  // primeira e o da segunda, o item saia do inventario e nunca virava anuncio,
+  // e nada ligava a linha do razao a ausencia do anuncio.
+  //
+  // Ver docs/research/INVENTORY_TRADE_CRAFTING_AUDIT.md §4.1. A `buyItem`
+  // deste mesmo arquivo ja fazia certo — a diferenca entre as duas era a
+  // medida da divida.
+  //
+  // A barraca nao usa `core/inventory.transfer` porque `market_stall_items`
+  // **nao e uma pilha**: ela carrega preco, rotulo e status por anuncio. O que
+  // se usa daqui e a primitiva do personagem mais o razao com contraparte
+  // nomeada — ver `core/inventory-owner.js`, sobre `MARKET` ser vocabulario
+  // reservado.
   const conn = await db.getConnection();
+  const requestId = `stall.add.${character.characterId}.${crypto.randomUUID().slice(0, 18)}`;
   try {
     await conn.beginTransaction();
 
@@ -574,13 +626,20 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     );
     const stall = rows[0];
     if (!stall || stall.owner_character_id !== character.characterId) {
-      // Devolver item ao jogador se a barraca nao existe
       await conn.rollback();
-      await inventory.giveItem(actorId, character.characterId, baseId, count, 'stall_list_revert', MODULE);
       notify(actorId, 'Barraca ativa nao encontrada ou voce nao e o dono.');
-      conn.release();
       return;
     }
+
+    await transactionService.tx.applyInventoryDelta(conn, character.characterId, baseId, -count);
+    await transactionService.tx.recordInventoryLedger(conn, {
+      characterId: character.characterId,
+      ownerType: 'character', ownerRef: String(character.characterId),
+      counterpartyType: 'market', counterpartyRef: String(stallId),
+      baseId, delta: -count,
+      reason: 'stall_list_item', module: MODULE,
+      idempotencyKey: requestId
+    });
 
     await conn.query(
       `INSERT INTO market_stall_items (stall_id, base_id, count, price, label, status)
@@ -591,15 +650,17 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     await conn.commit();
   } catch (err) {
     await conn.rollback();
-    // Devolver item ao jogador em caso de erro
-    await inventory.giveItem(actorId, character.characterId, baseId, count, 'stall_list_revert', MODULE);
-    notify(actorId, 'Erro ao listar item. Itens devolvidos.');
-    console.error('[market-stalls] addItem transaction failed:', err.message);
-    conn.release();
+    const regra = ERROS_DE_REGRA.test(err.message);
+    if (!regra) console.error('[market-stalls] addItem transaction failed:', err.message);
+    notify(actorId, regra ? err.message : 'Erro ao listar item.');
     return;
   } finally {
-    if (conn && typeof conn.release === 'function') conn.release();
+    conn.release();
   }
+
+  // Cliente APOS o commit. O banco ja e a fonte de verdade; uma falha aqui e
+  // reconciliada no proximo login.
+  transactionService.tx.applyToClient(actorId, baseId, -count);
 
   await audit(actorId, 'stall:item_add', `stallId=${stallId} baseId=0x${baseId.toString(16)} count=${count} price=${price}`, stallId);
   notify(actorId, 'Item anunciado na barraca.');
@@ -646,6 +707,20 @@ async function removeItem(actorId, itemIdRaw) {
     }
 
     await conn.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', itemId]);
+
+    // Mesma correcao do `packStall`: a devolucao entra na transacao que marcou
+    // o anuncio como removido. Fora dela, um erro no `giveItem` deixava o item
+    // `removed` na barraca e ausente do inventario — perdido nos dois lugares.
+    await transactionService.tx.applyInventoryDelta(conn, character.characterId, item.base_id, item.count);
+    await transactionService.tx.recordInventoryLedger(conn, {
+      characterId: character.characterId,
+      ownerType: 'character', ownerRef: String(character.characterId),
+      counterpartyType: 'market', counterpartyRef: String(item.stall_id),
+      baseId: item.base_id, delta: item.count,
+      reason: 'stall_unlist_item', module: MODULE,
+      idempotencyKey: `stall.unlist.${itemId}.${crypto.randomUUID().slice(0, 18)}`
+    });
+
     await conn.commit();
   } catch (err) {
     await conn.rollback();
@@ -656,7 +731,7 @@ async function removeItem(actorId, itemIdRaw) {
     conn.release();
   }
 
-  await inventory.giveItem(actorId, character.characterId, item.base_id, item.count, 'stall_unlist_item', MODULE);
+  transactionService.tx.applyToClient(actorId, item.base_id, item.count);
   await audit(actorId, 'stall:item_remove', `itemId=${itemId}`, item.stall_id);
   notify(actorId, 'Item removido da barraca e devolvido.');
 }
@@ -777,16 +852,51 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw, requestId) {
     // guarda de saldo negativo estavam duplicados, e correcao no
     // transaction-service nao alcancava esta funcao.
     //
-    // `applyGoldDelta` faz o `SELECT ... FOR UPDATE` e recusa saldo negativo
-    // sozinho — por isso o SELECT manual que existia aqui saiu.
-    await transactionService.tx.applyGoldDelta(conn, buyer.characterId, -total);
-    await transactionService.tx.applyGoldDelta(conn, item.owner_character_id, sellerAmount);
+    // ── Em 13/08/2026 este bloco subiu mais um degrau ────────────────────────
+    //
+    // Ele chamava `tx.applyGoldDelta` duas vezes (comprador e vendedor) e
+    // creditava o imposto com `UPDATE cities SET treasury = treasury + ?`
+    // solto. Atomico e com ledger para os dois personagens — e **sem nenhuma
+    // linha para o imposto**, que era o Achado 2 de
+    // `ECONOMY_FRAMEWORK_AUDIT.md`: `cities.treasury` nao tinha como ser
+    // conferido contra historico nenhum, e a soma dos deltas de uma venda dava
+    // `-5` em vez de zero, com os 5 restantes existindo noutra tabela.
+    //
+    // Agora sao duas transferencias pelo `economy-service`, e o dinheiro fecha:
+    //
+    //   comprador → vendedor   (o total cheio)
+    //   vendedor  → cidade     (o imposto)
+    //
+    // O saldo final de cada um e identico ao de antes. O que muda e a historia:
+    // o vendedor *ganhou* 100 e *pagou* 5 de imposto, em vez de ter ganho 95 e
+    // 5 septims terem aparecido no tesouro sem origem. Modulo de dominio nao
+    // fala com as primitivas do motor (ADR 004 §2.3).
+    const pagamento = await economyService.transferInTransaction(conn, {
+      from: { type: 'character', ref: buyer.characterId },
+      to: { type: 'character', ref: item.owner_character_id },
+      amount: total,
+      reason: 'stall_purchase',
+      module: MODULE,
+      actorCharacterId: buyer.characterId,
+      idempotencyKey: `${idempotencyKey}_pay`
+    });
+    if (!pagamento.ok) {
+      throw new Error(pagamento.code === 'insufficient_funds'
+        ? `Ouro insuficiente: tem ${pagamento.balance}, precisa ${total}`
+        : `Pagamento recusado: ${pagamento.code}`);
+    }
 
     if (taxAmount > 0 && item.city_id) {
-      // Tesouro de cidade nao e ouro de personagem: nao tem linha em
-      // `gold_transactions` nem passa pelo transaction-service, que e sobre
-      // patrimonio de personagem. O rastro dele e `market_stall_sales.tax_amount`.
-      await conn.query('UPDATE cities SET treasury = treasury + ? WHERE id = ?', [taxAmount, item.city_id]);
+      const imposto = await economyService.transferInTransaction(conn, {
+        from: { type: 'character', ref: item.owner_character_id },
+        to: { type: 'city', ref: item.city_id },
+        amount: taxAmount,
+        reason: 'stall_tax',
+        module: MODULE,
+        actorCharacterId: buyer.characterId,
+        idempotencyKey: `${idempotencyKey}_tax`
+      });
+      if (!imposto.ok) throw new Error(`Imposto recusado: ${imposto.code}`);
     }
 
     // Estoque da barraca — dominio deste modulo, nao do transaction-service.
@@ -806,17 +916,16 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw, requestId) {
       [stallId, item.owner_character_id, buyer.characterId, item.base_id, count, item.price, taxAmount, item.city_id, idempotencyKey]
     );
 
-    // Ledger: saldo que muda sem linha aqui e ouro sem rastro.
-    await transactionService.tx.recordGoldLedger(conn, {
-      characterId: buyer.characterId, delta: -total,
-      reason: 'stall_purchase', module: MODULE, idempotencyKey: `${idempotencyKey}_buy_gold`
-    });
-    await transactionService.tx.recordGoldLedger(conn, {
-      characterId: item.owner_character_id, delta: sellerAmount,
-      reason: 'stall_sale', module: MODULE, idempotencyKey: `${idempotencyKey}_sell_gold`
-    });
+    // As duas pernas de ouro ja foram gravadas por `transferInTransaction`
+    // acima, com `transfer_id` ligando comprador e vendedor — o que estas duas
+    // chamadas manuais de `recordGoldLedger` nao conseguiam fazer. O ledger de
+    // item continua sendo escrito aqui: a entrega nao e uma transferencia de
+    // ouro, e o dono do outro lado e a barraca.
     await transactionService.tx.recordInventoryLedger(conn, {
-      characterId: buyer.characterId, baseId: item.base_id, delta: count,
+      characterId: buyer.characterId,
+      ownerType: 'character', ownerRef: String(buyer.characterId),
+      counterpartyType: 'market', counterpartyRef: String(stallId),
+      baseId: item.base_id, delta: count,
       reason: 'stall_purchase', module: MODULE, idempotencyKey: `${idempotencyKey}_buy_inv`
     });
 
@@ -1142,80 +1251,26 @@ function commandDefs() {
   ];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UI Interaction Hooks
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function getInteractionSections(actorId, targetActorId) {
-  const actor = getCharacter(actorId);
-  const target = getCharacter(targetActorId);
-  if (!actor || !target) return [];
-
-  // Se o alvo for o proprio jogador, ele pode querer gerenciar
-  const isSelf = (actorId === targetActorId);
-
-  const rows = await db.query(
-    `SELECT id, name FROM market_stalls WHERE owner_character_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
-    [target.characterId]
-  );
-  if (rows.length === 0) return [];
-
-  const stall = rows[0];
-  const actions = [];
-
-  if (isSelf) {
-    actions.push({ action: 'stall.manage', label: 'Gerenciar' });
-  } else {
-    actions.push({ action: 'stall.view', label: 'Ver Vitrine' });
-    actions.push({ action: 'stall.buy', label: 'Comprar Item' });
-  }
-
-  return [{
-    id: 'market_stall',
-    label: `Barraca: ${stall.name}`,
-    actions
-  }];
-}
-
-async function handleInteractionAction(actorId, action, payload = {}) {
-  const targetActorRaw = payload.targetActorId || payload.target || payload.actorId;
-  const targetActorId = Number.parseInt(String(targetActorRaw), String(targetActorRaw).startsWith('0x') ? 16 : 10);
-  
-  if (!Number.isFinite(targetActorId)) {
-    notify(actorId, 'Alvo invalido.');
-    return;
-  }
-
-  const target = getCharacter(targetActorId);
-  if (!target) return;
-  
-  const rows = await db.query(
-    `SELECT id FROM market_stalls WHERE owner_character_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
-    [target.characterId]
-  );
-  if (rows.length === 0) {
-    notify(actorId, 'Este alvo nao possui barraca ativa.');
-    return;
-  }
-  const stallId = rows[0].id;
-
-  switch (action) {
-    case 'stall.view':
-      return listItems(actorId, stallId);
-    case 'stall.buy':
-      return buyItem(actorId, stallId, payload.itemId, payload.count || 1, payload.requestId);
-    case 'stall.manage':
-      if (payload.actionType === 'add') {
-        return addItem(actorId, stallId, payload.baseId, payload.count, payload.price, payload.label || 'Mercadoria');
-      } else if (payload.actionType === 'remove') {
-        // removeItem espera o ID da listagem (market_stall_items.id), nao o baseId.
-        return removeItem(actorId, payload.itemId);
-      }
-      return;
-    default:
-      notify(actorId, 'Acao de barraca desconhecida.');
-  }
-}
+/*
+ * `getInteractionSections` e `handleInteractionAction` foram REMOVIDAS em
+ * 13/08/2026.
+ *
+ * As duas so eram alcancaveis por dentro do `governance-service.js`, que as
+ * chamava com um `require('./market-stalls-service')` por nome fixo — o
+ * acoplamento que o Interaction Framework existe para eliminar. Hoje quem
+ * declara as acoes de barraca e `registerStallInteractions()`, logo abaixo.
+ *
+ * Duas coisas mudaram de comportamento junto, e nenhuma e perda:
+ *
+ *   - `stall.manage` saiu do menu. Ele dependia do ramo `isSelf`, que ja era
+ *     INALCANCAVEL: a governanca recusava `actorId === targetActorId` antes de
+ *     chegar aqui (`CORE_FRAMEWORK_AUDIT.md` §6.7a). O comando de chat continua
+ *     sendo o caminho, e a acao volta ao menu quando `object`/`container`
+ *     ganharem resolvedor e a barraca virar alvo de verdade.
+ *   - `stall.buy` passou a ter alcance e deduplicacao de verdade. A vitrine
+ *     aparecia para quem estivesse na mesma celula, a qualquer distancia, e o
+ *     `requestId` chegava e era ignorado.
+ */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lifecycle
@@ -1224,11 +1279,86 @@ async function handleInteractionAction(actorId, action, payload = {}) {
 let _expirationTimer = null;
 let _rateLimitCleanupTimer = null;
 
+/**
+ * Declara as ações de barraca no Interaction Framework.
+ *
+ * Este arquivo é a prova do §23 do pedido: até 13/08/2026, para a barraca
+ * aparecer no menu de interação, era o `governance-service.js` que precisava
+ * `require('./market-stalls-service')` dentro de `getInteractionActions`.
+ * Agora quem tem a ação é quem a declara, e a governança não conhece mais este
+ * módulo.
+ *
+ * O alvo continua sendo **o dono da barraca**, não a barraca. É honesto com o
+ * que existe hoje: não há resolvedor de `container` nem de `object`, e inventar
+ * um contra APIs do SkyMP que este projeto nunca exercitou seria pior que a
+ * ausência. Quando `object` ganhar resolvedor, muda o `target` do descritor e
+ * o resto continua igual.
+ */
+function registerStallInteractions() {
+  // Reinicializar o serviço re-declara o conjunto **deste** módulo, em vez de
+  // colidir com o que ele mesmo registrou antes. Ids de outro módulo continuam
+  // protegidos: `unregisterModule` só remove os próprios.
+  interactionRegistry.unregisterModule(MODULE);
+
+  /**
+   * A barraca ativa do alvo, ou `null`. Consultada no `canSee` e de novo no
+   * `execute`: a barraca pode ter sido empacotada entre um e outro.
+   */
+  async function stallDoAlvo(characterId) {
+    const rows = await db.query(
+      `SELECT id, name FROM market_stalls WHERE owner_character_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
+      [characterId]
+    );
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  const comum = {
+    module: MODULE,
+    target: interactionRegistry.TARGET_TYPES.PLAYER,
+    section: 'barraca',
+    distance: STALL_INTERACTION_RANGE,
+    canSee: async ctx => Boolean(await stallDoAlvo(ctx.target.characterId))
+  };
+
+  interactionRegistry.register({
+    ...comum,
+    id: 'stall.view', label: 'Ver vitrine', order: 10,
+    // Ler uma vitrine não é evento de arbitragem. Gravar isso encheria
+    // `audit_logs` de linhas que ninguém vai consultar — §20 do pedido.
+    audit: interactionRegistry.AUDIT_LEVELS.TRACE,
+    execute: async ctx => {
+      const stall = await stallDoAlvo(ctx.target.characterId);
+      if (!stall) throw new Error('Barraca nao esta mais ativa.');
+      return listItems(ctx.actorId, stall.id);
+    }
+  });
+
+  interactionRegistry.register({
+    ...comum,
+    id: 'stall.buy', label: 'Comprar item', order: 20,
+    audit: interactionRegistry.AUDIT_LEVELS.ECONOMY,
+    // Compra move ouro e item. O `requestId` já existia no payload e era
+    // descartado; agora ele deduplica de verdade, e `buyItem` continua
+    // recebendo-o para a idempotência de banco (migration v13).
+    idempotent: true,
+    schema: {
+      itemId: { type: 'int', label: 'ID do item na vitrine', min: 1, required: true },
+      count: { type: 'int', label: 'Quantidade', min: 1, default: 1 }
+    },
+    execute: async ctx => {
+      const stall = await stallDoAlvo(ctx.target.characterId);
+      if (!stall) throw new Error('Barraca nao esta mais ativa.');
+      return buyItem(ctx.actorId, stall.id, ctx.data.itemId, ctx.data.count, ctx.requestId);
+    }
+  });
+}
+
 async function initMarketStallsService() {
   loadVisualConfig();
   actionPolicy.registerAction('stall_place', ['gameplay'], 'Montar barraca');
   actionPolicy.registerAction('stall_manage', ['gameplay', 'trade'], 'Gerenciar barraca');
   actionPolicy.registerAction('stall_buy', ['gameplay', 'trade'], 'Comprar em barraca');
+  registerStallInteractions();
 
   // Verificacao periodica de barracas expiradas (5 minutos)
   _expirationTimer = setInterval(async () => {
@@ -1274,7 +1404,5 @@ module.exports = {
   suspendStall,
   confiscateItem,
   expireStalls,
-  getInteractionSections,
-  handleInteractionAction,
   isInitialized: () => initialized
 };

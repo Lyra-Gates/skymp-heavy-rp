@@ -15,6 +15,13 @@ function allowLocalAutoWhitelist(profileId) {
   return profileId === 1 || profileId === 2;
 }
 
+// In online mode, SkyMP gets `profileId` from `user.id` in the Master API.
+// Our Master API deliberately returns `accounts.id`; it is not a Discord ID.
+function accountIdFromProfileId(profileId) {
+  const accountId = Number(profileId);
+  return Number.isSafeInteger(accountId) && accountId > 0 ? accountId : null;
+}
+
 /**
  * Concede o ouro inicial (`economy.startingGold`) uma única vez por personagem.
  *
@@ -78,13 +85,20 @@ async function checkWhitelist(userId, profileId, actorId) {
   try {
     console.log(`[whitelist] Running check for User:${userId}, Profile:${profileId}, Actor:${actorId.toString(16)}`);
 
-    // 1. Buscar ou criar conta baseada no profileId (que simula o Discord ID localmente)
+    // 1. In online mode, profileId is the account id resolved by the Master API.
+    // Never resolve it through discord_identities: that confuses two namespaces.
+    const accountId = accountIdFromProfileId(profileId);
+    if (!accountId) {
+      console.log(`[whitelist] Invalid account profileId: ${profileId}. Kicking user ${userId}...`);
+      if (typeof mp !== 'undefined') mp.kick(userId);
+      return false;
+    }
+
     let accountRows = await db.query(
       `SELECT a.id, a.status, a.vip_level 
-       FROM accounts a 
-       JOIN discord_identities d ON d.account_id = a.id 
-       WHERE d.discord_id = ?`,
-      [profileId.toString()]
+       FROM accounts a
+       WHERE a.id = ?`,
+      [accountId]
     );
 
     let account = null;
@@ -96,8 +110,7 @@ async function checkWhitelist(userId, profileId, actorId) {
       }
       console.log(`[whitelist] Account not found for profileId: ${profileId}. Auto-registering local account...`);
       // Apenas para laboratório local. NUNCA em produção.
-      const insertAcc = await db.query(`INSERT INTO accounts (status) VALUES ('active')`);
-      const accountId = insertAcc.insertId;
+      await db.query(`INSERT INTO accounts (id, status) VALUES (?, 'active')`, [accountId]);
       await db.query(
         `INSERT INTO discord_identities (discord_id, account_id, username) VALUES (?, ?, ?)`,
         [profileId.toString(), accountId, `Player_${profileId}`]
@@ -220,5 +233,6 @@ async function checkWhitelist(userId, profileId, actorId) {
 }
 
 module.exports = {
-  checkWhitelist
+  checkWhitelist,
+  accountIdFromProfileId
 };

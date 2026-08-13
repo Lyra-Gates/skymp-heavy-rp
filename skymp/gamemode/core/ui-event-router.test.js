@@ -28,14 +28,28 @@ describe('ui-event-router', () => {
     assert.deepStrictEqual(calls, [['governance', 123, 'governance:interaction:actions']]);
   });
 
-  it('chama também os demais handlers registrados (fallback multi-módulo)', async () => {
+  // Substitui o teste do "fallback multi-módulo" removido em 13/08/2026. O
+  // comportamento antigo entregava TODO evento a TODO handler registrado, então
+  // `panel` via o payload de `governance:*` e vice-versa — ver o cabeçalho de
+  // `ui-event-router.js` e `CORE_FRAMEWORK_AUDIT.md` §3.
+  it('entrega o evento SOMENTE ao handler do prefixo', async () => {
     const calls = [];
     uiEventRouter.register('governance', async () => { calls.push('governance'); return true; });
     uiEventRouter.register('panel', async () => { calls.push('panel'); return false; });
 
     await uiEventRouter.dispatch(1, { type: 'governance:interaction:actions' });
 
-    assert.deepStrictEqual(calls.sort(), ['governance', 'panel']);
+    assert.deepStrictEqual(calls, ['governance']);
+  });
+
+  it('não entrega a ninguém quando nenhum prefixo bate', async () => {
+    const calls = [];
+    uiEventRouter.register('governance', async () => { calls.push('governance'); return true; });
+
+    const handled = await uiEventRouter.dispatch(1, { type: 'interaction:query' });
+
+    assert.strictEqual(handled, false);
+    assert.deepStrictEqual(calls, []);
   });
 
   it('retorna false quando nenhum handler trata o evento', async () => {
@@ -50,14 +64,17 @@ describe('ui-event-router', () => {
     assert.strictEqual(await uiEventRouter.dispatch(1, { type: 42 }), false);
   });
 
-  it('não propaga exceção de um handler — isola erro e segue os demais', async () => {
+  it('não propaga exceção do handler — devolve false e não contamina os outros', async () => {
     const calls = [];
     uiEventRouter.register('governance', async () => { throw new Error('boom'); });
     uiEventRouter.register('panel', async () => { calls.push('panel'); return true; });
 
     const handled = await uiEventRouter.dispatch(1, { type: 'governance:x' });
 
-    assert.strictEqual(handled, true);
+    assert.strictEqual(handled, false);
+    // `panel` não é chamado como consolo: o evento era da governança.
+    assert.deepStrictEqual(calls, []);
+    assert.strictEqual(await uiEventRouter.dispatch(1, { type: 'panel:open' }), true);
     assert.deepStrictEqual(calls, ['panel']);
   });
 

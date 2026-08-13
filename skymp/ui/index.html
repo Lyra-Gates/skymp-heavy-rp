@@ -507,147 +507,20 @@
     }
   };
 
-  const DEFAULT_INTERACTION_SECTIONS = [
-    {
-      id: 'social',
-      label: 'Social',
-      actions: [
-        { action: 'social.trade', label: 'Trocar', preset: 'trade' },
-        { action: 'social.group', label: 'Grupo', preset: 'group' },
-        { action: 'social.introduce', label: 'Apresentar-se', preset: 'introduce' }
-      ]
-    }
-  ];
-
-  const ACTION_CONFIG = {
-    'social.trade': {
-      title: 'Trocar',
-      description: 'Envia uma solicitacao de troca para o alvo.',
-      fields: [],
-      submitType: 'chat',
-      chatCommand: ({ targetActorId }) => `/trade ${formatActorId(targetActorId)}`
-    },
-    'social.group': {
-      title: 'Grupo',
-      description: 'Envia uma solicitacao de grupo para o alvo.',
-      fields: [],
-      submitType: 'chat',
-      chatCommand: ({ targetActorId }) => `/groupinvite ${formatActorId(targetActorId)}`
-    },
-    'social.introduce': {
-      title: 'Apresentar-se',
-      description: 'Registra que o alvo passa a conhecer seu personagem pelo nome.',
-      fields: [],
-      submitType: 'chat',
-      chatCommand: ({ targetActorId }) => `/apresentar ${formatActorId(targetActorId)}`
-    },
-    'guard.stop': {
-      title: 'Abordar',
-      description: 'Inicia uma abordagem oficial da guarda.',
-      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: verificacao de identidade' }]
-    },
-    'guard.search': {
-      title: 'Revistar',
-      description: 'Solicita consentimento para revista. Se houver mandado ativo, a revista sera forcada pelo servidor.',
-      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: suspeita de contrabando' }]
-    },
-    'guard.records': {
-      title: 'Ver ficha',
-      description: 'Consulta ficha criminal e mandados conhecidos do alvo.',
-      fields: []
-    },
-    'guard.fine': {
-      title: 'Aplicar multa',
-      description: 'Registra multa. O servidor cobra automaticamente se o alvo possuir ouro suficiente.',
-      fields: [
-        { name: 'amount', label: 'Valor', type: 'number', min: 1, placeholder: '150' },
-        { name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: desordem publica' }
-      ]
-    },
-    'guard.detain': {
-      title: 'Deter',
-      description: 'Detem o alvo temporariamente para procedimento da guarda.',
-      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: resistencia a abordagem' }]
-    },
-    'guard.arrest': {
-      title: 'Prender',
-      description: 'Registra prisao e envia o alvo para a cela configurada.',
-      fields: [
-        { name: 'sentenceMinutes', label: 'Pena em minutos', type: 'number', min: 1, max: 180, placeholder: '10' },
-        { name: 'reason', label: 'Crime', type: 'textarea', placeholder: 'Ex: roubo e resistencia' }
-      ]
-    },
-    'guard.confiscate': {
-      title: 'Confiscar item',
-      description: 'Remove item do inventario persistente do alvo e registra como evidencia.',
-      fields: [
-        { name: 'baseId', label: 'FormID do item', type: 'text', placeholder: '0x0000000F' },
-        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' },
-        { name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: item ilegal' }
-      ]
-    },
-    'guard.release': {
-      title: 'Liberar',
-      description: 'Encerra abordagem, detencao ou escolta do alvo.',
-      fields: [{ name: 'reason', label: 'Motivo', type: 'textarea', placeholder: 'Ex: sem irregularidades' }]
-    },
-    'stall.view': {
-      title: 'Ver Vitrine',
-      description: 'Lista os itens a venda nesta barraca.',
-      fields: [],
-      submitType: 'event',
-      eventName: 'governance:interaction:execute'
-    },
-    'stall.buy': {
-      title: 'Comprar Item',
-      description: 'Compre um item especifico desta barraca.',
-      fields: [
-        { name: 'itemId', label: 'ID do Item', type: 'number', min: 1, placeholder: 'Ex: 1' },
-        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' }
-      ],
-      submitType: 'event',
-      eventName: 'governance:interaction:execute'
-    },
-    'stall.manage': {
-      title: 'Gerenciar Barraca',
-      description: 'Adiciona ou remove itens da sua propria barraca.',
-      fields: [
-        { name: 'actionType', label: 'Acao', type: 'select', options: [{value: 'add', label: 'Adicionar'}, {value: 'remove', label: 'Remover'}] },
-        { name: 'baseId', label: 'FormID do Item', type: 'text', placeholder: '0x0000000F' },
-        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' },
-        { name: 'price', label: 'Preco (apenas para adicionar)', type: 'number', min: 0, placeholder: '5' }
-      ],
-      submitType: 'event',
-      eventName: 'governance:interaction:execute'
-    },
-    'npc.market_view': {
-      title: 'Mercado: Ver Precos',
-      description: 'Lista os itens e precos disponiveis no mercado local.',
-      fields: [],
-      submitType: 'event',
-      eventName: 'governance:interaction:execute'
-    },
-    'npc.market_buy': {
-      title: 'Mercado: Comprar',
-      description: 'Compra itens superfaturados do NPC local.',
-      fields: [
-        { name: 'baseId', label: 'FormID do Item', type: 'text', placeholder: '0x0000000F' },
-        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' }
-      ],
-      submitType: 'event',
-      eventName: 'governance:interaction:execute'
-    },
-    'npc.market_sell': {
-      title: 'Mercado: Vender',
-      description: 'Vende itens ao NPC local por uma fracao do valor.',
-      fields: [
-        { name: 'baseId', label: 'FormID do Item', type: 'text', placeholder: '0x0000000F' },
-        { name: 'count', label: 'Quantidade', type: 'number', min: 1, placeholder: '1' }
-      ],
-      submitType: 'event',
-      eventName: 'governance:interaction:execute'
-    }
-  };
+  // ─── ACTION_CONFIG foi removido em 13/08/2026 ──────────────────────────────
+  //
+  // O cliente mantinha aqui a própria tabela de campos de cada ação: título,
+  // descrição, tipo de input, mínimo, máximo, placeholder. O servidor mantinha
+  // a dele, no `schema` de cada interação.
+  //
+  // Duas declarações da mesma coisa, e nenhuma autoridade sobre a outra. O dia
+  // em que o servidor apertasse um limite — `amount` máximo, tamanho do motivo,
+  // um campo novo obrigatório — esta tabela continuaria oferecendo o antigo, e
+  // o jogador descobriria digitando e sendo recusado.
+  //
+  // Agora os campos vêm do servidor, em `action.fields`, montados por
+  // `describeFields` no `core/interaction-service.js`. Ver
+  // `docs/framework/INTERACTION_FRAMEWORK.md` §11.
 
   function normalizePayload(data) {
     if (!data) return {};
@@ -676,14 +549,12 @@
     }
   }
 
-  function sendChatCommand(command) {
-    if (!command) return;
-    if (window.mp && typeof window.mp.send === 'function') {
-      window.mp.send('cef::chat:send', command);
-      return;
-    }
-    sendUiEvent('cef::chat:send', command);
-  }
+  // `sendChatCommand` foi removida em 13/08/2026. Ela existia para o
+  // `submitType: 'chat'` do `ACTION_CONFIG`: três ações do menu não eram
+  // eventos de UI, eram comandos de chat digitados pelo cliente
+  // (`/trade`, `/groupinvite`, `/apresentar`). Duas nunca existiram no servidor
+  // e a terceira virou a interação `identity.introduce`. Sem chamador, a função
+  // era uma segunda porta de entrada para o chat esperando alguém usá-la.
 
   const CHAT_LOG_MAX_LINES = 40;
   const CHAT_LOG_FADE_AFTER_MS = 18000;
@@ -1122,29 +993,54 @@
     mp.trigger('cef::trade:cancel', {});
   }
 
-  // ── Interaction Menu / Governance ───────────────────────────────────────────
-  function mergeInteractionSections(serverSections) {
-    const result = DEFAULT_INTERACTION_SECTIONS.map(section => ({
-      ...section,
-      actions: section.actions.map(action => ({ ...action }))
-    }));
+  // ── Interaction Menu ────────────────────────────────────────
+  //
+  // Desde 13/08/2026 este bloco nao decide nada. A lista de acoes, os campos de
+  // cada formulario e os limites de cada campo vem inteiros do servidor, por
+  // `interaction:query`; o clique volta por `interaction:execute` e e
+  // revalidado do zero antes de executar.
+  //
+  // Antes disso o cliente acrescentava tres acoes proprias as do servidor e
+  // mantinha a propria tabela de campos (`ACTION_CONFIG`). Ver
+  // `docs/research/CORE_FRAMEWORK_AUDIT.md` 7 e
+  // `docs/framework/INTERACTION_FRAMEWORK.md`.
 
-    for (const section of serverSections || []) {
-      const existing = result.find(item => item.id === section.id);
-      if (existing) {
-        existing.actions.push(...(section.actions || []));
-      } else {
-        result.push(section);
+  // O unico tipo de alvo com resolvedor no servidor hoje. Quando `container` ou
+  // `door` ganharem um, quem abre o menu passa o tipo junto.
+  const INTERACTION_TARGET_TYPE = 'player';
+
+  /**
+   * Identificador de uma tentativa, para o servidor recusar o duplo clique.
+   *
+   * Gerado por acao escolhida, nao por menu aberto: reenviar o MESMO id e
+   * exatamente o que faz o servidor devolver o resultado anterior em vez de
+   * cobrar duas vezes. So viaja em acoes que o servidor marcou
+   * `requiresRequestId`.
+   *
+   * `crypto.randomUUID` nao existe em todo CEF; o fallback nao precisa ser
+   * criptografico - precisa ser unico por jogador, e a chave de deduplicacao do
+   * servidor ja e `(actorId, requestId)`.
+   */
+  function newRequestId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  function findInteractionAction(actionId) {
+    for (const section of state.interaction.sections) {
+      for (const item of section.actions || []) {
+        if (item.action === actionId) return item;
       }
     }
-
-    return result.filter(section => section.actions && section.actions.length > 0);
+    return null;
   }
 
   function openInteractionMenu(data) {
     const d = normalizePayload(data);
     state.interaction.targetActorId = d.targetActorId || d.target || d.actorId || null;
-    state.interaction.sections = mergeInteractionSections(d.sections || []);
+    state.interaction.sections = [];
     state.interaction.selectedAction = null;
 
     document.getElementById('interaction-target').textContent =
@@ -1156,16 +1052,27 @@
     document.getElementById('interaction-menu').setAttribute('aria-hidden', 'false');
 
     if (state.interaction.targetActorId) {
-      sendUiEvent('governance:interaction:actions', { targetActorId: state.interaction.targetActorId });
+      sendUiEvent('interaction:query', {
+        targetType: INTERACTION_TARGET_TYPE,
+        targetId: formatActorId(state.interaction.targetActorId)
+      });
     }
   }
 
   function updateInteractionActions(data) {
     const d = normalizePayload(data);
-    if (d.targetActorId && String(d.targetActorId) !== String(state.interaction.targetActorId)) {
-      return;
-    }
-    state.interaction.sections = mergeInteractionSections(d.sections || []);
+    // O menu pode ter mudado de alvo enquanto a resposta vinha. Descartar e o
+    // certo: mostrar as acoes de um alvo sob o nome de outro faria o jogador
+    // clicar em "Prender" achando que e outra pessoa.
+    const alvoDaResposta = d.target && d.target.id ? d.target.id : null;
+    const alvoAtual = state.interaction.targetActorId
+      ? `${INTERACTION_TARGET_TYPE}:${parseInt(String(formatActorId(state.interaction.targetActorId)).replace(/^0x/i, ''), 16)}`
+      : null;
+    if (alvoDaResposta && alvoAtual && alvoDaResposta !== alvoAtual) return;
+
+    state.interaction.sections = (d.sections || []).filter(
+      section => section.actions && section.actions.length > 0
+    );
     renderInteractionActions();
   }
 
@@ -1176,12 +1083,21 @@
     state.interaction.sections = [];
     state.interaction.selectedAction = null;
     clearInteractionDetail();
-    sendUiEvent('governance:interaction:close', {});
   }
 
   function renderInteractionActions() {
     const root = document.getElementById('interaction-actions');
     root.innerHTML = '';
+
+    if (state.interaction.sections.length === 0) {
+      const vazio = document.createElement('div');
+      vazio.className = 'interaction-section-title';
+      // Diferente de "carregando": o servidor respondeu e nao ha nada a fazer
+      // com este alvo daqui. Silencio faria parecer que o menu quebrou.
+      vazio.textContent = 'Nenhuma acao disponivel com este alvo.';
+      root.appendChild(vazio);
+      return;
+    }
 
     for (const section of state.interaction.sections) {
       const sectionEl = document.createElement('section');
@@ -1199,9 +1115,17 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'interaction-action';
-        button.disabled = Boolean(item.disabled);
         button.dataset.action = item.action;
-        button.innerHTML = `<span>${item.label || item.action}</span><span class="hint">›</span>`;
+        // `textContent` em dois nos, nao `innerHTML`: o rotulo vem do servidor,
+        // mas interpolar texto de fora em HTML e a mesma classe de erro
+        // independente de quem manda.
+        const label = document.createElement('span');
+        label.textContent = item.label || item.action;
+        const hint = document.createElement('span');
+        hint.className = 'hint';
+        hint.textContent = '›';
+        button.appendChild(label);
+        button.appendChild(hint);
         button.onclick = () => selectInteractionAction(item.action);
         list.appendChild(button);
       }
@@ -1212,60 +1136,79 @@
   }
 
   function selectInteractionAction(action) {
+    const item = findInteractionAction(action);
+    if (!item) return;
+
     state.interaction.selectedAction = action;
     for (const el of document.querySelectorAll('.interaction-action')) {
       el.classList.toggle('active', el.dataset.action === action);
     }
 
-    const config = ACTION_CONFIG[action] || {
-      title: action,
-      description: 'Executa a acao selecionada.',
-      fields: []
-    };
-
     document.getElementById('interaction-detail-empty').style.display = 'none';
     const form = document.getElementById('interaction-action-form');
     form.classList.add('active');
-    document.getElementById('detail-title').textContent = config.title;
-    document.getElementById('detail-description').textContent = config.description || '';
+    document.getElementById('detail-title').textContent = item.label || action;
+    document.getElementById('detail-description').textContent =
+      (item.fields && item.fields.length > 0)
+        ? 'Preencha os campos e confirme. O servidor valida tudo de novo antes de executar.'
+        : 'Confirme para executar. O servidor valida tudo de novo antes de executar.';
 
     const fields = document.getElementById('detail-fields');
     fields.innerHTML = '';
-    for (const field of config.fields || []) {
+    for (const field of item.fields || []) {
       fields.appendChild(createActionField(field));
     }
   }
 
+  /**
+   * Monta um input a partir do `schema` que o servidor declarou.
+   *
+   * O mapeamento de tipo e so apresentacao - `int` vira `number` porque o
+   * teclado numerico e melhor, `string` longa vira `textarea` porque cabe mais.
+   * **Nada aqui valida**: `min`, `max` e `required` sao conforto de digitacao, e
+   * o servidor os checa de novo contra o mesmo schema que os gerou. Um cliente
+   * modificado que os remova nao ganha nada.
+   */
   function createActionField(field) {
     const row = document.createElement('div');
     row.className = 'form-row';
 
     const label = document.createElement('label');
     label.htmlFor = `field-${field.name}`;
-    label.textContent = field.label;
+    label.textContent = field.label || field.name;
     row.appendChild(label);
 
     let input;
-    if (field.type === 'textarea') {
-      input = document.createElement('textarea');
-    } else if (field.type === 'select') {
+    if (field.type === 'enum') {
       input = document.createElement('select');
-      for (const option of field.options || []) {
+      for (const value of field.values || []) {
         const opt = document.createElement('option');
-        opt.value = option.value;
-        opt.textContent = option.label;
+        opt.value = value;
+        opt.textContent = value;
         input.appendChild(opt);
       }
+    } else if (field.type === 'bool') {
+      input = document.createElement('select');
+      for (const value of ['true', 'false']) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = value === 'true' ? 'Sim' : 'Nao';
+        input.appendChild(opt);
+      }
+    } else if (field.type === 'string' && (field.max === undefined || field.max > 60)) {
+      input = document.createElement('textarea');
     } else {
       input = document.createElement('input');
-      input.type = field.type || 'text';
+      input.type = field.type === 'int' ? 'number' : 'text';
     }
 
     input.id = `field-${field.name}`;
     input.name = field.name;
     if (field.placeholder) input.placeholder = field.placeholder;
     if (field.min !== undefined) input.min = field.min;
-    if (field.max !== undefined) input.max = field.max;
+    if (field.max !== undefined && field.type === 'int') input.max = field.max;
+    if (field.max !== undefined && field.type === 'string') input.maxLength = field.max;
+    if (field.required) input.required = true;
     row.appendChild(input);
     return row;
   }
@@ -1288,26 +1231,30 @@
       return;
     }
 
-    const config = ACTION_CONFIG[action] || {};
-    const data = {
-      targetActorId: state.interaction.targetActorId,
-      action
-    };
+    const item = findInteractionAction(action);
+    if (!item) {
+      showInteractionToast('Acao indisponivel. Abra o menu de novo.');
+      return;
+    }
 
+    const data = {};
     const formData = new FormData(event.currentTarget);
     for (const [key, value] of formData.entries()) {
       data[key] = value;
     }
 
-    if (config.submitType === 'chat') {
-      sendChatCommand(config.chatCommand(data));
-    } else if (config.submitType === 'event') {
-      sendUiEvent(config.eventName, data);
-    } else {
-      sendUiEvent('governance:interaction:execute', data);
-    }
+    const payload = {
+      action,
+      targetId: formatActorId(state.interaction.targetActorId),
+      data
+    };
+    if (item.requiresRequestId) payload.requestId = newRequestId();
 
-    showInteractionToast('Acao enviada.');
+    sendUiEvent('interaction:execute', payload);
+
+    // Sem "Acao enviada": o servidor responde por notificacao - com o resultado
+    // ou com o motivo da recusa. Um toast otimista aqui diria "enviada" a quem
+    // acabou de ser recusado por distancia, e o jogador acreditaria no cliente.
     closeInteractionMenu();
   }
 
@@ -1316,10 +1263,10 @@
   window.closeInteractionMenu = closeInteractionMenu;
   window.handleServerModal = (payload) => {
     const message = normalizePayload(payload);
-    if (message.type === 'governance:interaction:actions') {
+    if (message.type === 'interaction:actions') {
       updateInteractionActions(message.data);
     }
-    if (message.type === 'governance:interaction:open') {
+    if (message.type === 'interaction:open') {
       openInteractionMenu(message.data);
     }
     if (message.type === 'governance:toast' || message.type === 'toast') {
@@ -1381,8 +1328,9 @@
 
     mp.events.add('interaction:open', (data) => openInteractionMenu(data));
     mp.events.add('interaction:close', () => closeInteractionMenu());
-    mp.events.add('governance:interaction:actions', (data) => updateInteractionActions(data));
-    mp.events.add('governance:interaction:open', (data) => openInteractionMenu(data));
+    // `governance:interaction:actions` e `:open` saíram em 13/08/2026 junto com
+    // o caminho legado do servidor. O menu agora fala `interaction:*` nos dois
+    // sentidos.
   }
 
   window.addEventListener('keydown', (event) => {
