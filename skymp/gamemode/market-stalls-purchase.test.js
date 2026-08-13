@@ -80,7 +80,17 @@ function novaConexao() {
         return [{}];
       }
       if (/INSERT INTO inventory_transactions/i.test(sql)) {
-        ledgerItem.push({ characterId: params[1], baseId: params[2], delta: params[3], reason: params[4] });
+        // Posições mudaram na migration v14: o razão passou a nomear os dois
+        // lados do movimento (owner_*/counterparty_*/transfer_id) entre o
+        // `character_id` e o `base_id`.
+        // (transaction_id, character_id, owner_type, owner_ref,
+        //  counterparty_type, counterparty_ref, transfer_id,
+        //  base_id, delta, reason, module, idempotency_key)
+        ledgerItem.push({
+          characterId: params[1], ownerType: params[2], ownerRef: params[3],
+          counterpartyType: params[4], counterpartyRef: params[5],
+          baseId: params[7], delta: params[8], reason: params[9]
+        });
         return [{}];
       }
       if (/INSERT INTO market_stall_sales/i.test(sql)) {

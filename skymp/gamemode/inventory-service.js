@@ -1,5 +1,30 @@
 /**
- * inventory-service.js
+ * inventory-service.js — projeção do inventário no cliente
+ *
+ * ⚠️ **Este arquivo não é o Inventory Framework.** Desde 13/08/2026, a API
+ * central de movimentação de item é `core/inventory.js`, e a documentação dela
+ * é `docs/framework/INVENTORY_FRAMEWORK.md`. O que sobrou aqui é a outra
+ * metade do assunto: levar o que o banco sabe até a tela do jogador, e os três
+ * atalhos históricos (`giveItem`/`removeItem`/`hasItem`) que continuam válidos
+ * para o caso de **um dono só**.
+ *
+ * Qual usar:
+ *
+ *   - um dono muda (staff dá item, recompensa)      → daqui, ou transaction-service
+ *   - **dois** donos (troca, baú, barraca, craft)   → `core/inventory.transfer`
+ *
+ * ─── Limite conhecido da reconciliação ──────────────────────────────────────
+ *
+ * `syncInventoryToClient` é **unidirecional**: ela entrega ao cliente o que o
+ * banco conhece e nunca faz o contrário. Ela não remove do cliente o que o
+ * cliente tem e o banco não conhece, não compara contagens, e roda uma vez só
+ * (chamador único: `whitelist.js`).
+ *
+ * Consequência: item pego do chão, saque de NPC vanilla e recompensa de quest
+ * existem só no cliente, para sempre. Isso é a fronteira nomeada no
+ * `docs/technical/ADR_003_INVENTORY_SOURCE_OF_TRUTH.md` §3 — fechá-la exige ler
+ * `mp.get(id,'inventory')` (ainda **[DOC]** em `types/mp.d.ts`, nunca
+ * exercitada) e decidir uma política de divergência, que é decisão de jogo.
  *
  * Serviço de inventário com reconciliação para prevenir duplicatas.
  *

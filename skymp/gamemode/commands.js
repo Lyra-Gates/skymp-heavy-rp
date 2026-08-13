@@ -87,7 +87,40 @@ function removeActiveCharacter(actorId) {
     }
 
     activeCharacters.delete(actorId);
+
+    // Assinantes registrados por módulos que podem estar desligados.
+    //
+    // Os `require` preguiçosos acima são a forma antiga, e ela funciona porque
+    // aqueles cinco módulos ou são core ou têm `isEnabled` para consultar. Um
+    // módulo `lab` sem esse tratamento — `trade` é o primeiro — não pode entrar
+    // naquela lista: `commands.js` passaria a conhecer por nome fixo um serviço
+    // que o `module-registry` talvez não tenha ligado, que é o acoplamento que
+    // o `governance-service` cita como a pior ideia possível.
+    //
+    // Aqui a seta se inverte, pelo mesmo motivo do Interaction Framework: quem
+    // precisa saber da desconexão assina no `initialize()` e é removido no
+    // `shutdown()`. `commands.js` não sabe quem são.
+    for (const assinante of _characterRemovedSubscribers) {
+      try {
+        assinante(actorId, char);
+      } catch (err) {
+        console.error('[commands] Assinante de desconexao falhou:', err.message);
+      }
+    }
   }
+}
+
+/** @type {Set<(actorId: number, character: object) => void>} */
+const _characterRemovedSubscribers = new Set();
+
+/**
+ * Assina a saída de um personagem. Devolve a função de cancelamento.
+ * @param {(actorId: number, character: object) => void} fn
+ */
+function onCharacterRemoved(fn) {
+  if (typeof fn !== 'function') throw new Error('[commands] assinante invalido');
+  _characterRemovedSubscribers.add(fn);
+  return () => _characterRemovedSubscribers.delete(fn);
 }
 
 function getCharacterName(actorId) {
@@ -462,9 +495,23 @@ module.exports = {
   registerActiveCharacter,
   removeActiveCharacter,
   getActiveCharacterData,
+
+  // Apelido de `getActiveCharacterData`, e não decoração: `phase0-basic.js`
+  // passa `commands.getCharacterData` para `createTargetResolvers` e para
+  // `createInteractionService` desde 13/08/2026, e o nome nunca esteve neste
+  // objeto. `createTargetResolvers` lança quando o recebe `undefined`, e o
+  // lançamento acontece no corpo do módulo — ou seja, **o servidor não subia**,
+  // e nenhum teste pegava porque nenhum deles carrega `phase0-basic.js`.
+  //
+  // O apelido, e não a renomeação: `getActiveCharacterData` é o nome usado por
+  // uma dúzia de chamadores e por vários testes, e o core prefere `getCharacter`
+  // porque para ele não existe "ativo" — existe "o servidor sabe quem é".
+  getCharacterData: getActiveCharacterData,
+
   getActiveActorByCharacterId,
   listActiveActorIds,
   handleChatInput,
   broadcastProximityMessage,
-  sendNotification
+  sendNotification,
+  onCharacterRemoved
 };

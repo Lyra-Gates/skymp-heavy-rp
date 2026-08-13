@@ -488,8 +488,32 @@ async function packStall(actorId, stallIdRaw) {
     );
     items = itemRows;
 
+    // ── A devolucao acontece AQUI DENTRO ────────────────────────────────────
+    //
+    // Ela ficava depois do commit, num laco de `inventory.giveItem()` — N
+    // transacoes independentes com os N itens ja marcados `removed`. Uma
+    // barraca de dez itens com falha no quinto devolvia quatro e perdia seis,
+    // sem caminho automatico de volta (auditoria §4.2).
+    //
+    // O comentario que estava aqui explicava corretamente por que a devolucao
+    // vinha depois do commit — evitar que outra chamada reivindicasse o mesmo
+    // item — e nao percebia que trocava uma janela de duplicacao por uma janela
+    // de perda. Dentro da mesma transacao nao existe nenhuma das duas: os itens
+    // ja estao travados por `FOR UPDATE` desde o SELECT acima.
+    const chavePack = `stall.pack.${stallId}.${crypto.randomUUID().slice(0, 18)}`;
+    let indice = 0;
     for (const item of items) {
       await conn.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', item.id]);
+
+      await transactionService.tx.applyInventoryDelta(conn, stall.owner_character_id, item.base_id, item.count);
+      await transactionService.tx.recordInventoryLedger(conn, {
+        characterId: stall.owner_character_id,
+        ownerType: 'character', ownerRef: String(stall.owner_character_id),
+        counterpartyType: 'market', counterpartyRef: String(stallId),
+        baseId: item.base_id, delta: item.count,
+        reason: 'stall_pack_return', module: MODULE,
+        idempotencyKey: `${chavePack}#${indice++}`
+      });
     }
     await conn.query('UPDATE market_stalls SET status = ?, updated_at = NOW() WHERE id = ?', ['packed', stallId]);
 
@@ -503,12 +527,15 @@ async function packStall(actorId, stallIdRaw) {
     conn.release();
   }
 
-  // Devolve os itens DEPOIS do commit — a barraca e os itens ja estao marcados
-  // como recolhidos/removidos de forma atomica, entao nao ha mais janela pra
-  // outra chamada concorrente reivindicar o mesmo item.
-  for (const item of items) {
-    await inventory.giveItem(actorId, character.characterId, item.base_id, item.count, 'stall_pack_return', MODULE);
+  // Cliente APOS o commit. O dono pode ser outro ator que nao quem recolheu
+  // (staff com `manage_staff` recolhe barraca alheia), e pode estar offline —
+  // por isso a projecao so acontece quando o dono e quem esta na frente.
+  if (stall.owner_character_id === character.characterId) {
+    for (const item of items) {
+      transactionService.tx.applyToClient(actorId, item.base_id, item.count);
+    }
   }
+
   if (typeof mp !== 'undefined' && stall.visual_ref_id) {
     try {
       mp.set(stall.visual_ref_id, 'isDisabled', true);
@@ -569,16 +596,26 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     return;
   }
 
-  // Remover item do inventario ANTES da transacao de barraca
-  // (inventory-service ja usa transaction-service internamente)
-  const removed = await inventory.removeItem(actorId, character.characterId, baseId, count, 'stall_list_item', MODULE);
-  if (!removed) {
-    notify(actorId, 'Item insuficiente no inventario persistente.');
-    return;
-  }
-
-  // Transacao para validar barraca e inserir item atomicamente
+  // ── Uma transacao: o item sai do inventario E vira anuncio, ou nada ──────
+  //
+  // Ate 13/08/2026 isto eram tres transacoes: `inventory.removeItem()` (que
+  // commita a propria), depois o INSERT do anuncio na transacao de baixo, e um
+  // `giveItem()` compensatorio no `catch`. Compensacao so cobre falha que ESTE
+  // processo chega a observar: se o servidor morresse entre o commit da
+  // primeira e o da segunda, o item saia do inventario e nunca virava anuncio,
+  // e nada ligava a linha do razao a ausencia do anuncio.
+  //
+  // Ver docs/research/INVENTORY_TRADE_CRAFTING_AUDIT.md §4.1. A `buyItem`
+  // deste mesmo arquivo ja fazia certo — a diferenca entre as duas era a
+  // medida da divida.
+  //
+  // A barraca nao usa `core/inventory.transfer` porque `market_stall_items`
+  // **nao e uma pilha**: ela carrega preco, rotulo e status por anuncio. O que
+  // se usa daqui e a primitiva do personagem mais o razao com contraparte
+  // nomeada — ver `core/inventory-owner.js`, sobre `MARKET` ser vocabulario
+  // reservado.
   const conn = await db.getConnection();
+  const requestId = `stall.add.${character.characterId}.${crypto.randomUUID().slice(0, 18)}`;
   try {
     await conn.beginTransaction();
 
@@ -588,13 +625,20 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     );
     const stall = rows[0];
     if (!stall || stall.owner_character_id !== character.characterId) {
-      // Devolver item ao jogador se a barraca nao existe
       await conn.rollback();
-      await inventory.giveItem(actorId, character.characterId, baseId, count, 'stall_list_revert', MODULE);
       notify(actorId, 'Barraca ativa nao encontrada ou voce nao e o dono.');
-      conn.release();
       return;
     }
+
+    await transactionService.tx.applyInventoryDelta(conn, character.characterId, baseId, -count);
+    await transactionService.tx.recordInventoryLedger(conn, {
+      characterId: character.characterId,
+      ownerType: 'character', ownerRef: String(character.characterId),
+      counterpartyType: 'market', counterpartyRef: String(stallId),
+      baseId, delta: -count,
+      reason: 'stall_list_item', module: MODULE,
+      idempotencyKey: requestId
+    });
 
     await conn.query(
       `INSERT INTO market_stall_items (stall_id, base_id, count, price, label, status)
@@ -605,15 +649,17 @@ async function addItem(actorId, stallIdRaw, baseIdRaw, countRaw, priceRaw, label
     await conn.commit();
   } catch (err) {
     await conn.rollback();
-    // Devolver item ao jogador em caso de erro
-    await inventory.giveItem(actorId, character.characterId, baseId, count, 'stall_list_revert', MODULE);
-    notify(actorId, 'Erro ao listar item. Itens devolvidos.');
-    console.error('[market-stalls] addItem transaction failed:', err.message);
-    conn.release();
+    const regra = ERROS_DE_REGRA.test(err.message);
+    if (!regra) console.error('[market-stalls] addItem transaction failed:', err.message);
+    notify(actorId, regra ? err.message : 'Erro ao listar item.');
     return;
   } finally {
-    if (conn && typeof conn.release === 'function') conn.release();
+    conn.release();
   }
+
+  // Cliente APOS o commit. O banco ja e a fonte de verdade; uma falha aqui e
+  // reconciliada no proximo login.
+  transactionService.tx.applyToClient(actorId, baseId, -count);
 
   await audit(actorId, 'stall:item_add', `stallId=${stallId} baseId=0x${baseId.toString(16)} count=${count} price=${price}`, stallId);
   notify(actorId, 'Item anunciado na barraca.');
@@ -660,6 +706,20 @@ async function removeItem(actorId, itemIdRaw) {
     }
 
     await conn.query('UPDATE market_stall_items SET status = ? WHERE id = ?', ['removed', itemId]);
+
+    // Mesma correcao do `packStall`: a devolucao entra na transacao que marcou
+    // o anuncio como removido. Fora dela, um erro no `giveItem` deixava o item
+    // `removed` na barraca e ausente do inventario — perdido nos dois lugares.
+    await transactionService.tx.applyInventoryDelta(conn, character.characterId, item.base_id, item.count);
+    await transactionService.tx.recordInventoryLedger(conn, {
+      characterId: character.characterId,
+      ownerType: 'character', ownerRef: String(character.characterId),
+      counterpartyType: 'market', counterpartyRef: String(item.stall_id),
+      baseId: item.base_id, delta: item.count,
+      reason: 'stall_unlist_item', module: MODULE,
+      idempotencyKey: `stall.unlist.${itemId}.${crypto.randomUUID().slice(0, 18)}`
+    });
+
     await conn.commit();
   } catch (err) {
     await conn.rollback();
@@ -670,7 +730,7 @@ async function removeItem(actorId, itemIdRaw) {
     conn.release();
   }
 
-  await inventory.giveItem(actorId, character.characterId, item.base_id, item.count, 'stall_unlist_item', MODULE);
+  transactionService.tx.applyToClient(actorId, item.base_id, item.count);
   await audit(actorId, 'stall:item_remove', `itemId=${itemId}`, item.stall_id);
   notify(actorId, 'Item removido da barraca e devolvido.');
 }
@@ -830,7 +890,10 @@ async function buyItem(actorId, stallIdRaw, itemIdRaw, countRaw, requestId) {
       reason: 'stall_sale', module: MODULE, idempotencyKey: `${idempotencyKey}_sell_gold`
     });
     await transactionService.tx.recordInventoryLedger(conn, {
-      characterId: buyer.characterId, baseId: item.base_id, delta: count,
+      characterId: buyer.characterId,
+      ownerType: 'character', ownerRef: String(buyer.characterId),
+      counterpartyType: 'market', counterpartyRef: String(stallId),
+      baseId: item.base_id, delta: count,
       reason: 'stall_purchase', module: MODULE, idempotencyKey: `${idempotencyKey}_buy_inv`
     });
 

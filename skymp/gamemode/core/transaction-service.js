@@ -26,20 +26,45 @@ function uuid() {
  * Registra uma transação de item no ledger.
  * @param {object} conn - Conexão com transação ativa
  * @param {object} opts
- * @param {number} opts.characterId
+ * @param {number|null} opts.characterId
  * @param {number} opts.baseId
  * @param {number} opts.delta - positivo = ganhou, negativo = perdeu
  * @param {string} opts.reason
  * @param {string} opts.module
- * @param {string|null} opts.idempotencyKey
+ * @param {string|null} [opts.idempotencyKey]
+ * @param {string} [opts.ownerType] - padrão `character` (migration v14)
+ * @param {string|number} [opts.ownerRef] - padrão o próprio `characterId`
+ * @param {string} [opts.counterpartyType] - o outro lado do movimento
+ * @param {string|number} [opts.counterpartyRef]
+ * @param {string} [opts.transferId] - UUID compartilhado pelas pernas da mesma transferência
  */
 async function _recordInventoryLedger(conn, opts) {
   const txId = uuid();
+
+  // `owner_*` e `counterparty_*` entraram na migration v14 (Inventory
+  // Framework). Quem não passa nada continua gravando exatamente a linha de
+  // antes: dono `character`, ref igual ao `character_id`, contraparte nula.
+  // É o que mantém `giveItem`/`removeItem` e os chamadores das primitivas
+  // inalterados enquanto o `core/inventory.js` nomeia os dois lados.
+  const ownerType = opts.ownerType || 'character';
+  const ownerRef = opts.ownerRef !== undefined && opts.ownerRef !== null
+    ? String(opts.ownerRef)
+    : String(opts.characterId);
+
   await conn.query(
     `INSERT INTO inventory_transactions
-      (transaction_id, character_id, base_id, delta, reason, module, idempotency_key, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'committed')`,
-    [txId, opts.characterId, opts.baseId, opts.delta, opts.reason, opts.module, opts.idempotencyKey || null]
+      (transaction_id, character_id, owner_type, owner_ref,
+       counterparty_type, counterparty_ref, transfer_id,
+       base_id, delta, reason, module, idempotency_key, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'committed')`,
+    [
+      txId,
+      opts.characterId === undefined ? null : opts.characterId,
+      ownerType, ownerRef,
+      opts.counterpartyType || null, opts.counterpartyRef || null,
+      opts.transferId || null,
+      opts.baseId, opts.delta, opts.reason, opts.module, opts.idempotencyKey || null
+    ]
   );
   return txId;
 }
@@ -59,46 +84,130 @@ async function _recordGoldLedger(conn, opts) {
 }
 
 /**
- * Atualiza character_inventory dentro de uma transação ativa.
- * Não cria nem destrói a transação, apenas executa queries.
+ * Tabelas de pilha `(dono, base_id, count)` que este arquivo sabe escrever.
+ *
+ * ─── Por que é uma lista fechada, e não um parâmetro ────────────────────────
+ *
+ * `_applyStackDelta` monta SQL com o nome da tabela e da coluna interpolados —
+ * um placeholder `?` não funciona para identificador. Uma lista fechada aqui é
+ * o que torna essa interpolação segura por construção: nenhum nome vindo de
+ * módulo, de configuração ou de payload chega ao SQL. Um dono novo entra
+ * editando este objeto, sob revisão, que é o mesmo critério da lista de origens
+ * do `core/inventory-owner.js`.
+ *
+ * `market_stall_items` **não está aqui de propósito**: ela carrega preço,
+ * rótulo e status por anúncio, então não é uma pilha. Ver
+ * `docs/research/INVENTORY_TRADE_CRAFTING_AUDIT.md` §1.1.
  */
-async function _applyInventoryDelta(conn, characterId, baseId, delta) {
+const STACK_TABLES = Object.freeze({
+  character_inventory: 'character_id',
+  container_inventory: 'container_id'
+});
+
+/**
+ * O maior valor que cabe em `count INT` do MySQL.
+ *
+ * A guarda existe porque `UPDATE ... SET count = count + ?` no modo não-estrito
+ * satura silenciosamente em vez de falhar: um jogador com 2.147.483.000 flechas
+ * recebendo mais 1.000 ficaria com 2.147.483.647, e a diferença viraria item
+ * destruído sem nenhuma linha explicando. Melhor recusar a operação.
+ */
+const MAX_STACK_COUNT = 2147483647;
+
+/**
+ * Atualiza uma tabela de pilha dentro de uma transação **do chamador**.
+ * Não cria nem destrói a transação, apenas executa queries.
+ *
+ * Generalizada em 13/08/2026: era `character_inventory` fixa, e o
+ * `core/inventory.js` precisa da mesma semântica (o `FOR UPDATE`, a recusa por
+ * estoque insuficiente, o `DELETE` quando zera) para container. Duas cópias
+ * disso é o defeito que a exportação das primitivas `tx.*` existe para não ter.
+ *
+ * ─── Validação ─────────────────────────────────────────────────────────────
+ *
+ * Ela é nova e é o §6 da auditoria: as funções públicas (`giveItem`,
+ * `removeItem`) checavam `count <= 0`, e esta primitiva — que é a exportada,
+ * usada direto por crafting e barraca — não checava nada. `delta = NaN` caía no
+ * ramo de remoção, passava pela comparação (`x < NaN` é sempre `false`) e
+ * escrevia `count = NaN`.
+ *
+ * @param {object} conn conexão com transação ativa
+ * @param {string} table uma chave de `STACK_TABLES`
+ * @param {number} ownerId valor da coluna de dono
+ * @param {number} baseId FormID
+ * @param {number} delta positivo credita, negativo debita; zero é recusado
+ */
+async function _applyStackDelta(conn, table, ownerId, baseId, delta) {
+  const ownerColumn = STACK_TABLES[table];
+  if (!ownerColumn) {
+    throw new Error(`[transaction] tabela de pilha desconhecida: ${JSON.stringify(table)}`);
+  }
+  if (!Number.isSafeInteger(ownerId) || ownerId <= 0) {
+    throw new Error(`[transaction] dono invalido em ${table}: ${JSON.stringify(ownerId)}`);
+  }
+  if (!Number.isSafeInteger(baseId) || baseId <= 0) {
+    throw new Error(`[transaction] baseId invalido: ${JSON.stringify(baseId)}`);
+  }
+  // `delta = 0` é recusado, não ignorado: ele chegaria aqui vindo de um cálculo
+  // que deu errado em algum lugar, e gravar uma linha de ledger com delta zero
+  // esconderia esse erro atrás de uma operação "bem-sucedida".
+  if (!Number.isSafeInteger(delta) || delta === 0) {
+    throw new Error(`[transaction] delta invalido para 0x${Number(baseId).toString(16)}: ${JSON.stringify(delta)}`);
+  }
+
   // FOR UPDATE trava a linha (ou o gap, se ainda não existir) dentro da transação
-  // ativa em conn — uma segunda chamada concorrente pra mesma (characterId, baseId)
+  // ativa em conn — uma segunda chamada concorrente pra mesma (dono, base_id)
   // bloqueia aqui até o commit/rollback da primeira, em vez de ler o mesmo valor
   // obsoleto e sobrescrever (o bug original permitia duplicar/perder itens quando
   // duas operações rodavam em paralelo, ex: stall_add + stall_pack).
   const [rows] = await conn.query(
-    'SELECT count FROM character_inventory WHERE character_id = ? AND base_id = ? FOR UPDATE',
-    [characterId, baseId]
+    `SELECT count FROM ${table} WHERE ${ownerColumn} = ? AND base_id = ? FOR UPDATE`,
+    [ownerId, baseId]
   );
 
   if (delta > 0) {
-    // Adiciona itens
+    const atual = rows.length > 0 ? Number(rows[0].count) : 0;
+    if (atual + delta > MAX_STACK_COUNT) {
+      throw new Error(`Pilha cheia: ${atual} + ${delta} passa do limite de ${MAX_STACK_COUNT}`);
+    }
     if (rows.length > 0) {
       await conn.query(
-        'UPDATE character_inventory SET count = count + ? WHERE character_id = ? AND base_id = ?',
-        [delta, characterId, baseId]
+        `UPDATE ${table} SET count = count + ? WHERE ${ownerColumn} = ? AND base_id = ?`,
+        [delta, ownerId, baseId]
       );
     } else {
       await conn.query(
-        'INSERT INTO character_inventory (character_id, base_id, count) VALUES (?, ?, ?)',
-        [characterId, baseId, delta]
+        `INSERT INTO ${table} (${ownerColumn}, base_id, count) VALUES (?, ?, ?)`,
+        [ownerId, baseId, delta]
       );
     }
   } else {
     // Remove itens (delta é negativo)
-    if (rows.length === 0) throw new Error(`Personagem ${characterId} não possui item 0x${baseId.toString(16)}`);
-    const currentCount = rows[0].count;
+    if (rows.length === 0) {
+      throw new Error(`Dono ${ownerId} não possui item 0x${baseId.toString(16)}`);
+    }
+    const currentCount = Number(rows[0].count);
     const remove = Math.abs(delta);
     if (currentCount < remove) throw new Error(`Estoque insuficiente: tem ${currentCount}, precisa ${remove}`);
     const newCount = currentCount - remove;
     if (newCount <= 0) {
-      await conn.query('DELETE FROM character_inventory WHERE character_id = ? AND base_id = ?', [characterId, baseId]);
+      await conn.query(`DELETE FROM ${table} WHERE ${ownerColumn} = ? AND base_id = ?`, [ownerId, baseId]);
     } else {
-      await conn.query('UPDATE character_inventory SET count = ? WHERE character_id = ? AND base_id = ?', [newCount, characterId, baseId]);
+      await conn.query(
+        `UPDATE ${table} SET count = ? WHERE ${ownerColumn} = ? AND base_id = ?`,
+        [newCount, ownerId, baseId]
+      );
     }
   }
+}
+
+/**
+ * Atualiza `character_inventory` dentro de uma transação ativa.
+ * Continua sendo o nome que crafting e barraca chamam; hoje é um apelido de
+ * `_applyStackDelta` com a tabela do personagem.
+ */
+async function _applyInventoryDelta(conn, characterId, baseId, delta) {
+  return _applyStackDelta(conn, 'character_inventory', characterId, baseId, delta);
 }
 
 /**
@@ -453,6 +562,12 @@ module.exports = {
   tx: {
     applyGoldDelta: _applyGoldDelta,
     applyInventoryDelta: _applyInventoryDelta,
+    // Generalização de `applyInventoryDelta` para qualquer tabela de
+    // `STACK_TABLES`. Quem usa é `core/inventory.js`, que precisa da mesma
+    // semântica de lock e de recusa para container.
+    applyStackDelta: _applyStackDelta,
+    STACK_TABLES,
+    MAX_STACK_COUNT,
     recordGoldLedger: _recordGoldLedger,
     recordInventoryLedger: _recordInventoryLedger,
     // Exportada quando o `crafting-service` migrou: ele precisava entregar o

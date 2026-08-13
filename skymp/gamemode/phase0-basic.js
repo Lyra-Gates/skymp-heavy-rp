@@ -66,6 +66,7 @@ const soulService   = require(path.join(gamemodeDir, 'soul-service'));
 const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
 const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
 const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
+const tradeService  = require(path.join(gamemodeDir, 'trade-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -340,12 +341,41 @@ moduleRegistry.register({
   }
 });
 
+// LAB: Troca entre jogadores.
+//
+// Reescrito em 13/08/2026 sobre o Inventory Framework — antes era um convite
+// sem troca (nenhuma transferência, nenhum timeout, nenhuma limpeza em
+// desconexão; ver INVENTORY_TRADE_CRAFTING_AUDIT.md §12). Ganhou descritor
+// porque agora tem o que registrar: uma interação e cinco comandos.
+//
+// Nasce com a flag em `false`, como todo `lab`. **Não tem UI CEF** — os
+// comandos de chat são a interface inteira. E, como tudo neste servidor, nunca
+// rodou numa sessão real.
+moduleRegistry.register({
+  id: 'trade',
+  enabledBy: 'ENABLE_TRADE_SERVICE',
+  phase: 'lab',
+  version: '2.0.0',
+  dependencies: ['interaction'],
+  commands: tradeService.commandDefs(),
+  initialize: async () => {
+    tradeService.registerInteractions();
+    // A desconexão precisa derrubar a sessão do lado que ficou — senão o
+    // outro fica preso numa troca com um ausente até o TTL. O gancho é
+    // assinado aqui, e não no `commands.js`, para que ele não conheça um
+    // módulo que pode estar desligado.
+    commands.onCharacterRemoved(tradeService.onDisconnect);
+  },
+  shutdown: async () => {
+    tradeService.sweep();
+  }
+});
+
 // PARKED — Existem no disco e NÃO são registrados até passarem por reengenharia:
 // - economy-regional  (ENABLE_REGIONAL_ECONOMY)
 // - jobs-service      (ENABLE_WOODCUTTING / ENABLE_MINING / ENABLE_FISHING)
 // - crafting-service  (ENABLE_CRAFTING)
 // - housing-service   (ENABLE_HOUSING)
-// - trade-service     (ENABLE_TRADE)
 // - horse-service     (ENABLE_HORSES)
 //
 // APAGADOS em 06/08/2026 (ver docs/technical/PARKED_SERVICES_DECISION.md):

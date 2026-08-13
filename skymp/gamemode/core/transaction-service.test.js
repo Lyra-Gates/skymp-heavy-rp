@@ -69,7 +69,11 @@ function mockDb() {
           const s = sql.trim().toUpperCase();
 
           if (s.startsWith('INSERT INTO INVENTORY_TRANSACTIONS')) {
-            const key = params[6]; // idempotency_key
+            // A posição mudou na migration v14: entre `character_id` e
+            // `base_id` entraram owner_type, owner_ref, counterparty_type,
+            // counterparty_ref e transfer_id, para que o razão nomeie os dois
+            // lados do movimento. Ver INVENTORY_TRADE_CRAFTING_AUDIT.md §2.
+            const key = params[11]; // idempotency_key
             ops.push(() => {
               mockLedger.push({ type: 'inventory', params });
               if (key) mockIdempotency.add(key);
