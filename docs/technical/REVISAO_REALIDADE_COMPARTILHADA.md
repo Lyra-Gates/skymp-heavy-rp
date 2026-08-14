@@ -25,9 +25,12 @@ no calor da descoberta.
 > `death-service` (§6, os dois achados) e o `safe-zones` (§2) saíram em
 > [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12), numa rodada separada que fez **só** os dois
 > consertos. Os vereditos abaixo foram atualizados no lugar, com a marca ✅
-> **corrigido** e o que mudou. **`hit-events` (§1) e `voip-service` (§5)
-> continuam 🔴** e continuam sem conserto — ver a priorização no fim, que explica
-> por que nenhum dos dois bloqueia a sessão.
+> **corrigido** e o que mudou.
+>
+> **Atualização de 14/08/2026 — o terceiro saiu.** O `voip-service` (§5) foi
+> corrigido em [`112d51b`](https://github.com/vinicius3232/skymp-heavy-rp/commit/112d51b), também numa rodada de um
+> conserto só. **Resta `hit-events` (§1) em 🔴**, sem conserto e de propósito — a
+> priorização no fim explica por que ele não deve entrar antes da sessão.
 >
 > O texto do achado foi **mantido no passado**, não apagado: o que ele descreve
 > aconteceu, e um documento de auditoria que reescreve o diagnóstico depois do
@@ -78,7 +81,7 @@ features.
 | Sistema | Antes (§8) | Agora (§8 + §9) | Por quê |
 |---|---|---|---|
 | `core/hit-events.js` | 🟡 | **🔴** | §9.1 `[DOC]`: o `OnHit` nativo chega ao gamemode e já resolve o `0x14` |
-| `voip-service` | 🟡 | **🔴** | Leitura de código nesta passagem: `tickProximity` ignora a célula |
+| `voip-service` | 🟡 | **🔴** (✅ corrigido depois, `112d51b`) | Leitura de código nesta passagem: `tickProximity` ignora a célula |
 | Escala de mob | ✅ | **⚪** | §9.8 registra explicitamente que a wiki **não** responde a parte que importa |
 
 ---
@@ -672,7 +675,8 @@ euclidiana ([market-stalls-service.js:154-158](../../skymp/gamemode/market-stall
 `loc.cellOrWorldDesc`, que é o campo real (§8.4). O `'unknown'` no fim da cadeia
 é um fallback que nunca será alcançado, o que é o comportamento desejado. A
 governança valida alcance por `core/range-utils.js`, que **compara célula** — o
-caminho certo, e o mesmo que falta no `voip-service` (§5).
+caminho certo, e o mesmo que o `voip-service` passou a reaproveitar quando o
+achado da §5 foi corrigido.
 
 **`[DEEPWIKI]`** (§8.7 / 2.4.2) reforça de fora: o servidor já valida posse de
 ator em `SendToNeighbours` antes de aceitar mudança de estado, e
@@ -702,11 +706,11 @@ existe para isso.
 2. **`getNearestCityId` compara coordenadas entre células**, com penalidade fixa
    de 50000 em vez de descarte
    ([market-stalls-service.js:296-301](../../skymp/gamemode/market-stalls-service.js)).
-   É a mesma suposição que torna o `voip-service` 🔴, mas aqui o efeito é
-   limitado: a pergunta é "qual cidade cobra imposto", a penalidade já empurra a
-   mesma célula para a frente, e o pior caso é atribuição de jurisdição errada,
-   não voz atravessando parede. Registrado como design a revisar, não como
-   desalinhamento.
+   É a mesma suposição que tornou o `voip-service` 🔴 (§5, já corrigido), mas
+   aqui o efeito é limitado: a pergunta é "qual cidade cobra imposto", a
+   penalidade já empurra a mesma célula para a frente, e o pior caso é atribuição
+   de jurisdição errada, não voz atravessando parede. Registrado como design a
+   revisar, não como desalinhamento.
 
 ---
 
@@ -738,7 +742,7 @@ e é justamente o que a §10 mostra que faltou nos outros dois.
 
 O `safeRadius` se apoia em `rangeUtils.distanceBetween`, que compara célula e
 devolve `Infinity` quando divergem — correto pela §8.4, e a mesma disciplina que
-falta no `voip-service`.
+faltava no `voip-service` até a §5 ser corrigida.
 
 ---
 
@@ -838,7 +842,9 @@ nesta revisão sugere que a sessão vá encontrar surpresa de arquitetura**, e o
 roteiro segue como planejado.
 
 **Um sistema bloqueava parte da sessão: o `death-service`. Não bloqueia mais.**
-Os outros dois 🔴 não bloqueavam, por motivos diferentes, e continuam abertos.
+Dos que não bloqueavam, `safe-zones` e `voip-service` também saíram consertados;
+**resta um 🔴 aberto, o `hit-events`, e ele deve continuar aberto até depois da
+sessão** — o motivo está no item 5.
 
 Prioridade entre os 🔴:
 
@@ -859,15 +865,21 @@ Prioridade entre os 🔴:
    ✅ Corrigido no mesmo commit.** Era o mesmo teste, e consertar A sem B só
    trocaria o sintoma: o jogador ficaria caído até o bleed-out e então falharia o
    respawn. Saíram juntos, como previsto.
-3. **`voip-service` (distância sem célula) — não bloqueia, mas muda o que
-   observar.** A voz já era 🟡 por um motivo maior (ninguém ouviu áudio ainda), e
-   o roteiro não depende dela. Mas **se** a sessão chegar a produzir áudio, este
-   defeito muda o que ela mede: um teste de "voz por proximidade funciona" feito
-   inteiramente dentro de uma célula passaria sem revelar nada. Duas saídas, e
-   qualquer uma serve: consertar antes (é uma mudança pequena e contida no
-   `tickProximity`), ou incluir no roteiro o passo de **duas pessoas em interiores
-   diferentes** e registrar o resultado. Não vale ir para a sessão sem escolher
-   uma das duas.
+3. **`voip-service` (distância sem célula) — não bloqueava.
+   ✅ Corrigido em [`112d51b`](https://github.com/vinicius3232/skymp-heavy-rp/commit/112d51b).** A decisão que esta seção
+   deixou em aberto — consertar antes ou levar o defeito para a sessão e medir em
+   volta dele — foi tomada na primeira: o conserto era pequeno, contido no
+   `tickProximity`, e reaproveitava regra que já existia. Não sobra pendência de
+   desenho aqui.
+
+   **O que muda para a sessão:** o passo de **duas pessoas em interiores
+   diferentes** deixa de ser obrigatório para não medir errado, mas continua
+   valendo como verificação barata — é o único jeito de confirmar ao vivo o que os
+   testes afirmam com `mp` mockado. E o alerta que motivava a escolha some: um
+   teste de voz feito inteiramente dentro de uma célula agora mede o que promete.
+
+   **O que não muda:** a voz segue 🟡 pelo motivo de sempre — ninguém ouviu áudio
+   ainda —, e isso é a Fase 0 que responde, não este commit.
 4. **`safe-zones` (formato do `cellId`) — não bloqueava.
    ✅ Corrigido em [`09fbb12`](https://github.com/vinicius3232/skymp-heavy-rp/commit/09fbb12).** As zonas nascem vazias e
    desligadas, e nenhum chamador de `canPerform` informa `context.actorId`; nada
