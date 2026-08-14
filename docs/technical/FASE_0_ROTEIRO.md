@@ -253,6 +253,16 @@ protocolo (inclusive `role: 'sender'`) com um tom de 440Hz no lugar do microfone
 captura entrega sinal em tempo real está provado; que a **voz sai inteligível**
 não. É por isso que este passo existe e por que ele precisa de você.
 
+> **Este passo virou o gate da decisão de migrar para LiveKit (14/08/2026).** O
+> transporte LiveKit também já foi provado — 22 verificações contra um
+> `livekit-server` real, com o sinal atravessando o SFU intacto
+> ([`SKYVOICE_LIVEKIT_AUDIT.md`](SKYVOICE_LIVEKIT_AUDIT.md) §11). E ele trava no
+> **mesmo lugar que o caminho atual**: ninguém escutou nenhum dos dois.
+>
+> Enquanto isso não for feito, migrar seria trocar um sistema não-ouvido por
+> outro não-ouvido e perder a única comparação honesta entre os dois. Ou seja:
+> este passo não destrava só a voz nativa — destrava a decisão de arquitetura.
+
 ⚠️ **`VOIP_DEBUG_EXPOSE_TICKET` grava um ticket de voz em texto puro no disco.**
 Ele vale 30 segundos e autentica como aquele jogador na cena de voz. É andaime de
 bancada, com um engenheiro olhando — **não deixe ligado**. O passo 7 existe pra

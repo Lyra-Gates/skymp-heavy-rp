@@ -45,8 +45,10 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | Como cliente e modpack chegam ao jogador, como a paridade é verificada, e a assinatura do instalador (§6). |
 | [PUBLIC_BUILD_GUIDE.md](technical/PUBLIC_BUILD_GUIDE.md) | O que precisa estar verdadeiro antes de publicar a build pra comunidade. |
 | [LICENSE_AND_AFFILIATION_POLICY.md](technical/LICENSE_AND_AFFILIATION_POLICY.md) | Licenças do SkyMP por subprojeto, o que cada situação obriga, e não-afiliação. |
-| [VOICE_CLIENT_PATCH.md](technical/VOICE_CLIENT_PATCH.md) | Runbook do patch de client que o VOIP nativo precisava e que não existe upstream — **superado** pelo helper nativo, e mantido porque explica por que a captura saiu do navegador. |
-| [VOICE_NATIVE_HELPER.md](technical/VOICE_NATIVE_HELPER.md) | **O caminho de voz que vale.** Captura fora do CEF por WASAPI, relay pelo servidor, e o registro do primeiro build e da primeira captura medida (§8.3, §8.4). A §8.2 diz o que continua sem prova: ninguém ouviu. |
+| [SKYVOICE_LIVEKIT_AUDIT.md](technical/SKYVOICE_LIVEKIT_AUDIT.md) | **Comece por aqui para qualquer coisa de voz.** Auditoria do VOIP atual + validação do LiveKit. Corrige a versão da CEF (é a **108**, não "~70"), mostra por que `getUserMedia` falha de verdade, e traz o spike que provou o transporte A→SFU→B contra um `livekit-server` real. A §12 diz o que continua bloqueado: ninguém ouviu. |
+| [VOICE_CLIENT_PATCH.md](technical/VOICE_CLIENT_PATCH.md) | Runbook do patch de client que o VOIP nativo precisava e que não existe upstream — **descartado**, e mantido porque explica por que a captura saiu do navegador. O bloco no topo corrige a versão da CEF e acrescenta o terceiro motivo da rejeição. |
+| [VOICE_NATIVE_HELPER.md](technical/VOICE_NATIVE_HELPER.md) | O caminho de voz que **existe e captura hoje**, e o Plano B da migração. WASAPI fora do CEF, relay pelo servidor, primeiro build e primeira captura medida (§8.3, §8.4). A §8.2 diz o que continua sem prova: ninguém ouviu. |
+| [VOICE_FORK_AUDIT_SKYMP_VGR_2026-08-11.md](technical/VOICE_FORK_AUDIT_SKYMP_VGR_2026-08-11.md) | O único fork com voz LiveKit ponta a ponta no fonte — e as lacunas dele (`proximityLoop` que não inicia, API de posição aberta sem autenticação) que não devemos repetir. |
 
 ### Decisões tomadas
 

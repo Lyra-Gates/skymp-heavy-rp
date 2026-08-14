@@ -34,6 +34,14 @@
  * qualquer servidor SkyMP que ele conectasse depois, não só a este. De quebra, o
  * relay resolve NAT/CGNAT: dois jogadores em redes residenciais distintas não
  * fecham conexão direta, mas os dois alcançam o servidor.
+ *
+ * Nota de 14/08/2026: a CEF do SkyMP é a **108** (Chromium 108.0.5359.125), não
+ * a "~70" que este cabeçalho e os docs de voz afirmavam. A 108 tem
+ * `CefPermissionHandler`, então existe um caminho de microfone **por origem e
+ * só áudio** que não depende de flag global nenhuma. Isso não muda uma linha
+ * deste arquivo — a proximidade, o mute por ator e o cálculo de volume valem
+ * igual em qualquer transporte —, mas muda qual é o próximo passo.
+ * Ver `docs/technical/SKYVOICE_LIVEKIT_AUDIT.md` §5 e `core/voice/`.
  */
 
 const crypto = require('crypto');
