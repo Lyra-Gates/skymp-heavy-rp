@@ -11,6 +11,7 @@ const commands = require('./commands');
 const identity = require('./identity-service');
 const moderationLog = require('./core/moderation-log');
 const { actorRef } = require('./core/papyrus');
+const skymp = require('./core/skymp-adapter');
 
 // Roles e permissões por nível
 //
@@ -294,7 +295,9 @@ async function kickPlayer(actorId, targetActorId, reason) {
   commands.sendNotification(targetActorId, `Você foi expulso: ${reason}`);
   if (typeof mp !== 'undefined') {
     setTimeout(() => {
-      if (typeof mp !== 'undefined') mp.kick(targetActorId);
+      // `mp.kick` recebe `userId`, nao FormID; o adaptador converte. Ver
+      // docs/research/SKYMP_INTEGRATION_AUDIT.md §6.
+      if (typeof mp !== 'undefined') skymp.kick(targetActorId);
     }, 3000);
   }
   console.log(`[admin] ${actorId.toString(16)} (${getRole(actorId)}) kicked ${targetActorId.toString(16)}: ${reason}`);
@@ -439,7 +442,9 @@ async function retireCharacter(actorId, targetActorId, reason) {
 
   if (typeof mp !== 'undefined') {
     setTimeout(() => {
-      if (typeof mp !== 'undefined') mp.kick(targetActorId);
+      // `mp.kick` recebe `userId`, nao FormID; o adaptador converte. Ver
+      // docs/research/SKYMP_INTEGRATION_AUDIT.md §6.
+      if (typeof mp !== 'undefined') skymp.kick(targetActorId);
     }, 3000);
   }
 }

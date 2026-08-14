@@ -31,6 +31,7 @@ const deathEvents = require('./core/death-events');
 // so onde a forma do `self` e decidida — enquanto a construcao estava
 // duplicada aqui, corrigir `core/papyrus.js` nao alcancava este arquivo.
 const { actorRef } = require('./core/papyrus');
+const skymp = require('./core/skymp-adapter');
 
 const RESPAWN_POS = [-150, -100, -200]; // Coordenadas ficticias do Templo de Kynareth
 
@@ -415,7 +416,9 @@ async function retireOnPermadeath(actorId, characterId) {
     // `status='approved'`, então uma reconexão já não encontra este personagem.
     if (typeof mp !== 'undefined') {
       const kickTimer = setTimeout(() => {
-        try { mp.kick(actorId); } catch (err) { console.error('[death-service] Falha ao kickar apos permadeath:', err.message); }
+        // `mp.kick` recebe `userId`, nao FormID; o adaptador converte pelo
+        // `getUserByActor`. Ver docs/research/SKYMP_INTEGRATION_AUDIT.md §6.
+        try { skymp.kick(actorId); } catch (err) { console.error('[death-service] Falha ao kickar apos permadeath:', err.message); }
       }, 8000);
       if (typeof kickTimer.unref === 'function') kickTimer.unref();
     }

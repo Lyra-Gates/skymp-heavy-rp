@@ -26,7 +26,13 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
+| [research/SKYMP_INTEGRATION_AUDIT.md](research/SKYMP_INTEGRATION_AUDIT.md) | **Auditoria de 14/08 da fronteira com o SkyMP.** Nenhum dos problemas do Heavy RP exige patch — mas seis chamadas nossas usam API que não existe, e uma delas derruba todo jogador conectado em dois segundos. **Leia antes de qualquer sessão de teste.** |
 | [SKYMP_UPSTREAM_REFERENCE.md](technical/SKYMP_UPSTREAM_REFERENCE.md) | A API real do SkyMP, incluindo hooks que a documentação oficial não menciona. Onde achar a verdade quando a doc é omissa. |
+| [SKYMP_COMPATIBILITY_MATRIX.md](technical/SKYMP_COMPATIBILITY_MATRIX.md) | **A única declaração de versão do projeto** — SkyMP, Skyrim, SKSE, SkyrimPlatform, modpack — mais o procedimento de atualização e as três camadas de teste que ela exige. |
+| [PAPYRUS_USAGE_POLICY.md](technical/PAPYRUS_USAGE_POLICY.md) | As 128 funções Papyrus que o servidor implementa, classificadas em REQUIRED/SAFE/LIMITED/AVOID. Chamar qualquer outra devolve `null` em silêncio. |
+| [PLUGIN_LOAD_ORDER_STRATEGY.md](technical/PLUGIN_LOAD_ORDER_STRATEGY.md) | Por que o primeiro byte do FormID é o índice do plugin, por que **ESL não existe no SkyMP**, e o que o nosso gate de paridade ainda deixa passar. |
+| [SKYMP_PATCH_POLICY.md](technical/SKYMP_PATCH_POLICY.md) | Quando patch, quando adapter, quando extensão de cliente, quando PR — e o que mudou quando o upstream passou a exigir cessão de direito autoral. |
+| [`core/skymp-adapter/`](../skymp/gamemode/core/skymp-adapter/README.md) | A fronteira declarada contra o motor: identidade, Papyrus e detecção de capacidade. Só os boundaries que a auditoria provou instáveis. |
 | [MODS_AND_GAMEMODE_CONTRACT.md](technical/MODS_AND_GAMEMODE_CONTRACT.md) | O que acontece com um mod dentro de um cliente conectado. Responde "esse mod funciona no servidor?" com critério. |
 | [SKYMP_SERVER_SETUP.md](technical/SKYMP_SERVER_SETUP.md) | Instalação e configuração do servidor SkyMP. |
 | [OPERATIONS.md](technical/OPERATIONS.md) | Runbook: subir, conferir schema, quem pode o quê, portas, e o que fazer quando algo dá errado. |
@@ -96,6 +102,7 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 
 | Documento | Sobre |
 |---|---|
+| [research/SKYMP_FORK_DIFF_MATRIX.md](research/SKYMP_FORK_DIFF_MATRIX.md) | **Rodada de 14/08**, e a primeira feita por comparação de commits em vez de leitura de árvore. Corrige duas afirmações registradas como fato: o "fork do Red House" não tem um commit próprio na `main`, e o Hijos tem o dobro do que estava documentado. |
 | [research/SKYMP_ECOSYSTEM_MATRIX.md](research/SKYMP_ECOSYSTEM_MATRIX.md) | **Rodada de 13/08.** Matriz de 37 sistemas contra sete projetos, com licença e profundidade de verificação de cada um — três deles não têm licença, e são justamente os que têm o que nos falta. |
 | [research/SKYMP_ECOSYSTEM_DEEP_DIVE.md](research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) | Relatório por projeto. Traz os quatro achados acionáveis, os dois resultados negativos, e onde nós estamos à frente. |
 | [roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md](roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md) | P0–P7 derivado da rodada de 13/08. Não reordena o roadmap de forks; acrescenta e declara dependência. Cinco tarefas não dependem da Fase 0. |
