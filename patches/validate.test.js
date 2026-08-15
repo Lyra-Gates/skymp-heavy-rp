@@ -8,6 +8,9 @@ const { validateManifest } = require('./validate');
 // Todo arquivo existe, salvo quando o teste diz o contrário.
 const allFilesExist = { fileExists: () => true };
 
+/** O pin do manifesto de teste. Os patches abaixo apontam para um prefixo dele. */
+const PIN = 'd85f18d808f877401c4e20484d2c2f6f73cf9caa';
+
 function patch(overrides = {}) {
   return {
     id: 'exemplo-valido',
@@ -27,7 +30,7 @@ function patch(overrides = {}) {
 }
 
 function validate(patches, opts = allFilesExist) {
-  return validateManifest({ version: 1, patches }, opts);
+  return validateManifest({ version: 1, upstream: { pin: PIN }, patches }, opts);
 }
 
 describe('manifesto vazio', () => {
@@ -164,6 +167,52 @@ describe('integridade do registro', () => {
     const res = validate([patch({ id: 'Um_Ruim' }), patch({ id: 'outro', target: 'x' })]);
     assert.equal(res.ok, false);
     assert.ok(res.errors.length >= 2, `esperava vários erros, veio: ${res.errors.join('; ')}`);
+  });
+});
+
+describe('pin — o commit contra o qual todos os patches se aplicam', () => {
+  test('manifesto vazio não precisa de pin', () => {
+    const res = validateManifest({ version: 1, patches: [] }, allFilesExist);
+    assert.equal(res.ok, true, res.errors.join('; '));
+  });
+
+  test('patch sem pin declarado reprova', () => {
+    const res = validateManifest({ version: 1, patches: [patch()] }, allFilesExist);
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('upstream.pin')), res.errors.join('; '));
+  });
+
+  test('pin abreviado reprova — SHA completo ou nada', () => {
+    const res = validateManifest({ version: 1, upstream: { pin: 'd85f18d' }, patches: [patch()] }, allFilesExist);
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('upstream.pin')));
+  });
+
+  test('upstream_commit que não é prefixo do pin reprova', () => {
+    const res = validate([patch({ upstream_commit: 'abc1234' })]);
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('não bate com upstream.pin')), res.errors.join('; '));
+  });
+
+  test('upstream_commit completo e igual ao pin passa', () => {
+    const res = validate([patch({ upstream_commit: PIN })]);
+    assert.equal(res.ok, true, res.errors.join('; '));
+  });
+
+  test('a comparação ignora caixa', () => {
+    const res = validate([patch({ upstream_commit: 'D85F18D' })]);
+    assert.equal(res.ok, true, res.errors.join('; '));
+  });
+
+  test('upstream_commit curto demais reprova antes de comparar com o pin', () => {
+    const res = validate([patch({ upstream_commit: 'd85' })]);
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some((e) => e.includes('não parece um SHA')), res.errors.join('; '));
+  });
+
+  test('pin invalido reprova mesmo sem patch algum', () => {
+    const res = validateManifest({ version: 1, upstream: { pin: 'nao-e-sha' }, patches: [] }, allFilesExist);
+    assert.equal(res.ok, false);
   });
 });
 

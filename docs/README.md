@@ -13,7 +13,8 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | 0 | [CONSTITUICAO.md](CONSTITUICAO.md) | **A constituição de design.** O que o projeto é, o que nunca criar, e por que toda mecânica precisa responder "como isso gera histórias?". O Anexo A traz as tensões conhecidas dela. |
 | 1 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | **O estado real de cada componente**, incluindo o que não está pronto e o plano priorizado. É o documento mais honesto do projeto. |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | Como banco, painel web, bot, API do jogo, launcher e gamemode conversam. |
-| 2.1 | [skyadmin/README.md](skyadmin/README.md) | Centro de orientação do painel de staff: escopo, arquitetura, plano, segurança, operação e referências. |
+| 2.1 | [research/ADMIN_PLATFORM_AUDIT.md](research/ADMIN_PLATFORM_AUDIT.md) | **O estado real do painel de staff.** Doze rotas administrativas, zero verificações de permissão — e o que mais a auditoria de 13/08 encontrou. Leia antes de `skyadmin/`. |
+| 2.2 | [skyadmin/README.md](skyadmin/README.md) | Centro de orientação do painel de staff: escopo, arquitetura, plano, segurança, operação e referências. **É projeto, não estado** — ver a §7 da auditoria acima. |
 | 3 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | As regras que não são óbvias lendo o código. Quase todas existem porque alguém já quebrou aquilo. |
 | 4 | [../CHANGELOG.md](../CHANGELOG.md) | O que mudou em cada versão — e o que sabidamente não está pronto. |
 
@@ -25,7 +26,13 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
+| [research/SKYMP_INTEGRATION_AUDIT.md](research/SKYMP_INTEGRATION_AUDIT.md) | **Auditoria de 14/08 da fronteira com o SkyMP.** Nenhum dos problemas do Heavy RP exige patch — mas seis chamadas nossas usam API que não existe, e uma delas derruba todo jogador conectado em dois segundos. **Leia antes de qualquer sessão de teste.** |
 | [SKYMP_UPSTREAM_REFERENCE.md](technical/SKYMP_UPSTREAM_REFERENCE.md) | A API real do SkyMP, incluindo hooks que a documentação oficial não menciona. Onde achar a verdade quando a doc é omissa. |
+| [SKYMP_COMPATIBILITY_MATRIX.md](technical/SKYMP_COMPATIBILITY_MATRIX.md) | **A única declaração de versão do projeto** — SkyMP, Skyrim, SKSE, SkyrimPlatform, modpack — mais o procedimento de atualização e as três camadas de teste que ela exige. |
+| [PAPYRUS_USAGE_POLICY.md](technical/PAPYRUS_USAGE_POLICY.md) | As 128 funções Papyrus que o servidor implementa, classificadas em REQUIRED/SAFE/LIMITED/AVOID. Chamar qualquer outra devolve `null` em silêncio. |
+| [PLUGIN_LOAD_ORDER_STRATEGY.md](technical/PLUGIN_LOAD_ORDER_STRATEGY.md) | Por que o primeiro byte do FormID é o índice do plugin, por que **ESL não existe no SkyMP**, e o que o nosso gate de paridade ainda deixa passar. |
+| [SKYMP_PATCH_POLICY.md](technical/SKYMP_PATCH_POLICY.md) | Quando patch, quando adapter, quando extensão de cliente, quando PR — e o que mudou quando o upstream passou a exigir cessão de direito autoral. |
+| [`core/skymp-adapter/`](../skymp/gamemode/core/skymp-adapter/README.md) | A fronteira declarada contra o motor: identidade, Papyrus e detecção de capacidade. Só os boundaries que a auditoria provou instáveis. |
 | [MODS_AND_GAMEMODE_CONTRACT.md](technical/MODS_AND_GAMEMODE_CONTRACT.md) | O que acontece com um mod dentro de um cliente conectado. Responde "esse mod funciona no servidor?" com critério. |
 | [SKYMP_SERVER_SETUP.md](technical/SKYMP_SERVER_SETUP.md) | Instalação e configuração do servidor SkyMP. |
 | [OPERATIONS.md](technical/OPERATIONS.md) | Runbook: subir, conferir schema, quem pode o quê, portas, e o que fazer quando algo dá errado. |
@@ -38,8 +45,10 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | Como cliente e modpack chegam ao jogador, como a paridade é verificada, e a assinatura do instalador (§6). |
 | [PUBLIC_BUILD_GUIDE.md](technical/PUBLIC_BUILD_GUIDE.md) | O que precisa estar verdadeiro antes de publicar a build pra comunidade. |
 | [LICENSE_AND_AFFILIATION_POLICY.md](technical/LICENSE_AND_AFFILIATION_POLICY.md) | Licenças do SkyMP por subprojeto, o que cada situação obriga, e não-afiliação. |
-| [VOICE_CLIENT_PATCH.md](technical/VOICE_CLIENT_PATCH.md) | Runbook do patch de client que o VOIP nativo precisava e que não existe upstream — **superado** pelo helper nativo, e mantido porque explica por que a captura saiu do navegador. |
-| [VOICE_NATIVE_HELPER.md](technical/VOICE_NATIVE_HELPER.md) | **O caminho de voz que vale.** Captura fora do CEF por WASAPI, relay pelo servidor, e o registro do primeiro build e da primeira captura medida (§8.3, §8.4). A §8.2 diz o que continua sem prova: ninguém ouviu. |
+| [SKYVOICE_LIVEKIT_AUDIT.md](technical/SKYVOICE_LIVEKIT_AUDIT.md) | **Comece por aqui para qualquer coisa de voz.** Auditoria do VOIP atual + validação do LiveKit. Corrige a versão da CEF (é a **108**, não "~70"), mostra por que `getUserMedia` falha de verdade, e traz o spike que provou o transporte A→SFU→B contra um `livekit-server` real. A §12 diz o que continua bloqueado: ninguém ouviu. |
+| [VOICE_CLIENT_PATCH.md](technical/VOICE_CLIENT_PATCH.md) | Runbook do patch de client que o VOIP nativo precisava e que não existe upstream — **descartado**, e mantido porque explica por que a captura saiu do navegador. O bloco no topo corrige a versão da CEF e acrescenta o terceiro motivo da rejeição. |
+| [VOICE_NATIVE_HELPER.md](technical/VOICE_NATIVE_HELPER.md) | O caminho de voz que **existe e captura hoje**, e o Plano B da migração. WASAPI fora do CEF, relay pelo servidor, primeiro build e primeira captura medida (§8.3, §8.4). A §8.2 diz o que continua sem prova: ninguém ouviu. |
+| [VOICE_FORK_AUDIT_SKYMP_VGR_2026-08-11.md](technical/VOICE_FORK_AUDIT_SKYMP_VGR_2026-08-11.md) | O único fork com voz LiveKit ponta a ponta no fonte — e as lacunas dele (`proximityLoop` que não inicia, API de posição aberta sem autenticação) que não devemos repetir. |
 
 ### Decisões tomadas
 
@@ -95,6 +104,7 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 
 | Documento | Sobre |
 |---|---|
+| [research/SKYMP_FORK_DIFF_MATRIX.md](research/SKYMP_FORK_DIFF_MATRIX.md) | **Rodada de 14/08**, e a primeira feita por comparação de commits em vez de leitura de árvore. Corrige duas afirmações registradas como fato: o "fork do Red House" não tem um commit próprio na `main`, e o Hijos tem o dobro do que estava documentado. |
 | [research/SKYMP_ECOSYSTEM_MATRIX.md](research/SKYMP_ECOSYSTEM_MATRIX.md) | **Rodada de 13/08.** Matriz de 37 sistemas contra sete projetos, com licença e profundidade de verificação de cada um — três deles não têm licença, e são justamente os que têm o que nos falta. |
 | [research/SKYMP_ECOSYSTEM_DEEP_DIVE.md](research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) | Relatório por projeto. Traz os quatro achados acionáveis, os dois resultados negativos, e onde nós estamos à frente. |
 | [roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md](roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md) | P0–P7 derivado da rodada de 13/08. Não reordena o roadmap de forks; acrescenta e declara dependência. Cinco tarefas não dependem da Fase 0. |
@@ -105,12 +115,37 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 
 ---
 
+## Plataforma: launcher, game-api e distribuição
+
+| Documento | Sobre |
+|---|---|
+| [research/PLATFORM_INFRASTRUCTURE_AUDIT.md](research/PLATFORM_INFRASTRUCTURE_AUDIT.md) | **Auditoria de 13/08.** O caminho login→fila→sessão auditado linha a linha: 27 achados, o desenho da máquina de estados do launcher, o manifesto v2, e o que fazer (e o que **não** fazer) de infraestrutura antes da Fase 0. |
+| [platform/MOD_DISTRIBUTION_POLICY.md](platform/MOD_DISTRIBUTION_POLICY.md) | O que pode ser redistribuído e o que só pode ser verificado. Quatro categorias, e como o manifesto as codifica. |
+| [testing/LAUNCHER_PLATFORM_TEST_MATRIX.md](testing/LAUNCHER_PLATFORM_TEST_MATRIX.md) | Instalação limpa, update, repair, manifesto adversário, backend fora do ar, fila, tickets. O que já é coberto, o que só uma máquina com Skyrim prova, e onde investir primeiro. |
+| [technical/LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | O que o código faz **hoje** — canais, manifestos, login, assinatura do instalador. |
+
+---
+
+## Plataforma administrativa: painel de staff, RBAC e moderação
+
+| Documento | Sobre |
+|---|---|
+| [research/ADMIN_PLATFORM_AUDIT.md](research/ADMIN_PLATFORM_AUDIT.md) | **Auditoria de 13/08.** O que existe hoje: dois sistemas de permissão que não se conhecem, três permissões que nada verifica, ban construído pela metade, e o teto real do que a API `mp` permite fazer com jogador conectado. |
+| [admin/ADMIN_PLATFORM.md](admin/ADMIN_PLATFORM.md) | O painel alvo: catorze módulos, cinco fases, o fluxo de uma ação — e por que `server.restart` e `modules.toggle` a quente ficam de fora. |
+| [admin/RBAC.md](admin/RBAC.md) | Catálogo de ~40 permissões, seis cargos, modelo de dados, contrato do middleware e a política de Discord. |
+| [admin/MODERATION_WORKFLOW.md](admin/MODERATION_WORKFLOW.md) | Casos, warns, ban com prazo, whitelist em cinco estados, apelação — e a diferença entre aposentar e matar um personagem. |
+| [testing/ADMIN_SECURITY_MATRIX.md](testing/ADMIN_SECURITY_MATRIX.md) | O portão: três testes por rota, matriz cargo × permissão, ameaças da §20 e as mutações que provam que os testes valem. **Nenhum deles existe ainda.** |
+| [technical/ADR_005_ADMIN_RBAC.md](technical/ADR_005_ADMIN_RBAC.md) | A decisão: permissão é a unidade, cargo é agrupamento, o banco é a autoridade, e não há herança entre cargos. |
+
+---
+
 ## Modding
 
 | Documento | Sobre |
 |---|---|
 | [MODDING_GUIDELINES.md](MODDING_GUIDELINES.md) | Política de mods: regra de ouro, perfis, fases de QA, lista negra. |
 | [MODPACK.md](MODPACK.md) | Composição do modpack. |
+| [platform/MOD_DISTRIBUTION_POLICY.md](platform/MOD_DISTRIBUTION_POLICY.md) | Permissão de redistribuição, mod a mod. |
 | [technical/MODS_AND_GAMEMODE_CONTRACT.md](technical/MODS_AND_GAMEMODE_CONTRACT.md) | O lado técnico da mesma questão. |
 
 ---

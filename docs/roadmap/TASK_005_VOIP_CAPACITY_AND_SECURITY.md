@@ -12,8 +12,15 @@ frame somente aos listeners na mesma celula e dentro do alcance. Isto evita
 reabrir globalmente a permissao de microfone do Chromium embutido.
 
 O sistema tem autenticacao por ticket de uso unico, separacao sender/listener,
-mute por ator e testes de proximidade/reconexao. Ele nao deve coexistir com um
-segundo sistema LiveKit.
+mute por ator e testes de proximidade/reconexao.
+
+> **Revisao de 14/08/2026.** A frase original terminava com "ele nao deve
+> coexistir com um segundo sistema LiveKit". A intencao continua certa — nao
+> queremos dois sistemas de voz **ativos ao mesmo tempo** — mas a redacao
+> proibia tambem a fase de transicao, que e justamente como se migra sem um
+> corte. O que vale: um transporte ativo por vez, escolhido por `VOICE_BACKEND`
+> (`legacy` por padrao), com os dois caminhos presentes no codigo durante a
+> migracao. Ver [`SKYVOICE_LIVEKIT_AUDIT.md`](../technical/SKYVOICE_LIVEKIT_AUDIT.md) §7.4.
 
 ## Alteracao feita nesta tarefa
 

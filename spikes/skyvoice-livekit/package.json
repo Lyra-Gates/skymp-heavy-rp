@@ -1,0 +1,14 @@
+{
+  "name": "skyvoice-livekit-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SPIKE: prova do transporte LiveKit (A -> SFU -> B) com token emitido pelo gamemode. Nao e producao.",
+  "main": "spike.js",
+  "scripts": {
+    "spike": "node spike.js"
+  },
+  "license": "AGPL-3.0-or-later",
+  "dependencies": {
+    "@livekit/rtc-node": "^0.13.33"
+  }
+}

@@ -42,6 +42,27 @@
 > origens arbitrárias". Essa premissa é falsa: carregar a UI que o servidor
 > aponta é precisamente navegar para uma origem arbitrária.
 >
+> ### Correção de fato — 14/08/2026: a versão da CEF estava errada
+>
+> Este documento (e o comentário do patch abaixo) diz **"CEF3, baseado em
+> Chromium ~70"**. É falso. O SkyMP pina
+> **CEF 108.4.13 / Chromium 108.0.5359.125** — verificado em
+> `overlay_ports/cef-prebuilt/portfile.cmake` no upstream.
+>
+> O número veio junto com o diff copiado de `Silveira-Software/skymp` e nunca
+> foi conferido. Ele importa porque muda a conclusão: Chromium 70 não tem
+> `CefPermissionHandler`; **Chromium 108 tem**. Existe, portanto, um caminho
+> para liberar o microfone **por origem e só áudio**, sem nenhuma flag global —
+> que é o oposto do que este patch faz.
+>
+> A rejeição deste patch **continua válida**, e agora com um motivo a mais:
+> `use-fake-device-for-media-stream` substitui o microfone real por um
+> dispositivo sintético, e `use-file-for-fake-audio-capture=""` o alimenta com
+> nada. O patch que existe para liberar o microfone provavelmente entregaria
+> silêncio.
+>
+> Ver [`SKYVOICE_LIVEKIT_AUDIT.md`](SKYVOICE_LIVEKIT_AUDIT.md) §5.
+>
 > ### O que substitui
 >
 > Tirar a captura do navegador em vez de enfraquecer o navegador. Um executável
@@ -55,6 +76,10 @@
 ---
 
 ## Contexto
+
+> ⚠️ O parágrafo abaixo diz "Chromium ~70". **Está errado** — é Chromium 108.
+> Preservado como escrito porque este documento é registro histórico; a correção
+> e o que ela muda estão no bloco no topo do arquivo.
 
 O `voip-service.js` (`skymp/gamemode/voip-service.js`, comando `/voz`) já está implementado e testado no lado servidor: sinalização WebRTC, autenticação por ticket, cálculo de volume por distância. Mas o navegador embutido do SkyMP (CEF3, baseado em Chromium ~70) **recusa `getUserMedia({audio:true})` com `NotAllowedError`** mesmo com permissão de microfone concedida pelo Windows, porque `OnBeforeCommandLineProcessing` (em `skyrim-platform/src/tilted/ui/MyChromiumApp.cpp`, no client oficial) não habilita nenhuma flag de mídia do Chromium.
 

@@ -62,6 +62,7 @@ const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
 const deathService  = require(path.join(gamemodeDir, 'death-service'));
 const voipService   = require(path.join(gamemodeDir, 'voip-service'));
+const voiceEndpoint = require(path.join(gamemodeDir, 'core', 'voice', 'voice-endpoint'));
 const soulService   = require(path.join(gamemodeDir, 'soul-service'));
 const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
 const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
@@ -270,6 +271,14 @@ moduleRegistry.register({
 });
 
 // LAB: Voz por proximidade (opt-in via /voz — ver voip-service.js)
+//
+// `VOICE_BACKEND` escolhe o transporte e **não** liga o módulo — quem liga
+// continua sendo `ENABLE_VOIP_SERVICE`. São duas perguntas distintas ("tem voz
+// neste servidor?" e "por onde ela passa?"), e juntá-las numa flag só faria
+// trocar de transporte parecer que desliga a voz.
+//
+// Hoje só `legacy` tem implementação; ver `core/voice/voice-endpoint.js` e
+// `docs/technical/SKYVOICE_LIVEKIT_AUDIT.md`.
 moduleRegistry.register({
   id: 'voip',
   enabledBy: 'ENABLE_VOIP_SERVICE',
@@ -277,6 +286,24 @@ moduleRegistry.register({
   dependencies: [],
   commands: voipService.commandDefs(),
   initialize: async () => {
+    const voice = voiceEndpoint.describeBackend();
+    console.log(
+      `[voip] VOICE_BACKEND=${voice.backend} ` +
+      `(endpoints: ${voice.endpoints.join(', ')}; relay no servidor de jogo: ` +
+      `${voice.relaysAudioThroughGameServer ? 'sim' : 'não'})`
+    );
+
+    // Dizer em voz alta em vez de falhar: um servidor que sobe mudo por causa
+    // de uma flag é pior de diagnosticar do que um que sobe avisando que a voz
+    // não vai sair. O caminho legado continua atendendo quem não configurou.
+    if (voiceEndpoint.hasUnimplementedEndpoint()) {
+      console.warn(
+        `[voip] ⚠️  O backend '${voice.backend}' inclui endpoint sem implementação. ` +
+        `Nenhum áudio será capturado por esse caminho — ver ` +
+        `docs/technical/SKYVOICE_LIVEKIT_AUDIT.md §14.`
+      );
+    }
+
     voipService.startVoipServer();
   }
 });

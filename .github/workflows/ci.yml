@@ -159,3 +159,57 @@ jobs:
             exit 1
           fi
           echo "OK: nenhum asset da Bethesda."
+
+  # Confere que todo patch registrado ainda aplica limpo sobre o commit fixado
+  # em patches/manifest.json.
+  #
+  # Roda em job próprio porque precisa clonar o upstream (~53 MB), e **sai cedo
+  # quando não há patch**: clonar para verificar zero diffs é queimar minuto de
+  # runner para produzir a mesma resposta todo dia. Hoje ele sempre sai cedo, e
+  # essa é a situação preferida — ver patches/README.md.
+  #
+  # `git apply --check` e não `git apply`: responde "aplicaria por inteiro?" sem
+  # escrever nada. É o "nunca aplicar patch silenciosamente pela metade" do
+  # briefing §12, e sai de graça.
+  patches-aplicam:
+    name: patches ainda aplicam no upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Há patch registrado?
+        id: check
+        run: |
+          n=$(node -e 'process.stdout.write(String(require("./patches/manifest.json").patches.length))')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          echo "pin=$(node -e 'process.stdout.write(require("./patches/manifest.json").upstream.pin || "")')" >> "$GITHUB_OUTPUT"
+          if [ "$n" = "0" ]; then
+            echo "Nenhum patch registrado — nada a verificar."
+          fi
+
+      - name: Clonar o SkyMP no commit fixado
+        if: steps.check.outputs.count != '0'
+        run: |
+          git clone --filter=blob:none --no-checkout \
+            https://github.com/skyrim-multiplayer/skymp.git /tmp/upstream-skymp
+          cd /tmp/upstream-skymp
+          # Falha aqui significa que o pin aponta para um commit que não existe
+          # mais — reescrita de histórico upstream, ou erro de digitação.
+          git checkout --detach "${{ steps.check.outputs.pin }}"
+
+      - name: git apply --check em cada patch
+        if: steps.check.outputs.count != '0'
+        run: |
+          falhou=0
+          for f in $(node -e '
+            const m = require("./patches/manifest.json");
+            process.stdout.write(m.patches.map(p => p.file).join("\n"));
+          '); do
+            if git -C /tmp/upstream-skymp apply --check "$GITHUB_WORKSPACE/patches/$f"; then
+              echo "OK: $f"
+            else
+              echo "::error file=patches/$f::nao aplica sobre ${{ steps.check.outputs.pin }}. Reavalie o patch antes de remendar — o upstream pode ter resolvido o problema."
+              falhou=1
+            fi
+          done
+          exit $falhou

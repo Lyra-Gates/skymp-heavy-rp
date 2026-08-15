@@ -9,14 +9,40 @@ function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
 }
 
-test('auth boundary — staging e runtime versionado nunca usam offlineMode', () => {
-  const staging = JSON.parse(read('skymp/config/server-settings.staging.example.json'));
-  const runtime = JSON.parse(read('skymp/server/server-settings.json'));
+// `skymp/server/` inteiro é ignorado pelo `.gitignore` (linha 29), então o
+// `server-settings.json` de runtime não existe em clone limpo. O teste antigo
+// juntava as duas verificações numa só e lia esse arquivo, o que fazia a suíte
+// passar na máquina de quem já rodou o servidor e falhar na CI desde 12/08 —
+// quatro execuções seguidas vermelhas na `main`.
+//
+// O nome dele dizia "runtime versionado", e o arquivo que ele lia não é
+// versionado. São duas perguntas diferentes e viraram dois testes: uma sobre o
+// que o repositório promete, que sempre roda; outra sobre o que esta máquina
+// vai subir, que só existe onde há o que conferir.
 
-  assert.equal(staging.offlineMode, false);
-  assert.equal(runtime.offlineMode, false);
-  assert.equal(typeof staging.master, 'string');
-  assert.ok(staging.master.length > 0);
+test('auth boundary — nenhuma configuração versionada usa offlineMode', () => {
+  for (const arquivo of [
+    'skymp/config/server-settings.local.example.json',
+    'skymp/config/server-settings.staging.example.json'
+  ]) {
+    const cfg = JSON.parse(read(arquivo));
+    assert.equal(cfg.offlineMode, false, `${arquivo} usa offlineMode`);
+    assert.equal(typeof cfg.master, 'string', `${arquivo} não declara master`);
+    assert.ok(cfg.master.length > 0, `${arquivo} tem master vazio`);
+  }
+});
+
+test('auth boundary — o server-settings desta máquina não usa offlineMode', (t) => {
+  const runtime = path.join(repoRoot, 'skymp/server/server-settings.json');
+
+  // Pular é honesto aqui, e aparece na saída: em clone limpo não há
+  // configuração de runtime, então não há nada a afirmar sobre ela.
+  if (!fs.existsSync(runtime)) {
+    t.skip('skymp/server/server-settings.json não existe (é ignorado pelo git)');
+    return;
+  }
+
+  assert.equal(JSON.parse(fs.readFileSync(runtime, 'utf8')).offlineMode, false);
 });
 
 test('auth boundary — Master API resolve a sessão para accountId', () => {

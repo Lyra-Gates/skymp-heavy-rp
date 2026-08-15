@@ -301,17 +301,163 @@ interface Mp {
    */
   getUserActor(userId: number): FormId | undefined;
 
-  /** [USO] Desconecta um usuário. Aceita userId em phase0-basic; actorId em admin-service. */
-  kick(userIdOrActorId: number): void;
+  /**
+   * [CPP] Desconecta um usuário. O argumento é o **userId** — o slot de
+   * conexão —, nunca um FormID:
+   *
+   *     auto userId = info[0].As<Napi::Number>().Uint32Value();
+   *     server->CloseConnection(userId);      // ScampServer.cpp
+   *
+   * Esta assinatura já esteve documentada aqui como "aceita userId em
+   * phase0-basic; actorId em admin-service", o que descrevia um bug como se
+   * fosse contrato: FormID de ator do servidor vive em 0xff000000+ e fecha um
+   * slot que não existe. Ver docs/research/SKYMP_INTEGRATION_AUDIT.md §6.
+   *
+   * Prefira `core/skymp-adapter`: `skymp.kick(actorId)` converte,
+   * `skymp.kickUser(userId)` passa direto.
+   */
+  kick(userId: number): void;
 
-  /** [USO] Dispara um evento nomeado no cliente daquele ator. */
-  triggerClient(actorId: FormId, eventName: string, ...args: any[]): void;
+  /** [CPP] userId dono deste ator. É o conversor que `kick` exige. */
+  getUserByActor(actorId: FormId): number;
+
+  /** [CPP] GUID da conexão. Usado upstream para detectar troca de slot em operação assíncrona. */
+  getUserGuid(userId: number): string;
+
+  /** [CPP] IP do usuário conectado. */
+  getUserIp(userId: number): string;
+
+  /** [CPP] Nome do ator. */
+  getActorName(actorId: FormId): string;
+
+  /** [CPP] Célula ou worldspace do ator, sem passar por Papyrus. */
+  getActorCellOrWorld(actorId: FormId): string;
+
+  /** [CPP] Posição do ator. */
+  getActorPos(actorId: FormId): [number, number, number];
+
+  /** [CPP] Cria um ator no mundo. `profileId` 0 para NPC sem dono. */
+  createActor(
+    profileId: number,
+    pos: [number, number, number],
+    angleZ: number,
+    cellOrWorld: number,
+    userProfileId?: number
+  ): FormId;
+
+  /** [CPP] Destrói um ator criado pelo servidor. */
+  destroyActor(actorId: FormId): void;
+
+  /** [CPP] Liga/desliga um ator (o mesmo que `Disable`/`Enable`, sem Papyrus). */
+  setEnabled(actorId: FormId, enabled: boolean): void;
+
+  /** [CPP] Abre o menu de raça no cliente daquele ator. */
+  setRaceMenuOpen(actorId: FormId, open: boolean): void;
+
+  /** [CPP] Associa um ator a um usuário conectado. */
+  setUserActor(userId: number, actorId: FormId): void;
+
+  /** [CPP] Envia um pacote arbitrário ao cliente. É o caminho servidor→cliente fora de properties. */
+  sendCustomPacket(userId: number, jsonContent: string): void;
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Mundo, plugins e diagnóstico — [CPP]
+  //
+  // Todas lidas de ScampServer.cpp em d85f18d8. Nenhuma é usada por este
+  // gamemode hoje; estão aqui porque a auditoria de 14/08 mostrou que metade
+  // do que precisávamos já existia e ninguém sabia. Ver
+  // docs/research/SKYMP_INTEGRATION_AUDIT.md §2.
+  // ───────────────────────────────────────────────────────────────────────
+
+  /**
+   * [CPP] A load order que o **servidor** carregou, na ordem em que ele indexa.
+   * É a fonte de verdade da paridade de plugin — ver
+   * docs/technical/PLUGIN_LOAD_ORDER_STRATEGY.md.
+   */
+  getEspmLoadOrder(): string[];
+
+  /** [CPP] Vizinhos por posição, calculados pelo motor. */
+  getNeighborsByPosition(cellOrWorld: number, pos: [number, number, number]): FormId[];
+
+  /** [CPP] Todos os forms conhecidos pelo servidor. */
+  getAllForms(): FormId[];
+
+  /** [CPP] Forms cuja property indexada tem este valor. Exige property criada com `isIndexed`. */
+  findFormsByPropertyValue(propertyName: string, value: unknown): FormId[];
+
+  /** [CPP] O `server-settings.json` como o servidor o entendeu. */
+  getServerSettings(): Record<string, unknown>;
+
+  /** [CPP] String localizada de um plugin. */
+  getLocalizedString(stringId: number, lang?: string): string;
+
+  /** [CPP] Métricas Prometheus do motor. */
+  getPrometheusMetrics(): string;
+
+  /**
+   * [CPP] Registra uma função nativa nova no VM Papyrus, implementada em JS.
+   * Ver docs/technical/PAPYRUS_USAGE_POLICY.md §5 — use prefixo de classe
+   * própria, nunca sobrescreva nome vanilla.
+   */
+  registerPapyrusFunction(
+    callType: 'method' | 'global',
+    className: string,
+    functionName: string,
+    f: (self: unknown, args: unknown[]) => unknown
+  ): void;
+
+  /**
+   * [CPP] Cliente de rede headless dentro do processo do servidor. É como o
+   * upstream roda `misc/tests/`. Candidato a harness de integração —
+   * `BOUND-008` na auditoria.
+   */
+  createBot(): { send(packet: string): void; tick(): void; destroy(): void };
+
+  /** [CPP] Grava o tráfego de um usuário, para repro determinística. */
+  setPacketHistoryRecording(userId: number, isRecording: boolean): void;
+  /** [CPP] O tráfego gravado. */
+  getPacketHistory(userId: number): unknown;
+  /** [CPP] Descarta o tráfego gravado. */
+  clearPacketHistory(userId: number): void;
+  /** [CPP] Reproduz um tráfego gravado contra o servidor. */
+  requestPacketHistoryPlayback(userId: number, packetHistory: unknown): void;
+
+  // ── Reflexão do VM Papyrus ─────────────────────────────────────────────
+  //
+  // Respondem, em runtime, o que o VM realmente implementa. É o que torna
+  // desnecessário confiar numa lista estática — ver
+  // core/skymp-adapter/papyrus-catalog.js e o `PAP-001` da política.
+
+  /** [CPP] Classes que o VM conhece. */
+  _sp3ListClasses(): string[];
+  /** [CPP] Classe-base de uma classe. */
+  _sp3GetBaseClass(className: string): string;
+  /** [CPP] Funções estáticas de uma classe. */
+  _sp3ListStaticFunctions(className: string): string[];
+  /** [CPP] Métodos de uma classe. */
+  _sp3ListMethods(className: string): string[];
+  /** [CPP] A implementação, ou nulo se a função não existe. */
+  _sp3GetFunctionImplementation(className: string, functionName: string, isStatic: boolean): unknown;
+  /** [CPP] Cast dinâmico entre classes do VM. */
+  _sp3DynamicCast(object: unknown, className: string): unknown;
 
   // ───────────────────────────────────────────────────────────────────────
   // Callbacks que o gamemode ATRIBUI (não chama) — [USO]
   // ───────────────────────────────────────────────────────────────────────
 
-  /** [USO] Atribua uma função aqui para receber eventos da UI CEF. */
+  /**
+   * ⚠️ **NÃO EXISTE NO SKYMP.** Busca por `onUiEvent` em `skymp5-client/src`,
+   * `skymp5-server/cpp`, `skymp5-front/src` e `skymp5-functions-lib/src` no
+   * commit `d85f18d8`: zero ocorrências. O servidor nunca chama esta property,
+   * e `core/ui-event-gateway.js` a atribui em vão.
+   *
+   * O caminho real é `makeEventSource('_onUiEvent', …)` com um snippet de
+   * cliente que assina `browserMessage` — ver
+   * docs/research/SKYMP_INTEGRATION_AUDIT.md §5 (`BOUND-004`).
+   *
+   * Mantida na tipagem só enquanto o gateway ainda a referencia. Sai junto com
+   * a correção.
+   */
   onUiEvent: (pcFormId: FormId, uiEvent: UiEvent) => void;
 
   /**

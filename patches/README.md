@@ -4,6 +4,8 @@
 
 Ele existe porque a hora de escrever a política é antes do primeiro patch, não depois do quinto. Todo projeto do ecossistema SkyMP que acabou mantendo um fork pesado começou com um patch sem registro — [`SKYMP_ECOSYSTEM_DEEP_DIVE.md`](../docs/research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) documenta os casos.
 
+> **A decisão de *se* um patch deve existir está em [`SKYMP_PATCH_POLICY.md`](../docs/technical/SKYMP_PATCH_POLICY.md).** Este arquivo explica *como* registrar um, depois que a decisão foi tomada.
+
 ## A escada de decisão
 
 Antes de escrever um patch, desça esta escada e pare no primeiro degrau que resolver. Patch é o penúltimo recurso; fork é o último.
@@ -11,12 +13,15 @@ Antes de escrever um patch, desça esta escada e pare no primeiro degrau que res
 ```
 1. SkyMP puro          — a API atual já resolve?
 2. Adapter             — dá pra resolver do nosso lado da fronteira?
-3. PR upstream         — é um bug ou lacuna que serve a todo mundo?
-4. Patch registrado    — precisamos disso antes do upstream aceitar?
-5. Fork                — só com ADR e justificativa escrita
+3. Client extension    — é UI, input, animação ou detecção local?
+4. PR upstream         — é um bug ou lacuna que serve a todo mundo?
+5. Patch registrado    — precisamos disso antes do upstream aceitar?
+6. Fork                — só com ADR e justificativa escrita
 ```
 
-**Degrau 1 e 2 não precisam de nada disto.** Se você chegou ao degrau 3, abra o PR e registre o patch como ponte temporária, com o link do PR no campo `upstream_pr`.
+**Os degraus 1 a 3 não precisam de nada disto.** A [auditoria de 14/08](../docs/research/SKYMP_INTEGRATION_AUDIT.md) desceu esta escada para doze problemas concretos e **onze pararam ali**.
+
+Se você chegou ao degrau 4, abra o PR e registre o patch como ponte temporária, com o link do PR no campo `upstream_pr` — e leia antes a [§5 da política](../docs/technical/SKYMP_PATCH_POLICY.md), porque desde 18/07/2026 o upstream exige cessão de direito autoral de quem contribui.
 
 Um patch cuja intenção é virar PR e nunca vira é um fork começando devagar.
 
@@ -31,8 +36,9 @@ Eles anotam, no README dos próprios patches, que o patch de `spawn.ts` some num
 ## Como registrar um patch
 
 1. Salve o diff em `<alvo>/<slug>.patch` — `<alvo>` é `skymp` ou `skyrim-platform`.
-2. Acrescente uma entrada em [`manifest.json`](manifest.json).
-3. Rode `node validate.js`. A CI roda o mesmo.
+2. Confira que `upstream.pin` em [`manifest.json`](manifest.json) é o commit contra o qual o diff foi gerado. **Todos os patches apontam para o mesmo pin** — se o seu precisa de outro, o pin é que sobe, e aí todo patch é reavaliado.
+3. Acrescente uma entrada em `manifest.json`.
+4. Rode `node validate.js`. A CI roda o mesmo, mais `git apply --check` do diff contra o upstream no commit do pin.
 
 ### Campos
 
@@ -41,7 +47,7 @@ Eles anotam, no README dos próprios patches, que o patch de `spawn.ts` some num
 | `id` | sim | Slug único, kebab-case |
 | `target` | sim | `skymp` ou `skyrim-platform` |
 | `file` | sim | Caminho do `.patch` relativo a este diretório; o arquivo precisa existir |
-| `upstream_commit` | sim | SHA do commit upstream sobre o qual o diff aplica |
+| `upstream_commit` | sim | SHA do commit upstream sobre o qual o diff aplica. Precisa ser o `upstream.pin` do manifesto, ou um prefixo dele de 7+ caracteres |
 | `reason` | sim | O problema. Não o que o patch faz — **o que quebra sem ele** |
 | `files_touched` | sim | Lista de arquivos upstream modificados |
 | `impact` | sim | O que muda em runtime, incluindo risco |

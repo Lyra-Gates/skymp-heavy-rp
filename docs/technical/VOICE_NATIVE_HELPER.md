@@ -14,6 +14,23 @@ WebRTC, autenticação por ticket, volume por distância. E nunca produziu áudi
 nenhum, porque o navegador embutido do client SkyMP (CEF) recusa
 `getUserMedia({audio:true})` com `NotAllowedError`.
 
+> **Correção de causa — 14/08/2026.** A recusa é real, mas o motivo registrado
+> aqui estava incompleto, e a versão da CEF citada mais abaixo (Chromium ~70)
+> está **errada**: o SkyMP usa **CEF 108.4.13 / Chromium 108.0.5359.125**.
+>
+> A causa exata, lida no fonte da CEF 108: o runtime alloy chama
+> `CefPermissionHandler::OnRequestMediaAccessPermission` e, **na ausência de um
+> handler**, nega por padrão (`default_disallow=true` em
+> `alloy_browser_host_impl.cc`). O `OverlayClient` do SkyMP não implementa
+> `GetPermissionHandler`. Ou seja: não falta versão de CEF — falta um handler
+> que a versão em uso já oferece.
+>
+> Isso **não invalida nada abaixo**. O helper nativo continua sendo um caminho
+> válido e é o Plano B da migração; a captura WASAPI medida na §8.4 continua
+> valendo, e este arquivo não deve ser apagado. O que muda é que o caminho pela
+> CEF volta a ser possível **sem** enfraquecer o cliente.
+> Ver [`SKYVOICE_LIVEKIT_AUDIT.md`](SKYVOICE_LIVEKIT_AUDIT.md) §5.
+
 A explicação que circulava — e que estava escrita em comentário no
 `skymp/ui/index.html` até 07/08/2026 — era que "falta um patch em
 `MyChromiumApp.cpp` que nunca foi mergeado upstream", como se fosse

@@ -11,6 +11,11 @@
  * - `upstream_pr`, que aceita `null` mas exige `notes` explicando — patch que
  *   deveria virar PR e nunca vira é um fork começando devagar.
  *
+ * E o pin: `upstream.pin` declara o commit contra o qual TODOS os patches se
+ * aplicam. A regra parece burocrática e não é — é o que impede um patch
+ * validado contra um commit de janeiro de conviver com outro validado contra um
+ * de agosto, dando a impressão de que os dois foram conferidos ao mesmo tempo.
+ *
  * Sem dependências de propósito: roda na CI com `node patches/validate.js`,
  * sem `npm ci`.
  */
@@ -21,6 +26,11 @@ const fs = require('fs');
 const path = require('path');
 
 const TARGETS = ['skymp', 'skyrim-platform'];
+
+/** SHA-1 completo de commit. */
+const SHA_COMPLETO = /^[0-9a-f]{40}$/i;
+/** Prefixo aceitável de SHA: 7 caracteres é o que o `git log --oneline` mostra. */
+const SHA_PREFIXO = /^[0-9a-f]{7,40}$/i;
 
 const REQUIRED_STRINGS = [
   'id', 'target', 'file', 'upstream_commit', 'reason',
@@ -50,6 +60,20 @@ function validateManifest(manifest, { fileExists }) {
   }
   if (!Array.isArray(manifest.patches)) {
     return { ok: false, errors: errors.concat('patches deve ser uma lista') };
+  }
+
+  // O pin só é exigido quando existe patch. Um manifesto vazio não precisa
+  // declarar contra o que zero diffs se aplicam.
+  const pin = manifest.upstream && manifest.upstream.pin;
+  if (manifest.patches.length > 0) {
+    if (!isNonEmptyString(pin) || !SHA_COMPLETO.test(pin)) {
+      err(
+        'upstream.pin é obrigatório quando há patch, e precisa ser o SHA-1 completo ' +
+        'do commit upstream contra o qual todos eles se aplicam'
+      );
+    }
+  } else if (pin !== undefined && !SHA_COMPLETO.test(String(pin))) {
+    err('upstream.pin, quando presente, precisa ser um SHA-1 completo');
   }
 
   const seen = new Set();
@@ -82,6 +106,22 @@ function validateManifest(manifest, { fileExists }) {
 
     if (isNonEmptyString(patch.file) && !fileExists(patch.file)) {
       err(`${label}: arquivo "${patch.file}" não existe`);
+    }
+
+    // Todo patch aponta para o mesmo commit. Dois patches conferidos contra
+    // commits diferentes num mesmo manifesto é a situação que o pin existe para
+    // impedir: parece controle e não é.
+    if (isNonEmptyString(patch.upstream_commit)) {
+      if (!SHA_PREFIXO.test(patch.upstream_commit)) {
+        err(`${label}: upstream_commit "${patch.upstream_commit}" não parece um SHA (mínimo 7 hex)`);
+      } else if (isNonEmptyString(pin) && SHA_COMPLETO.test(pin)) {
+        if (!pin.toLowerCase().startsWith(patch.upstream_commit.toLowerCase())) {
+          err(
+            `${label}: upstream_commit "${patch.upstream_commit}" não bate com upstream.pin ` +
+            `"${pin.slice(0, 12)}…". Subir o pin obriga a reavaliar todo patch`
+          );
+        }
+      }
     }
 
     if (!Array.isArray(patch.files_touched) || patch.files_touched.length === 0) {
