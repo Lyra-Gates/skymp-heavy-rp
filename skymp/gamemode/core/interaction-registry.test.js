@@ -65,12 +65,12 @@ describe('interaction-registry — registro', () => {
     }
   });
 
-  it('recusa target desconhecido e aceita os sete do vocabulário', () => {
+  it('recusa target desconhecido e aceita todo o vocabulário de TARGET_TYPES', () => {
     assert.throws(() => registry.register(descriptor({ target: 'dragao' })), /desconhecido/);
     for (const [i, target] of Object.values(TARGET_TYPES).entries()) {
       registry.register(descriptor({ id: `test.a${i}`, target }));
     }
-    assert.equal(registry.list().length, 7);
+    assert.equal(registry.list().length, Object.values(TARGET_TYPES).length);
   });
 
   it('recusa descritor sem execute, sem module ou com guardas que não são função', () => {

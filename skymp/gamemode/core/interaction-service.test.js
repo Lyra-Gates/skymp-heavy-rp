@@ -487,6 +487,44 @@ describe('interaction-service — query', () => {
   });
 });
 
+describe('interaction-service — peek (Tarefa 11: prompt de tela sem gastar rate limit)', () => {
+  beforeEach(() => registry._reset());
+
+  it('devolve o mesmo resultado que query, com o mundo igual', async () => {
+    registrar({ id: 'social.apresentar', module: 'identity', section: 'social', label: 'Apresentar-se' });
+    const { service } = montar();
+
+    const viaQuery = await service.query(ATOR, { targetType: TARGET_TYPES.PLAYER, targetId: ALVO });
+    const viaPeek = await service.peek(ATOR, { targetType: TARGET_TYPES.PLAYER, targetId: ALVO });
+
+    assert.deepEqual(viaPeek, viaQuery);
+  });
+
+  it('NAO consome o rate limit de query — um tick de servidor nao pode travar o clique real do jogador', async () => {
+    registrar();
+    const chamadasAoLimiter = [];
+    const rateLimiter = {
+      observe: (actorId, kind) => { chamadasAoLimiter.push(kind); return { allowed: true }; }
+    };
+    const { service } = montar({ rateLimiter });
+
+    const viaPeek = await service.peek(ATOR, { targetType: TARGET_TYPES.PLAYER, targetId: ALVO });
+    assert.equal(viaPeek.ok, true);
+    assert.deepEqual(chamadasAoLimiter, [], 'peek nao deveria ter tocado o rate limiter de jeito nenhum');
+
+    const viaQuery = await service.query(ATOR, { targetType: TARGET_TYPES.PLAYER, targetId: ALVO });
+    assert.equal(viaQuery.ok, true);
+    assert.deepEqual(chamadasAoLimiter, ['interaction:query'], 'o query real continua passando pelo limiter normalmente');
+  });
+
+  it('recusa envelope invalido sem checar rate limit nem lancar', async () => {
+    const { service } = montar();
+    const r = await service.peek(ATOR, null);
+    assert.equal(r.ok, false);
+    assert.equal(r.stage, STAGES.ENVELOPE);
+  });
+});
+
 describe('interaction-service — requestId, duplicata e replay', () => {
   beforeEach(() => registry._reset());
 

@@ -68,6 +68,8 @@ const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
 const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
 const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
 const tradeService  = require(path.join(gamemodeDir, 'trade-service'));
+const interactionPromptService = require(path.join(gamemodeDir, 'core', 'interaction-prompt-service'));
+const characterDashboardBridge = require(path.join(gamemodeDir, 'core', 'character-dashboard-bridge'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -144,6 +146,11 @@ const interactionService = createInteractionService({
     );
   }
 });
+
+// `peek()` (Tarefa 11) precisa da MESMA instância acima — não pode montar a
+// dele, senão o prompt calcularia contra um registry/canSee desalinhado do
+// que a CEF de verdade vê.
+interactionPromptService.configure({ interactionService });
 
 moduleRegistry.register({
   id: 'interaction',
@@ -244,6 +251,21 @@ moduleRegistry.register({
   }
 });
 
+// LAB: ponte SELF → /painel (Tarefa 11, objetivo 3). Zero UI nova — ver
+// cabeçalho de `character-dashboard-bridge.js`. Depende de `player-panel`
+// (é o `openPanel` dele que a interação chama) e de `interaction` (registra
+// o resolvedor de `TARGET_TYPES.SELF`).
+moduleRegistry.register({
+  id: 'character-dashboard-bridge',
+  enabledBy: 'ENABLE_INTERACTION_PROMPT',
+  phase: 'lab',
+  dependencies: ['interaction', 'player-panel'],
+  commands: [],
+  initialize: async () => {
+    characterDashboardBridge.registerInteractions({ targets: interactionTargets, openPanel: playerPanel.openPanel });
+  }
+});
+
 // LAB: Afinidade da Alma — sinais, marcas e árvore de transformação.
 //
 // Desligado por padrão, como todo lab. Duas coisas precisam estar no `.env`
@@ -328,6 +350,27 @@ moduleRegistry.register({
   },
   shutdown: async () => {
     nametagService.shutdownNametagService();
+  }
+});
+
+// LAB: Prompt de interação `[E]` (Tarefa 11) — PROVA DE CONCEITO no mesmo
+// sentido da nametag: alvo mais próximo por proximidade, NÃO raycast (ver
+// cabeçalho de `core/interaction-prompt-service.js` pra por quê). Depende de
+// `interaction` só na ordem de boot (usa a instância já criada acima via
+// `configure()`), não no framework de dependências do registry — por isso
+// `dependencies: []` e não `['interaction']`: não HÁ `initialize()` de outro
+// módulo esperando por este, e o contrário também não é verdade.
+moduleRegistry.register({
+  id: 'interaction-prompt',
+  enabledBy: 'ENABLE_INTERACTION_PROMPT',
+  phase: 'lab',
+  dependencies: [],
+  commands: [],
+  initialize: async () => {
+    interactionPromptService.initInteractionPromptService();
+  },
+  shutdown: async () => {
+    interactionPromptService.shutdownInteractionPromptService();
   }
 });
 
@@ -518,6 +561,18 @@ if (typeof mp !== "undefined") {
         ctx.sp.browser.executeJavaScript('window.handleVoipTicket && window.handleVoipTicket(' + payload + ')');
       }
     `,
+    updateNeighbor: ''
+  });
+
+  // Prompt `[E]` (Tarefa 11): {targetId, targetType, label} ou {targetId:
+  // null}. Rótulo fixo no centro da tela — não precisa de projeção
+  // mundo→tela por quadro como a nametag, mas precisa registrar o listener
+  // de tecla (uma vez só) — daí o snippet próprio em vez do inline das
+  // outras quatro properties. Ver `interaction-prompt-service.js`.
+  mp.makeProperty(interactionPromptService.PROPERTY, {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: interactionPromptService.SNIPPET_DO_CLIENTE,
     updateNeighbor: ''
   });
 

@@ -294,6 +294,25 @@ describe('module-registry — limpeza de comandos e interações', () => {
     assert.equal(commandRegistry.has('/testecmd'), false);
   });
 
+  // Tarefa 11 (Legacy Command Cleanup): `commandDefs()` de um módulo pode
+  // marcar um comando como `hidden` — precisa chegar inteiro no
+  // command-registry, não só no `handler`/`name`.
+  it('repassa commandDef.hidden pro command-registry', async () => {
+    moduleRegistry.register(modulo('comfallback', {
+      commands: [
+        { name: '/publico', handler: () => {}, description: 'aparece' },
+        { name: '/legado', handler: () => {}, description: 'escondido', hidden: true }
+      ]
+    }));
+    ligar('TEST_ENABLE_COMFALLBACK');
+
+    await semLog(() => moduleRegistry.bootAll());
+    const lista = commandRegistry.list();
+    assert.strictEqual(lista.find((c) => c.command === '/publico').hidden, false);
+    assert.strictEqual(lista.find((c) => c.command === '/legado').hidden, true);
+    assert.strictEqual(commandRegistry.list({ playerFacing: true }).some((c) => c.command === '/legado'), false);
+  });
+
   // Uma ação que sobrevive ao desligamento aparece no menu e executa contra um
   // serviço que não está mais lá. Automático pelo mesmo motivo que os comandos.
   it('remove as interações do módulo no shutdown', async () => {

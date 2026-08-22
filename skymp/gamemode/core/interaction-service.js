@@ -324,7 +324,29 @@ function createInteractionService({
     if (!checkRate(actorId, 'query')) {
       return fail(STAGES.RATE_LIMIT, 'Aguarde um instante.');
     }
+    return _computeSections(actorId, request);
+  }
 
+  /**
+   * O mesmo cálculo de `query`, sem o rate limit.
+   *
+   * Uso exclusivo de chamador INTERNO do servidor (ex: um tick periódico que
+   * decide se mostra o prompt `[E]` — Tarefa 11), nunca de um evento vindo da
+   * CEF. `interaction:query` da CEF sempre passa por `query()`, com o limite;
+   * ligar isto num `ui-event-router` seria abrir uma segunda porta pro mesmo
+   * cálculo sem o freio que a primeira tem.
+   *
+   * @param {number} actorId
+   * @param {{targetType?: unknown, targetId?: unknown}} request
+   */
+  async function peek(actorId, request) {
+    if (!request || typeof request !== 'object') {
+      return fail(STAGES.ENVELOPE, 'Pedido invalido.');
+    }
+    return _computeSections(actorId, request);
+  }
+
+  async function _computeSections(actorId, request) {
     const targetType = typeof request.targetType === 'string' ? request.targetType : null;
     if (!targetType) return fail(STAGES.ENVELOPE, 'Tipo de alvo ausente.');
 
@@ -505,7 +527,7 @@ function createInteractionService({
     return { pendingRequests: seen.size, dedupTtlMs };
   }
 
-  return { query, execute, handleUiEvent, snapshot, STAGES };
+  return { query, peek, execute, handleUiEvent, snapshot, STAGES };
 }
 
 /**

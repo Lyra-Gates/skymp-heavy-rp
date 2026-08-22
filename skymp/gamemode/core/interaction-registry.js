@@ -63,7 +63,12 @@ const TARGET_TYPES = Object.freeze({
   CONTAINER: 'container',
   DOOR: 'door',
   PROPERTY: 'property',
-  WORLD_POINT: 'world_point'
+  WORLD_POINT: 'world_point',
+  // Tarefa 11 (Character Dashboard). O próprio ator — nunca fora de alcance
+  // de si mesmo, então quem registra pra este tipo não declara `distance`
+  // (o resolvedor não expõe `assertRange`, e sem ela `buildContext` pula a
+  // checagem de distância por completo).
+  SELF: 'self'
 });
 
 /** @type {Set<string>} */
