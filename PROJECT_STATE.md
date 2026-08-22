@@ -1,0 +1,77 @@
+# Estado do Projeto — SkyMP Heavy RP
+
+> Última unificação: 2026-08-22. Consolida PR #34 (Profissões), PR #44
+> (Economia/Vault), PR #46 (Depot — recuperado de snapshot) e PR #45 (UX)
+> em `main`, antes do início do módulo de Justiça.
+
+## O que o framework faz hoje
+
+- **Identidade**: whitelist, aplicação de personagem, credenciais opacas
+  (AUTH-003), identidades Discord, revelação de staff.
+- **Governança**: cargos, permissões, facções, prisões/custódia, mandados,
+  confiscos, multas — módulo `governance-service` + tabelas de
+  `migration-v3-governance.sql`.
+- **Economia**: ouro 100% virtual via `characters.gold`, ledger de
+  transações, tesouraria institucional, mercado regional, dívidas,
+  contratos, escrow, anti-cheat de ouro físico
+  (`core/economy-physical-sync.js`), limite de auditoria de transação
+  grande (`economy.largeTransactionThreshold`).
+- **Profissões**: núcleo grant/revoke/rank/XP (`profession-service.js`),
+  registry de 13 profissões — nenhuma tem gameplay própria ainda além do
+  Minerador (consumidor de `core/profession-registry.js`).
+- **Depot** *(recuperado nesta unificação — ver nota abaixo)*: armazenamento
+  regional de itens por hold (`core/depot-service.js`), painel de UI
+  (`ui/depot-panel.js`), sem reserva de ouro própria e sem checagem de
+  combate (nenhum sinal de combate ao vivo existe no projeto).
+- **Ambiente**: relógio autoritativo do servidor (GameTime/TimeScale),
+  heartbeat de correção de deriva, persistência entre restarts
+  (`environment-service.js`). Sem clima.
+- **Persistência**: estado de célula / `/dropitem` (Tarefa 9, cell-persistence
+  — já estava em `main` antes desta unificação).
+- **UX / Interaction Hub** (Tarefa 11): prompt de interação `[E]`
+  (`core/interaction-prompt-service.js`), ponte SELF → `/painel`
+  (`character-dashboard-bridge.js`), resolução por proximidade (não
+  raycast — fora do escopo sem fork do SkyMP).
+- **Voz**: SkyVoice, sinalização WebSocket, proximidade por célula.
+
+Todos os módulos acima nascem **desligados por padrão** (flags `ENABLE_*`
+em `.env.example`) e entram na fase `lab` — nenhum populou tráfego real de
+jogador ainda.
+
+## Nota sobre o Depot
+
+O Depot Service (Tarefas 9+10) não tinha PR aberta — existia só como commit
+de auto-save nunca finalizado (`8e269dd`, "aguardando commit manual") na
+branch `feat/depot-service`. Foi localizado durante esta unificação,
+extraído como um commit revisável e mesclado via PR #46. O código é
+completo e testado (15 testes), mas a integração com Profissões
+**não existe ainda**.
+
+## Próximo passo conhecido: ponte Depot ↔ Profissão
+
+O objetivo "Ferreiro Rank 2 acessa depósito de minério raro" não está
+implementado. `profession-service.js` e `depot-service.js` não se
+referenciam hoje. Fica registrado aqui como trabalho futuro — não foi
+implementado nesta unificação para não expandir escopo sem revisão
+explícita.
+
+## Débito técnico pré-existente (não introduzido por esta unificação)
+
+`node scripts/check-write-guards.js --all` reporta 14 ocorrências, das
+quais 2 bloqueariam escrita nova:
+- `governance-service.js:857` e `whitelist.js:180` usam FormDesc com
+  prefixo `0x` (forma incorreta — ver convenção no cabeçalho de
+  `death-service.js`).
+- 12 migrations antigas (v3 a v15) sem teste que leia o SQL. Nenhuma das
+  migrations desta unificação (v18, v19, v20) está nessa lista — todas têm
+  cobertura de teste.
+
+## Validação desta unificação
+
+- `npm test` (skymp/gamemode): **974 testes, 231 suítes, 0 falhas**.
+- `check-test-registry.js`: 62 arquivos de teste, todos registrados, nenhum
+  órfão.
+- `check-schema-drift.js --list`: 68 tabelas, timeline de migrations linear
+  (v2 → v20, sem colisão).
+- Nenhum arquivo untracked/órfão fora do já esperado (`spikes/` já
+  versionado; configs locais de `.claude/` fora deste merge).
