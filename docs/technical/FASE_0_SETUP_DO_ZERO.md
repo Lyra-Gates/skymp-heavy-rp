@@ -1,5 +1,7 @@
 # Fase 0 — setup do zero (guia + problemas conhecidos)
 
+***Português** · [English](FASE_0_SETUP_DO_ZERO.en.md)*
+
 Não existe README na raiz do repo. Este documento é o roteiro completo de
 onboarding, criado em 21/08/2026 depois de acompanhar ao vivo um fork externo
 subindo o projeto pela primeira vez — cada item da seção de problemas
