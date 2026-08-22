@@ -71,6 +71,7 @@ const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
 const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
 const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
 const tradeService  = require(path.join(gamemodeDir, 'trade-service'));
+const depotService  = require(path.join(gamemodeDir, 'core', 'depot-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -111,6 +112,20 @@ const uiEventRateLimiter = createUiEventRateLimiter({
 // interações precisam dele PRONTO no `initialize()` deles, e a ordenação
 // topológica do registry garante isso a partir do `dependencies: ['interaction']`
 // que cada um declara.
+// Ponte servidor→CEF. Um único canal (`browserModal`) pra qualquer módulo
+// abrir ou atualizar uma tela — a CEF decide o que desenhar pelo `type`
+// (`window.handleServerModal` em `skymp/ui/index.html`). Extraída aqui, e não
+// deixada como arrow function só de `interactionService`, porque o Depot
+// (Tarefa 10) precisa do mesmo canal pra abrir seu próprio painel.
+function sendModal(actorId, type, data) {
+  if (typeof mp === 'undefined') return;
+  try {
+    mp.set(actorId, 'browserModal', { type, data, sentAt: Date.now() });
+  } catch (err) {
+    console.error('[ui] Falha ao enviar modal:', err.message);
+  }
+}
+
 const interactionTargets = createTargetResolvers({ getCharacter: commands.getCharacterData });
 const interactionService = createInteractionService({
   registry: interactionRegistry,
@@ -119,14 +134,7 @@ const interactionService = createInteractionService({
   actionPolicy,
   rateLimiter: uiEventRateLimiter,
   notify: commands.sendNotification,
-  sendModal: (actorId, type, data) => {
-    if (typeof mp === 'undefined') return;
-    try {
-      mp.set(actorId, 'browserModal', { type, data, sentAt: Date.now() });
-    } catch (err) {
-      console.error('[interaction] Falha ao enviar modal:', err.message);
-    }
-  },
+  sendModal,
   // A permissão é resolvida por quem registrou a interação, via `canSee`. Este
   // adaptador existe para o caso `descriptor.permission`, que hoje só o staff
   // usa: cargo de governança depende de escopo e de plantão, e quem sabe disso
@@ -449,6 +457,23 @@ moduleRegistry.register({
   },
   shutdown: async () => {
     tradeService.sweep();
+  }
+});
+
+// LAB: Depot — armazenamento regional de itens (por hold, não teletransporta
+// entre cidades). Sem checagem de combate (nenhum sinal ao vivo existe no
+// projeto — ver o cabeçalho de core/depot-service.js) e sem reserva de ouro
+// nova (characters.gold já é global). Primeiro consumidor real de
+// TARGET_TYPES.OBJECT no Interaction Framework além do Minerador.
+moduleRegistry.register({
+  id: 'depot',
+  enabledBy: 'ENABLE_DEPOT_SERVICE',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: ['interaction'],
+  commands: depotService.commandDefs(),
+  initialize: async () => {
+    depotService.registerInteractions({ sendModal });
   }
 });
 

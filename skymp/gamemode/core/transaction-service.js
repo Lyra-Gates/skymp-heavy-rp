@@ -141,7 +141,12 @@ async function _recordGoldLedger(conn, opts) {
  */
 const STACK_TABLES = Object.freeze({
   character_inventory: 'character_id',
-  container_inventory: 'container_id'
+  container_inventory: 'container_id',
+  // Depot Service (migration-v20-depot-service.sql): armazém regional, mesma
+  // forma (dono, base_id, count) das duas tabelas acima. Depósito/saque
+  // atômico é duas chamadas de `applyStackDelta` (character_inventory +
+  // depot_inventory) na mesma transação do chamador — ver core/depot-service.js.
+  depot_inventory: 'depot_id'
 });
 
 /**

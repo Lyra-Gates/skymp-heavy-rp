@@ -56,7 +56,9 @@ const SPEC = {
   'profession.maxPerCharacter': { ...num(1, 20), default: 3, usedBy: 'profession-service.js (grantProfession/reactivateProfession)' },
   'profession.maxRank': { ...num(0, 20), default: 3, usedBy: 'profession-service.js (setProfessionRank)' },
 
-  'economy.largeTransactionThreshold': { ...num(1, 2147483647), default: 5000, usedBy: 'core/economy-service.js (_auditLargeTransfer)' }
+  'economy.largeTransactionThreshold': { ...num(1, 2147483647), default: 5000, usedBy: 'core/economy-service.js (_auditLargeTransfer)' },
+
+  'depot.defaultCapacity': { ...num(1, 10000), default: 500, usedBy: 'core/depot-service.js (getOrCreateDepot)' }
 };
 
 /**

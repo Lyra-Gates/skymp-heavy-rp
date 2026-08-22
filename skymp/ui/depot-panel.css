@@ -1,0 +1,226 @@
+/* ============================================================================
+ * depot-panel.css
+ * Tema "Heavy RP": pedra/pergaminho escuro com borda metálica, deliberadamente
+ * diferente do glass violeta de player-panel.css — aquele é "dev tool",
+ * este é um baú de campo, então parece um baú de campo. Sem fonte externa
+ * (a CEF pode não ter rede pra buscar webfont): serif de sistema mais perto
+ * de um manuscrito.
+ * ==========================================================================*/
+
+#depot-panel {
+  --dp-stone-1: #1b1712;
+  --dp-stone-2: #262019;
+  --dp-parchment: #e8dcc0;
+  --dp-parchment-dim: rgba(232, 220, 192, 0.62);
+  --dp-parchment-faint: rgba(232, 220, 192, 0.32);
+  --dp-metal: #8a7a52;
+  --dp-metal-bright: #c9b877;
+  --dp-metal-dim: rgba(201, 184, 119, 0.16);
+  --dp-danger: #c0463a;
+  --dp-danger-dim: rgba(192, 70, 58, 0.22);
+  --dp-ok: #6f8f4f;
+  --dp-font: 'Bookman Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  transform: translate(-50%, -50%) scale(0.97);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+  z-index: 210;
+  font-family: var(--dp-font);
+  color: var(--dp-parchment);
+}
+/* "aparecer suavemente" (brief §3): opacidade + leve escala, nunca um corte seco de display:none. */
+#depot-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.dp-shell {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 96px);
+  background:
+    radial-gradient(ellipse 120% 60% at 50% -10%, rgba(201, 184, 119, 0.08), transparent 60%),
+    linear-gradient(180deg, var(--dp-stone-2), var(--dp-stone-1));
+  border: 2px solid var(--dp-metal);
+  border-radius: 6px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(201, 184, 119, 0.18),
+    0 26px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Cabeçalho ──────────────────────────────────────────────────────────── */
+.dp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--dp-metal-dim);
+  flex: none;
+}
+.dp-head-text { flex: 1; min-width: 0; }
+.dp-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--dp-metal-bright);
+}
+.dp-title {
+  font-size: 19px;
+  margin-top: 2px;
+  color: var(--dp-parchment);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dp-gold {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--dp-metal-dim);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dp-metal-bright);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dp-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--dp-metal-dim);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--dp-parchment-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  font-family: var(--dp-font);
+}
+.dp-close:hover { color: var(--dp-parchment); border-color: var(--dp-metal-bright); }
+
+/* ── Barra de capacidade ────────────────────────────────────────────────── */
+.dp-capacity { padding: 12px 18px 0; flex: none; }
+.dp-capacity-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--dp-parchment-dim);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.dp-capacity-label .value { color: var(--dp-parchment); font-variant-numeric: tabular-nums; }
+.dp-capacity-track {
+  height: 8px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.dp-capacity-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6f8f4f, #9cbf72);
+  transition: width 0.25s ease;
+}
+.dp-capacity-fill.warn { background: linear-gradient(90deg, #b98a3a, #d9ab5c); }
+.dp-capacity-fill.full { background: linear-gradient(90deg, #a03c32, #c0463a); }
+
+/* ── Colunas: inventário do jogador | depósito regional ────────────────── */
+.dp-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px 18px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.dp-column {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--dp-metal-dim);
+  border-radius: 5px;
+  padding: 10px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dp-column-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--dp-metal-bright);
+  padding: 2px 4px 8px;
+  border-bottom: 1px solid var(--dp-metal-dim);
+  margin-bottom: 6px;
+  flex: none;
+}
+.dp-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+.dp-empty {
+  color: var(--dp-parchment-faint);
+  font-size: 12.5px;
+  padding: 10px 4px;
+  font-style: italic;
+}
+
+.dp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 4px;
+  border-bottom: 1px solid rgba(201, 184, 119, 0.08);
+}
+.dp-row:last-child { border-bottom: none; }
+.dp-row-info { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dp-row-name {
+  color: var(--dp-parchment);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dp-row-count {
+  color: var(--dp-parchment-dim);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.dp-row-btn {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--dp-metal-dim);
+  background: var(--dp-metal-dim);
+  color: var(--dp-metal-bright);
+  font-family: var(--dp-font);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.dp-row-btn:hover { border-color: var(--dp-metal-bright); background: rgba(201, 184, 119, 0.26); }
+
+.dp-hint {
+  padding: 10px 18px 16px;
+  font-size: 11px;
+  color: var(--dp-parchment-faint);
+  line-height: 1.5;
+  flex: none;
+}
+
+/* ── Telas pequenas: colunas empilham em vez de espremer ──────────────────── */
+@media (max-width: 560px) {
+  .dp-columns { grid-template-columns: 1fr; }
+}

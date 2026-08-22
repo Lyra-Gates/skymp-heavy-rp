@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>SkyMP Heavy RP - UI</title>
   <link rel="stylesheet" href="player-panel.css">
+  <link rel="stylesheet" href="depot-panel.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -437,6 +438,43 @@
   </div>
 </div>
 <div id="chat-log" class="chat-log" aria-live="polite"></div>
+
+<!-- Painel do Depósito Regional (Tarefa 10: UI-Depot-Bridge) -->
+<div id="depot-panel" aria-hidden="true">
+  <div class="dp-shell">
+    <div class="dp-head">
+      <div class="dp-head-text">
+        <div class="dp-eyebrow">Depósito Regional</div>
+        <div class="dp-title" id="dp-hold-name">—</div>
+      </div>
+      <div class="dp-gold" id="dp-gold" title="Ouro do personagem (nao guardado aqui)">0 ouro</div>
+      <button type="button" class="dp-close" id="dp-close" aria-label="Fechar">×</button>
+    </div>
+
+    <div class="dp-capacity">
+      <div class="dp-capacity-label">
+        <span>Capacidade</span>
+        <span class="value" id="dp-capacity-value">0 / 0</span>
+      </div>
+      <div class="dp-capacity-track">
+        <div class="dp-capacity-fill" id="dp-capacity-fill"></div>
+      </div>
+    </div>
+
+    <div class="dp-columns">
+      <div class="dp-column">
+        <div class="dp-column-title">Seu inventário</div>
+        <div class="dp-list" id="dp-carried-list"><div class="dp-empty">Vazio.</div></div>
+      </div>
+      <div class="dp-column">
+        <div class="dp-column-title">Depósito</div>
+        <div class="dp-list" id="dp-depot-list"><div class="dp-empty">Vazio.</div></div>
+      </div>
+    </div>
+
+    <div class="dp-hint">Fica só neste terminal — o que voce guarda em Whiterun nao aparece em Solitude.</div>
+  </div>
+</div>
 
 <!-- Painel do Jogador -->
 <div id="player-panel" aria-hidden="true">
@@ -1292,6 +1330,12 @@
     if (message.type === 'governance:toast' || message.type === 'toast') {
       showInteractionToast(message.data && message.data.message ? message.data.message : 'Atualizado.');
     }
+    if (message.type === 'depot:open' && window.DepotPanel) {
+      window.DepotPanel.open(message.data);
+    }
+    if (message.type === 'depot:update' && window.DepotPanel) {
+      window.DepotPanel.update(message.data);
+    }
   };
 
   // Disparado pela property SkyMP 'voipTicket' quando o jogador roda /voz.
@@ -1357,8 +1401,12 @@
     if (event.key === 'Escape' && document.getElementById('interaction-menu').classList.contains('open')) {
       closeInteractionMenu();
     }
+    if (event.key === 'Escape' && window.DepotPanel && window.DepotPanel.isOpen()) {
+      window.DepotPanel.close();
+    }
   });
 </script>
 <script src="player-panel.js"></script>
+<script src="depot-panel.js"></script>
 </body>
 </html>
