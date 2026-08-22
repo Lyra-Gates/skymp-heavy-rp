@@ -22,6 +22,7 @@ Built for *strict roleplay*: server authority over economy, identity and consequ
 | Understand how the pieces talk | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribute code | [CONTRIBUTING.en.md](CONTRIBUTING.en.md) — the rules that aren't obvious from reading the code |
 | Know if a mod works on the server | [Mods × Gamemode Contract](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
+| Set up the server from scratch (database, `.env`, Skyrim assets, Discord, tunnel) | [FASE_0_SETUP_DO_ZERO.en.md](docs/technical/FASE_0_SETUP_DO_ZERO.en.md) — full checklist + known issues |
 | Browse all documentation | [docs/README.md](docs/README.md) |
 | Report a security issue | [SECURITY.en.md](SECURITY.en.md) — **do not open a public issue** |
 | Ask, propose, or show what you built | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
@@ -54,6 +55,8 @@ Built for *strict roleplay*: server authority over economy, identity and consequ
 
 ## Running it
 
+This is the quick summary. **Full step-by-step guide, with a known-issues section:** [FASE_0_SETUP_DO_ZERO.en.md](docs/technical/FASE_0_SETUP_DO_ZERO.en.md) — covers the database, every `.env` file, Skyrim assets, the SkyMP server artifact, Discord, and going public through a tunnel/domain. Worth reading before a from-scratch setup: every step in it exists because someone got stuck there first.
+
 Requires **Node.js 20+**, **MariaDB/MySQL**, and **Skyrim SE/AE** for in-game testing.
 
 ```bash
@@ -67,7 +70,7 @@ cd apps/game-api    && npm ci && cd ../..
 cd apps/bot-discord && npm ci && cd ../..
 ```
 
-Copy every `.env.example` to `.env` and fill it in — the comments explain where each value comes from. Apply `schema.sql` then migrations `v2` through `v9`, in order.
+Copy every `.env.example` to `.env` and fill it in — the comments explain where each value comes from. Apply `schema.sql`, then every `migration-v*.sql` file in `skymp/packages/database/`, in numeric order (there are more than `v9` by now — check the folder for the current highest number).
 
 ```powershell
 .\scripts\phase0\Start-AllServices.ps1

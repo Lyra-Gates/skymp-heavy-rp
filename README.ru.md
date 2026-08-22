@@ -67,7 +67,9 @@ cd apps/game-api    && npm ci && cd ../..
 cd apps/bot-discord && npm ci && cd ../..
 ```
 
-Скопируйте каждый `.env.example` в `.env` и заполните — комментарии внутри объясняют, откуда берётся каждое значение. Примените `schema.sql`, затем миграции с `v2` по `v9`, **по порядку**.
+**Полное пошаговое руководство (на английском, с разделом известных проблем):** [FASE_0_SETUP_DO_ZERO.en.md](docs/technical/FASE_0_SETUP_DO_ZERO.en.md).
+
+Скопируйте каждый `.env.example` в `.env` и заполните — комментарии внутри объясняют, откуда берётся каждое значение. Примените `schema.sql`, затем каждый файл `migration-v*.sql` из `skymp/packages/database/` **по порядку номеров** (сейчас их больше, чем `v9` — актуальный номер смотрите в папке).
 
 ```powershell
 .\scripts\phase0\Start-AllServices.ps1

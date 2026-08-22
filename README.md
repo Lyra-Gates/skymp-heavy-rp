@@ -20,6 +20,7 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 | Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
 | Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
+| Subir o servidor do zero (banco, `.env`, assets do Skyrim, Discord, túnel) | [FASE_0_SETUP_DO_ZERO.md](docs/technical/FASE_0_SETUP_DO_ZERO.md) — checklist completo + problemas conhecidos |
 | Navegar toda a documentação | [docs/README.md](docs/README.md) — índice mantido dos documentos do projeto |
 | Reportar falha de segurança | [SECURITY.md](SECURITY.md) — **não abra issue pública** |
 | Perguntar, propor ou mostrar o que fez | [Discussions](https://github.com/vinicius3232/skymp-heavy-rp/discussions) |
@@ -50,6 +51,8 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 > ⚠️ **O servidor ainda não foi validado com jogadores reais.** Todo o gamemode está verificado só por teste unitário com `mp` mockado — o próximo passo é rodar o [plano de teste in-game](docs/technical/GOVERNANCE_MARKET_STALLS_TEST_PLAN.md) com as flags `ENABLE_*` ligadas. Continua aberto também que o gamemode ainda deriva identidade do `profileId` do cliente em vez de validar o ticket de sessão. Plano completo em [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) §3.
 
 ## Como Executar o Servidor (Desenvolvimento)
+
+Este é o resumo rápido. **Guia completo, passo a passo, com seção de problemas conhecidos:** [FASE_0_SETUP_DO_ZERO.md](docs/technical/FASE_0_SETUP_DO_ZERO.md) — cobre banco de dados, todos os `.env`, assets do Skyrim, artefato do servidor SkyMP, Discord e túnel/domínio público. Vale a pena ler antes de tentar subir do zero: cada passo dele existe porque alguém já travou ali.
 
 Para facilitar a vida dos desenvolvedores, criamos um script de orquestração automatizado que inicia todas as dependências em terminais paralelos.
 

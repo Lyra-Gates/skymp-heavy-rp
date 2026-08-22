@@ -35,7 +35,8 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [SKYMP_PATCH_POLICY.md](technical/SKYMP_PATCH_POLICY.md) | Quando patch, quando adapter, quando extensão de cliente, quando PR — e o que mudou quando o upstream passou a exigir cessão de direito autoral. |
 | [`core/skymp-adapter/`](../skymp/gamemode/core/skymp-adapter/README.md) | A fronteira declarada contra o motor: identidade, Papyrus e detecção de capacidade. Só os boundaries que a auditoria provou instáveis. |
 | [MODS_AND_GAMEMODE_CONTRACT.md](technical/MODS_AND_GAMEMODE_CONTRACT.md) | O que acontece com um mod dentro de um cliente conectado. Responde "esse mod funciona no servidor?" com critério. |
-| [SKYMP_SERVER_SETUP.md](technical/SKYMP_SERVER_SETUP.md) | Instalação e configuração do servidor SkyMP. |
+| [SKYMP_SERVER_SETUP.md](technical/SKYMP_SERVER_SETUP.md) | Checklist do servidor SkyMP nativo: ambientes, arquivos obrigatórios, marco mínimo de validação. |
+| [FASE_0_SETUP_DO_ZERO.md](technical/FASE_0_SETUP_DO_ZERO.md) · [en](technical/FASE_0_SETUP_DO_ZERO.en.md) | **O onboarding do monorepo inteiro**, do zero: dependências de cada app, banco, todos os `.env`, assets do Skyrim, artefato do servidor, Discord, túnel — mais uma seção de problemas conhecidos com cada erro real encontrado ajudando um fork externo a subir o projeto. |
 | [OPERATIONS.md](technical/OPERATIONS.md) | Runbook: subir, conferir schema, quem pode o quê, portas, e o que fazer quando algo dá errado. |
 | [SERVER_OPTIONS_SCHEMA.md](technical/SERVER_OPTIONS_SCHEMA.md) | Opções de gameplay — **e quais delas realmente fazem efeito hoje**. |
 
