@@ -33,6 +33,12 @@
   (`character-dashboard-bridge.js`), resolução por proximidade (não
   raycast — fora do escopo sem fork do SkyMP).
 - **Voz**: SkyVoice, sinalização WebSocket, proximidade por célula.
+- **Crime & Proveniência** *(adicionado depois desta unificação — ver §
+  "O que veio depois" abaixo)*: `item_instances`, item "quente", revista
+  institucional, restituição por combat-log.
+- **Crafting com gate de profissão + Assinatura do Artesão** *(idem)*:
+  `required_profession`/`required_rank` por receita, XP por craft, e a
+  Assinatura do Artesão (`crafted_item_signatures`).
 
 Todos os módulos acima nascem **desligados por padrão** (flags `ENABLE_*`
 em `.env.example`) e entram na fase `lab` — nenhum populou tráfego real de
@@ -75,3 +81,27 @@ quais 2 bloqueariam escrita nova:
   (v2 → v20, sem colisão).
 - Nenhum arquivo untracked/órfão fora do já esperado (`spikes/` já
   versionado; configs locais de `.claude/` fora deste merge).
+
+## O que veio depois desta unificação (21-22/08/2026)
+
+Dois módulos novos, cada um seguindo o mesmo padrão acima (`lab`, flag
+própria, desligado por padrão):
+
+- **Crime & Proveniência** (commit `fd68762`, Tarefas 12-13): `item_instances`
+  rastreia posse de item roubado, com janela `hot` e restituição automática
+  por combat-log; revista institucional da guarda revela o dono original.
+  Ver [CRIME_SYSTEM_AUDIT.md](docs/technical/CRIME_SYSTEM_AUDIT.md).
+- **Gate de profissão no crafting + Assinatura do Artesão** (commits `c7ddcd7`
+  e `e777ede`): o gate `required_profession`/`required_rank` por receita
+  existia pronto e testado numa branch órfã (`feat/crafting-profession-integration`,
+  20/08) nunca mesclada — trazido em vez de reimplementado, migration
+  renumerada de v20 para v23 para não colidir com Depot/Crime. Em cima disso,
+  a Assinatura do Artesão (`crafted_item_signatures`, v24): artesão com rank
+  suficiente assina o que craft, revista institucional mostra a autoria. Ver
+  [MAKERS_MARK.md](docs/design/MAKERS_MARK.md) e
+  [CRAFTING_SYSTEM.md](docs/gameplay/CRAFTING_SYSTEM.md).
+
+Estado da suíte depois dos dois: **1069 testes, 255 suítes, 0 falhas**;
+`check-schema-drift.js --list` segue linear até v24, sem colisão.
+`check-write-guards.js --all` continua nas mesmas 14 ocorrências
+pré-existentes (2 bloqueariam escrita nova) — nenhuma nova introduzida.
