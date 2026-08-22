@@ -5,7 +5,9 @@ description: Habilidade para inicializar e testar o servidor local do SkyMP de f
 
 # Instruções de Inicialização e Teste do Servidor SkyMP
 
-Sempre que o usuário pedir para "testar o servidor", "iniciar o servidor" ou "verificar se o servidor está rodando", siga os passos abaixo:
+Sempre que o usuário pedir para "testar o servidor", "iniciar o servidor" ou "verificar se o servidor está rodando", siga os passos abaixo.
+
+Isto assume que o setup do zero já foi feito (dependências instaladas, banco migrado, `.env` preenchidos, assets do Skyrim em `skymp/data/`, artefato do servidor instalado em `skymp/server/`). Se qualquer um desses ainda não existir — por exemplo `skymp/server/dist_back/skymp5-server.js` não existe, ou `skymp/data/*.esm` está ausente — não tente contornar: siga `docs/technical/FASE_0_SETUP_DO_ZERO.md` do começo, incluindo a seção de problemas conhecidos.
 
 1. **Garantir a Inicialização das Configurações Locais:**
    Se os arquivos locais não existirem em `skymp/config/`, execute no terminal:

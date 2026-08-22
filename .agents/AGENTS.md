@@ -23,3 +23,4 @@ Estas regras devem ser estritamente seguidas ao trabalhar neste projeto:
 5. **Gerenciamento de Testes e Setup Técnico:**
    - Para testes locais, sempre assumir `offlineMode=true` no artefato do servidor, permitindo o uso de `profileId`. Em produção isso é expressamente proibido.
    - Scripts de setup, instalação do cliente e boot do servidor devem sempre usar o PowerShell presentes na pasta `scripts/phase0/`.
+   - Setup do zero (dependências, banco, `.env`, assets do Skyrim, artefato do servidor, Discord, troubleshooting) está documentado em `docs/technical/FASE_0_SETUP_DO_ZERO.md`. Antes de guiar alguém (humano ou agente) por um boot do zero, siga esse roteiro em vez de reconstruir os passos por conta própria.

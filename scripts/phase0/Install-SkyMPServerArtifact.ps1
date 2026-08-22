@@ -7,11 +7,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Ancorado em $PSScriptRoot, nao no diretorio de trabalho: rodar este script de
+# dentro de scripts/phase0 (ou via "Run with PowerShell" no Explorer, que abre
+# em outro cwd) fazia os caminhos relativos abaixo apontarem pro lugar errado
+# e o script falhar com "Missing local settings" mesmo com o arquivo existindo.
+# Descoberto em 21/08/2026 ajudando um fork externo a subir o servidor.
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+
+if (-not [System.IO.Path]::IsPathRooted($ArtifactPath)) {
+  $ArtifactPath = Join-Path $root $ArtifactPath
+}
+
 if (-not (Test-Path -LiteralPath $ArtifactPath)) {
   Write-Error "Artifact path not found: $ArtifactPath"
 }
 
-$root = Resolve-Path "."
 $server = Join-Path $root $ServerPath
 $artifact = Resolve-Path -LiteralPath $ArtifactPath
 
