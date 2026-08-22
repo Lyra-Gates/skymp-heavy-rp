@@ -171,6 +171,26 @@ function sendNotification(actorId, message) {
   }
 }
 
+/**
+ * Notificação de escolha binária (aceitar/recusar), mesmo canal `browserModal`
+ * que o toast já usa — PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 5. Este arquivo só
+ * entrega o convite pra CEF desenhar os dois botões; o que "aceitar" significa
+ * é de quem chamou (o `acceptEvent`/`denyEvent` do payload é o `uiEvent.type`
+ * que a CEF manda de volta ao clicar, e o dono de registrar um handler pra
+ * esse prefixo no `core/ui-event-router.js` é o módulo que chamou isto, nunca
+ * `commands.js`).
+ * @param {number} actorId
+ * @param {{title: string, message: string, acceptLabel: string, denyLabel: string, acceptEvent: string, denyEvent: string, eventData?: object}} payload
+ */
+function sendChoice(actorId, payload) {
+  if (typeof mp === 'undefined') return;
+  try {
+    mp.set(actorId, 'browserModal', { type: 'choice', data: payload, sentAt: Date.now() });
+  } catch (err) {
+    console.error(`[commands] Failed to send choice to actor ${actorId.toString(16)}:`, err.message);
+  }
+}
+
 // Transmite a mensagem para o autor e vizinhos dentro de um raio de proximidade
 function renderMessageForRecipient(message, recipientActorId) {
   return typeof message === 'function' ? message(recipientActorId) : message;
@@ -523,5 +543,6 @@ module.exports = {
   handleChatInput,
   broadcastProximityMessage,
   sendNotification,
+  sendChoice,
   onCharacterRemoved
 };

@@ -562,6 +562,19 @@ async function requestSearch(officerActorId, targetActorId, reason = 'revista') 
 
   notify(officerActorId, 'Revista solicitada. Aguarde consentimento ou use mandado.');
   notify(targetActorId, `Guarda solicita revista. Use /searchaccept ${result.insertId} ou /searchdeny ${result.insertId}.`);
+  // PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 5: notificação de texto continua
+  // (fallback, mesmo espírito do `[E]` manter comandos antigos vivos) — o
+  // modal de 2 botões é um SEGUNDO caminho pro mesmo `approveSearch`, não
+  // substitui o comando.
+  commands.sendChoice(targetActorId, {
+    title: 'Pedido de revista',
+    message: `Um guarda solicita revista. Motivo: ${reason}`,
+    acceptLabel: 'Aceitar',
+    denyLabel: 'Recusar',
+    acceptEvent: 'search:accept',
+    denyEvent: 'search:deny',
+    eventData: { searchId: result.insertId }
+  });
 }
 
 async function approveSearch(targetActorId, searchId, approved) {
@@ -594,6 +607,35 @@ async function approveSearch(targetActorId, searchId, approved) {
 
 function findActorByCharacterId(characterId) {
   return commands.getActiveActorByCharacterId(characterId);
+}
+
+/**
+ * Ponte pro modal de escolha (`commands.sendChoice`, Fase 5). Registrado sob
+ * o prefixo `search` (não `governance` — esse nome saiu do router em
+ * 13/08/2026 e não volta: só os dois eventos que o modal de revista dispara
+ * moram aqui, não "tudo de governança" de novo).
+ * @param {number} actorId
+ * @param {{type?: string, data?: {searchId?: unknown}}} uiEvent
+ * @returns {Promise<boolean>}
+ */
+async function handleUiEvent(actorId, uiEvent) {
+  if (!uiEvent || typeof uiEvent.type !== 'string') return false;
+
+  const raw = uiEvent.data ? uiEvent.data.searchId : undefined;
+  const searchId = typeof raw === 'number' && Number.isSafeInteger(raw) && raw > 0 ? raw : null;
+
+  switch (uiEvent.type) {
+    case 'search:accept':
+      if (searchId === null) return true;
+      await approveSearch(actorId, searchId, true);
+      return true;
+    case 'search:deny':
+      if (searchId === null) return true;
+      await approveSearch(actorId, searchId, false);
+      return true;
+    default:
+      return false;
+  }
 }
 
 async function showInventorySnapshot(officerActorId, targetActorId, searchId) {
@@ -1430,6 +1472,7 @@ module.exports = {
   releaseTarget,
   requestSearch,
   approveSearch,
+  handleUiEvent,
   issueWarrant,
   fineTarget,
   confiscateItem,

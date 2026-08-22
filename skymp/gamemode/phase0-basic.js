@@ -227,13 +227,15 @@ moduleRegistry.register({
   commands: governance.commandDefs(),
   initialize: async () => {
     await governance.initGovernanceService();
-    // O `uiEventRouter.register('governance', ...)` saiu em 13/08/2026 junto com
-    // o `handleUiEvent` do modulo: as unicas duas coisas que ele tratava eram
-    // `governance:interaction:actions` e `:execute`, e as duas viraram
-    // `interaction:*` no framework. A governanca deixou de ter UI propria — o
-    // que ela tem agora sao acoes registradas, declaradas no initialize acima.
+    // O `uiEventRouter.register('governance', ...)` saiu em 13/08/2026 (as
+    // unicas duas coisas que tratava viraram `interaction:*` no framework).
+    // Voltou em 22/08 sob um prefixo NOVO e mais estreito — `search`, so
+    // pros dois eventos que o modal de revista dispara (Fase 5 de
+    // PLAYER_ACTION_SHORTCUTS_PLAN.md) — nao "tudo de governanca" de novo.
+    uiEventRouter.register('search', governance.handleUiEvent);
   },
   shutdown: async () => {
+    uiEventRouter.unregister('search');
     governance.shutdownGovernanceService();
   }
 });

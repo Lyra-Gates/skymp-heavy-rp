@@ -172,6 +172,43 @@
     }
     .trade-btn:hover { background: #d4b97e; }
 
+    /* === CHOICE MODAL (Fase 5 — pedidos com resposta binaria, ex: revista) === */
+    #choice-modal {
+      display: none;
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 420px;
+      background: rgba(12,12,15,0.93);
+      border: 1px solid #bba16b;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+      z-index: 230; /* acima do interaction-menu (220) — uma escolha pendente
+                       nao pode ficar escondida atras de outro menu */
+    }
+    #choice-modal.open { display: block; }
+    #choice-modal .choice-title {
+      text-align: center;
+      font-size: 16px;
+      letter-spacing: 1px;
+      color: #bba16b;
+      border-bottom: 1px solid rgba(187,161,107,0.3);
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+    #choice-modal .choice-message {
+      color: #ddd;
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+    #choice-modal .choice-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+
     /* === INTERACTION MENU / GOVERNANCE === */
     #interaction-menu {
       position: fixed;
@@ -442,6 +479,16 @@
     <button class="trade-btn" onclick="acceptTrade()">Aceitar</button>
     <button class="trade-btn" onclick="confirmTrade()">Confirmar</button>
     <button class="trade-btn" onclick="closeTrade()">Cancelar</button>
+  </div>
+</div>
+
+<!-- Choice Modal (Fase 5) -->
+<div id="choice-modal" role="alertdialog" aria-modal="true" aria-hidden="true">
+  <div class="choice-title" id="choice-modal-title"></div>
+  <p class="choice-message" id="choice-modal-message"></p>
+  <div class="choice-buttons">
+    <button class="trade-btn" id="choice-modal-accept"></button>
+    <button class="trade-btn" id="choice-modal-deny"></button>
   </div>
 </div>
 
@@ -1158,6 +1205,42 @@
     sendUiEvent('trade:accept', {});
   }
 
+  // Choice Modal (Fase 5): mesmo canal `browserModal` do toast
+  // (window.handleServerModal, tipo 'choice'), CEF só desenha os dois
+  // botões — quem decide o que "aceitar"/"recusar" significam é o
+  // `acceptEvent`/`denyEvent` que o servidor mandou, nunca este arquivo.
+  function showChoiceModal(data) {
+    if (!data) return;
+    const modal = document.getElementById('choice-modal');
+    document.getElementById('choice-modal-title').textContent = data.title || '';
+    document.getElementById('choice-modal-message').textContent = data.message || '';
+
+    const acceptBtn = document.getElementById('choice-modal-accept');
+    const denyBtn = document.getElementById('choice-modal-deny');
+    acceptBtn.textContent = data.acceptLabel || 'Aceitar';
+    denyBtn.textContent = data.denyLabel || 'Recusar';
+
+    // Clonar+substituir em vez de reusar o botão troca o listener antigo por
+    // um novo — sem isso, um segundo pedido de revista chegando antes do
+    // jogador responder o primeiro empilharia handlers, e um clique
+    // dispararia os dois eventos (o velho E o novo).
+    const freshAccept = acceptBtn.cloneNode(true);
+    const freshDeny = denyBtn.cloneNode(true);
+    acceptBtn.replaceWith(freshAccept);
+    denyBtn.replaceWith(freshDeny);
+
+    freshAccept.addEventListener('click', () => {
+      modal.classList.remove('open');
+      if (data.acceptEvent) sendUiEvent(data.acceptEvent, data.eventData || {});
+    });
+    freshDeny.addEventListener('click', () => {
+      modal.classList.remove('open');
+      if (data.denyEvent) sendUiEvent(data.denyEvent, data.eventData || {});
+    });
+
+    modal.classList.add('open');
+  }
+
   function confirmTrade() {
     // Não fecha a overlay: confirmar é só o lado de QUEM CLICOU — a troca só
     // termina quando os dois confirmarem, e a overlay não tem hoje nenhum
@@ -1451,6 +1534,9 @@
     }
     if (message.type === 'governance:toast' || message.type === 'toast') {
       showInteractionToast(message.data && message.data.message ? message.data.message : 'Atualizado.');
+    }
+    if (message.type === 'choice') {
+      showChoiceModal(message.data);
     }
     if (message.type === 'depot:open' && window.DepotPanel) {
       window.DepotPanel.open(message.data);

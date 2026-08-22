@@ -196,17 +196,41 @@ Sem alvo, sem toggle de estado — é leitura pura, mesmo formato de
 `profession-service.js`/`soul-service.js` (que já expõem os dados via
 `/profissoes`/`/alma` — é reaproveitar a leitura, não duplicá-la).
 
-### Fase 5 — Notificação com 2 botões pra `/searchaccept`/`/searchdeny`
+### Fase 5 — Notificação com 2 botões pra `/searchaccept`/`/searchdeny` ✅ implementado (22/08)
 
-Maior esforço porque é um padrão de UI que **não existe ainda no
-projeto**: uma notificação que chega de forma assíncrona (o pedido de
-revista pode vir a qualquer momento, não é resposta a uma tecla) e
-oferece uma escolha binária com timeout. O mais próximo que existe é o
-toast de `sendNotification` (`browserModal` tipo `'toast'`) — que é
-só-leitura, sem botão. Precisaria de um tipo de modal novo
-(`browserModal` tipo `'choice'`?, ou canal próprio) — arquitetura a
-desenhar antes de codar, não uma extensão direta de algo pronto como as
-Fases 1-4.
+Decisão do dono do produto: novo tipo `'choice'` no `browserModal` já
+existente (não um canal próprio, não o menu `[E]`) — reusa o `mp.set`
+que o toast já prova, a CEF só aprende a desenhar um segundo formato de
+payload.
+
+- `commands.js` ganha `sendChoice(actorId, payload)`, irmã de
+  `sendNotification` — só entrega o convite pra tela; quem decide o que
+  "aceitar"/"recusar" significam é o `acceptEvent`/`denyEvent` do
+  payload (o `uiEvent.type` que a CEF manda de volta), nunca
+  `commands.js`.
+- `governance-service.js`: `requestSearch` manda o modal (junto com a
+  notificação de texto que já existia — mesmo espírito do `[E]` manter
+  comando antigo vivo) com `acceptEvent: 'search:accept'`,
+  `denyEvent: 'search:deny'`, `eventData: {searchId}`. Novo
+  `handleUiEvent` traduz os dois de volta pro MESMO `approveSearch` que
+  `/searchaccept`/`/searchdeny` já chamavam — zero lógica duplicada.
+- `phase0-basic.js`: `uiEventRouter.register('search', ...)` — prefixo
+  NOVO e estreito (só os dois eventos do modal), não uma reencarnação do
+  antigo `'governance'` que saiu em 13/08.
+- `index.html`: `#choice-modal` (mesma família visual do `trade-overlay`),
+  `showChoiceModal(data)` clona+substitui os botões a cada chamada — sem
+  isso, um segundo pedido chegando antes do jogador responder o primeiro
+  empilharia listeners e um clique dispararia dois eventos.
+
+6 testes novos (`governance-service.search.test.js`, arquivo próprio —
+`requestSearch`/`approveSearch` não tinham NENHUM teste dedicado antes
+disso, gap pré-existente fechado de graça). 1107 testes do gamemode
+passam. **Única fase com o lado CEF confirmado ao vivo nesta rodada**: a
+ferramenta de browser voltou a funcionar depois da falha da Fase 4 —
+`showChoiceModal` testado num navegador comum (abre, mostra título/
+mensagem, o clique certo manda o evento certo, um segundo pedido não
+empilha listener no primeiro). Lado servidor: não validado em jogo, como
+todo lab deste projeto.
 
 ## 2. O que eu ainda preciso ler antes de codar a Fase 2
 
