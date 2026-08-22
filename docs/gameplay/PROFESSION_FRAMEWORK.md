@@ -259,10 +259,16 @@ integração contra um banco real prova isso.
 - Fundidor, Curtidor — **têm gameplay** desde 20/08/2026: `crafting-service.js`
   foi reativado (ver [CRAFTING_SYSTEM.md](CRAFTING_SYSTEM.md)) com gate de
   profissão/rank real (`required_profession`/`required_rank`,
-  migration-v20-crafting-profession-gate.sql) e receita cadastrada em
-  `seed-forging.sql`. **Ferreiro, Encantador, Cozinheiro têm o gate pronto e
-  zero receita** — o mecanismo existe, falta conteúdo (um `result_base_id` de
-  arma/armadura/item confirmado, não inventado).
+  migration-v23-crafting-profession-gate.sql — este trabalho existia numa
+  branch órfã, `feat/crafting-profession-integration`, desde 20/08/2026 e só
+  foi trazido para `main` em 22/08/2026; a numeração mudou de v20 para v23
+  porque `main` já tinha v20/v21/v22 quando o merge aconteceu, conteúdo
+  idêntico) e receita cadastrada em `seed-forging.sql`. **Ferreiro,
+  Encantador, Cozinheiro têm o gate pronto e zero receita** — o mecanismo
+  existe, falta conteúdo (um `result_base_id` de arma/armadura/item
+  confirmado, não inventado). Ver também
+  [MAKERS_MARK.md](../design/MAKERS_MARK.md) — a Assinatura do Artesão usa
+  este mesmo gate.
 - Tratador de Cavalos, Taberneiro — qualquer integração com `horse-service.js`
   ou economia de taverna
 - Mensageiro — Contract Framework: `contracts-service.js` foi reativado em

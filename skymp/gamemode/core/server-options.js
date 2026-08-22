@@ -62,7 +62,10 @@ const SPEC = {
 
   'crime.hotItemWindowMinutes': { ...num(1, 1440), default: 30, usedBy: 'core/crime-service.js (sweep: hot -> stolen)' },
   'crime.combatLogGraceMinutes': { ...num(1, 1440), default: 15, usedBy: 'core/crime-service.js (sweep: restituicao apos deslogar com item hot)' },
-  'crime.sweepIntervalSeconds': { ...num(10, 3600), default: 60, usedBy: 'core/crime-service.js (initSweepTimer)' }
+  'crime.sweepIntervalSeconds': { ...num(10, 3600), default: 60, usedBy: 'core/crime-service.js (initSweepTimer)' },
+
+  'crafting.xpPerCraft': { ...num(0, 1000), default: 2, usedBy: 'crafting-service.js (craftItem)' },
+  'crafting.signatureMinRank': { ...num(0, 20), default: 2, usedBy: 'crafting-service.js (craftItem — gate de assinatura do artesao)' }
 };
 
 /**
