@@ -61,6 +61,9 @@ const governance    = require(path.join(gamemodeDir, 'governance-service'));
 const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
 const deathService  = require(path.join(gamemodeDir, 'death-service'));
+const professionService = require(path.join(gamemodeDir, 'profession-service'));
+const environmentService = require(path.join(gamemodeDir, 'environment-service'));
+const economyPhysicalSync = require(path.join(gamemodeDir, 'core', 'economy-physical-sync'));
 const voipService   = require(path.join(gamemodeDir, 'voip-service'));
 const voiceEndpoint = require(path.join(gamemodeDir, 'core', 'voice', 'voice-endpoint'));
 const soulService   = require(path.join(gamemodeDir, 'soul-service'));
@@ -68,6 +71,7 @@ const nametagService = require(path.join(gamemodeDir, 'nametag-service'));
 const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
 const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
 const tradeService  = require(path.join(gamemodeDir, 'trade-service'));
+const depotService  = require(path.join(gamemodeDir, 'core', 'depot-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -108,6 +112,20 @@ const uiEventRateLimiter = createUiEventRateLimiter({
 // interações precisam dele PRONTO no `initialize()` deles, e a ordenação
 // topológica do registry garante isso a partir do `dependencies: ['interaction']`
 // que cada um declara.
+// Ponte servidor→CEF. Um único canal (`browserModal`) pra qualquer módulo
+// abrir ou atualizar uma tela — a CEF decide o que desenhar pelo `type`
+// (`window.handleServerModal` em `skymp/ui/index.html`). Extraída aqui, e não
+// deixada como arrow function só de `interactionService`, porque o Depot
+// (Tarefa 10) precisa do mesmo canal pra abrir seu próprio painel.
+function sendModal(actorId, type, data) {
+  if (typeof mp === 'undefined') return;
+  try {
+    mp.set(actorId, 'browserModal', { type, data, sentAt: Date.now() });
+  } catch (err) {
+    console.error('[ui] Falha ao enviar modal:', err.message);
+  }
+}
+
 const interactionTargets = createTargetResolvers({ getCharacter: commands.getCharacterData });
 const interactionService = createInteractionService({
   registry: interactionRegistry,
@@ -116,14 +134,7 @@ const interactionService = createInteractionService({
   actionPolicy,
   rateLimiter: uiEventRateLimiter,
   notify: commands.sendNotification,
-  sendModal: (actorId, type, data) => {
-    if (typeof mp === 'undefined') return;
-    try {
-      mp.set(actorId, 'browserModal', { type, data, sentAt: Date.now() });
-    } catch (err) {
-      console.error('[interaction] Falha ao enviar modal:', err.message);
-    }
-  },
+  sendModal,
   // A permissão é resolvida por quem registrou a interação, via `canSee`. Este
   // adaptador existe para o caso `descriptor.permission`, que hoje só o staff
   // usa: cargo de governança depende de escopo e de plantão, e quem sabe disso
@@ -210,6 +221,57 @@ moduleRegistry.register({
   shutdown: async () => {
     governance.shutdownGovernanceService();
   }
+});
+
+// LAB: Profession Core — só o núcleo (grant/revoke/rank/xp). Nenhuma
+// profissão tem gameplay implementado ainda; ver core/profession-registry.js.
+// As ações administrativas (`/setprofissao` etc.) ficam por conta do PR de
+// Admin — este flag não controla se elas EXISTEM, controla se
+// `profession-service.js` aceita executá-las e se o comando de jogador
+// `/profissoes` é registrado.
+moduleRegistry.register({
+  id: 'profession',
+  enabledBy: 'ENABLE_PROFESSION_SERVICE',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: [],
+  commands: professionService.commandDefs(),
+  initialize: async () => {}
+});
+
+// LAB: Time Sync — relógio autoritativo do servidor (GameTime/TimeScale),
+// heartbeat de correção de deriva, persistência entre restarts. Sem clima —
+// ver docs/technical/ENVIRONMENT_WEATHER_SPIKE.md e o cabeçalho de
+// environment-service.js.
+moduleRegistry.register({
+  id: 'environment',
+  enabledBy: 'ENABLE_ENVIRONMENT_SERVICE',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: [],
+  commands: environmentService.commandDefs(),
+  initialize: async () => {
+    await environmentService.initialize();
+  },
+  shutdown: async () => {
+    await environmentService.shutdown();
+  },
+  healthCheck: () => environmentService.healthCheck()
+});
+
+// LAB: Anti-cheat de ouro físico — Gold001 nunca deveria existir no
+// inventário (ouro deste projeto é 100% virtual, ver core/economy-service.js
+// e core/economy-physical-sync.js). Detecta e remove no login; nunca mexe em
+// characters.gold.
+moduleRegistry.register({
+  id: 'economy-physical-sync',
+  enabledBy: 'ENABLE_ECONOMY_PHYSICAL_SYNC',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: [],
+  commands: [],
+  initialize: async () => {},
+  healthCheck: () => economyPhysicalSync.healthCheck()
 });
 
 moduleRegistry.register({
@@ -395,6 +457,23 @@ moduleRegistry.register({
   },
   shutdown: async () => {
     tradeService.sweep();
+  }
+});
+
+// LAB: Depot — armazenamento regional de itens (por hold, não teletransporta
+// entre cidades). Sem checagem de combate (nenhum sinal ao vivo existe no
+// projeto — ver o cabeçalho de core/depot-service.js) e sem reserva de ouro
+// nova (characters.gold já é global). Primeiro consumidor real de
+// TARGET_TYPES.OBJECT no Interaction Framework além do Minerador.
+moduleRegistry.register({
+  id: 'depot',
+  enabledBy: 'ENABLE_DEPOT_SERVICE',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: ['interaction'],
+  commands: depotService.commandDefs(),
+  initialize: async () => {
+    depotService.registerInteractions({ sendModal });
   }
 });
 

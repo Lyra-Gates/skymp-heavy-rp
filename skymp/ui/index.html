@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>SkyMP Heavy RP - UI</title>
   <link rel="stylesheet" href="player-panel.css">
+  <link rel="stylesheet" href="depot-panel.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -438,6 +439,43 @@
 </div>
 <div id="chat-log" class="chat-log" aria-live="polite"></div>
 
+<!-- Painel do Depósito Regional (Tarefa 10: UI-Depot-Bridge) -->
+<div id="depot-panel" aria-hidden="true">
+  <div class="dp-shell">
+    <div class="dp-head">
+      <div class="dp-head-text">
+        <div class="dp-eyebrow">Depósito Regional</div>
+        <div class="dp-title" id="dp-hold-name">—</div>
+      </div>
+      <div class="dp-gold" id="dp-gold" title="Ouro do personagem (nao guardado aqui)">0 ouro</div>
+      <button type="button" class="dp-close" id="dp-close" aria-label="Fechar">×</button>
+    </div>
+
+    <div class="dp-capacity">
+      <div class="dp-capacity-label">
+        <span>Capacidade</span>
+        <span class="value" id="dp-capacity-value">0 / 0</span>
+      </div>
+      <div class="dp-capacity-track">
+        <div class="dp-capacity-fill" id="dp-capacity-fill"></div>
+      </div>
+    </div>
+
+    <div class="dp-columns">
+      <div class="dp-column">
+        <div class="dp-column-title">Seu inventário</div>
+        <div class="dp-list" id="dp-carried-list"><div class="dp-empty">Vazio.</div></div>
+      </div>
+      <div class="dp-column">
+        <div class="dp-column-title">Depósito</div>
+        <div class="dp-list" id="dp-depot-list"><div class="dp-empty">Vazio.</div></div>
+      </div>
+    </div>
+
+    <div class="dp-hint">Fica só neste terminal — o que voce guarda em Whiterun nao aparece em Solitude.</div>
+  </div>
+</div>
+
 <!-- Painel do Jogador -->
 <div id="player-panel" aria-hidden="true">
   <div class="pp-head">
@@ -474,10 +512,25 @@
 
 <script>
   // ── Mock mp para testes fora do SkyMP ─────────────────────────────────────
+  //
+  // `mp.trigger`/`mp.events` aqui embaixo cobrem os usos client-internos e de
+  // servidor→cliente deste arquivo (voip, trade, interaction:open/close) —
+  // nenhum deles foi tocado por esta correcao e continuam sem confirmacao
+  // contra o upstream (mesma classe de suposicao nao verificada que o
+  // BOUND-004 encontrou do lado servidor→gamemode; ver
+  // docs/research/SKYMP_INTEGRATION_AUDIT.md §5). `window.skyrimPlatform`,
+  // abaixo, e o mock só do caminho que ESTA correcao resolveu: cliente→servidor
+  // (`sendUiEvent`), documentado oficialmente em
+  // docs/skyrim_platform/browser.md (upstream) como `window.skyrimPlatform.sendMessage(...)`.
   if (typeof mp === 'undefined') {
     window.mp = {
       trigger: (ev, data) => console.log('[mock] trigger:', ev, data),
       events: { add: (ev, cb) => console.log('[mock] event registered:', ev) }
+    };
+  }
+  if (typeof window.skyrimPlatform === 'undefined') {
+    window.skyrimPlatform = {
+      sendMessage: (...args) => console.log('[mock] skyrimPlatform.sendMessage:', args)
     };
   }
 
@@ -536,17 +589,22 @@
     return raw.startsWith('0x') ? raw : `0x${raw}`;
   }
 
+  // `window.mp.trigger`/`window.mp.send` nunca foram confirmados como API real
+  // da CEF do SkyMP (busca no upstream por `window.mp` só aparece no
+  // `skymp5-front`, o painel administrativo separado — não no cliente de
+  // jogo) — mesma classe de suposição não verificada que o BOUND-004
+  // encontrou do lado servidor. A correção usa o único caminho documentado
+  // oficialmente (`docs/skyrim_platform/browser.md` upstream):
+  // `window.skyrimPlatform.sendMessage(...)` dispara `browserMessage` do
+  // lado do Skyrim Platform, que `core/ui-event-gateway.js` agora escuta via
+  // `mp.makeEventSource('_onUiEvent', ...)`.
+  //
+  // UM argumento só, sempre — o `_onUiEvent` do servidor espera `args[0]`
+  // como o envelope inteiro (ver core/ui-event-gateway.js, SNIPPET_DO_CLIENTE).
   function sendUiEvent(type, data) {
-    const payload = { type, data };
-    if (!window.mp) return;
-
-    if (typeof window.mp.send === 'function') {
-      window.mp.send(type, JSON.stringify(data || {}));
-    }
-    if (typeof window.mp.trigger === 'function') {
-      window.mp.trigger(type, data || {});
-      window.mp.trigger('cef::ui:event', payload);
-    }
+    const payload = { type, data: data || {} };
+    if (!window.skyrimPlatform || typeof window.skyrimPlatform.sendMessage !== 'function') return;
+    window.skyrimPlatform.sendMessage(payload);
   }
 
   // `sendChatCommand` foi removida em 13/08/2026. Ela existia para o
@@ -1272,6 +1330,12 @@
     if (message.type === 'governance:toast' || message.type === 'toast') {
       showInteractionToast(message.data && message.data.message ? message.data.message : 'Atualizado.');
     }
+    if (message.type === 'depot:open' && window.DepotPanel) {
+      window.DepotPanel.open(message.data);
+    }
+    if (message.type === 'depot:update' && window.DepotPanel) {
+      window.DepotPanel.update(message.data);
+    }
   };
 
   // Disparado pela property SkyMP 'voipTicket' quando o jogador roda /voz.
@@ -1337,8 +1401,12 @@
     if (event.key === 'Escape' && document.getElementById('interaction-menu').classList.contains('open')) {
       closeInteractionMenu();
     }
+    if (event.key === 'Escape' && window.DepotPanel && window.DepotPanel.isOpen()) {
+      window.DepotPanel.close();
+    }
   });
 </script>
 <script src="player-panel.js"></script>
+<script src="depot-panel.js"></script>
 </body>
 </html>
