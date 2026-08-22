@@ -52,10 +52,10 @@ excluídos — são ferramentas de papel/cargo, não UX geral de jogador.
 | `/craft` | `<recipeId> [estacao] [dedicatoria...]` | Não — texto livre (dedicatória) |
 | `/alma` | nenhum | Sem args, informacional — candidato a virar aba do `/painel` (§3) |
 | `/profissoes` | nenhum | Sem args, informacional — candidato a virar aba do `/painel` (§3) |
-| `/trade` | `<actorId>` | Alvo por proximidade, sem texto — candidato ao menu `[E]` |
-| `/tradeaccept` | nenhum | **Achado**: o `trade-overlay` (`index.html:402`) já existe na tela mas só tem botão de **recusar** (`Fechar` → `closeTrade()` → `cef::trade:cancel`); aceitar ainda pede `/tradeaccept` digitado. Falta um botão simétrico. |
-| `/tradeconfirm` | nenhum | Mesmo caso — sem botão, só instrução de texto na overlay |
-| `/tradecancel` | nenhum | Já tem equivalente por botão (`Fechar`) — o comando de texto continua sendo o fallback correto, não precisa de mais nada |
+| `/trade` | `<actorId>` | **Correção (22/08, ver PLAYER_ACTION_SHORTCUTS_PLAN.md §0): já está no menu `[E]`** — `trade.request` em `trade-service.js:486`. A entrada anterior desta tabela estava errada. |
+| `/tradeaccept` | nenhum | **Correção (22/08)**: o botão "Fechar" da overlay chama `mp.trigger('cef::trade:cancel', {})`, e **nada no servidor escuta `cef::trade:cancel`** — confirmado por grep, zero ocorrências fora de `index.html`. O botão só esconde a `div` na tela; não cancela nada de verdade. Os três (`aceitar`/`confirmar`/`cancelar`) dependem 100% do texto hoje. Ver plano em `PLAYER_ACTION_SHORTCUTS_PLAN.md` Fase 1. |
+| `/tradeconfirm` | nenhum | Mesmo caso |
+| `/tradecancel` | nenhum | Mesmo caso — inclusive o botão que parecia cobrir isso |
 | `/tradeadd` | `<baseId> <qtd>` | Não — entrada numérica/id, é formulário |
 | `/voz` | nenhum | Entrada única pro sistema de voz — fora de escopo aqui, já coberto por `VOICE_MODE_KEY_AUDIT.md` |
 | `/stallplace` | `<nome>` | Não — texto livre |
@@ -64,7 +64,7 @@ excluídos — são ferramentas de papel/cargo, não UX geral de jogador.
 | `/stallremove` | `<itemId>` | Alvo por proximidade/seleção — candidato ao menu `[E]` |
 | `/stalls` | nenhum | Listagem — candidato a painel/UI, não tecla |
 | `/stallitems` | `<stallId>` | Listagem de uma barraca — idem |
-| `/stallbuy` | `<stallId> <itemId> <count>` | Fluxo de compra — candidato a formulário no menu `[E]` da barraca, não tecla solta |
+| `/stallbuy` | `<stallId> <itemId> <count>` | **Correção (22/08): já está no menu `[E]`** — `stall.view`/`stall.buy` em `market-stalls-service.js:1323-1339`. |
 | `/searchaccept` | `<id>` | Sem texto — resposta binária a um pedido já recebido; forte candidato a UI de notificação com dois botões (aceitar/recusar), não tecla global |
 | `/searchdeny` | `<id>` | Mesmo caso, par do anterior |
 | `/depot` | nenhum | **Já documentado** em `UI_UX_INTERACTION_AUDIT.md` §9 — vira `hidden: true` assim que o provider de âncora física for registrado; o prompt `[E]` já cobre |
