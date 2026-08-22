@@ -436,3 +436,34 @@ describe('interacao registrada', () => {
     );
   });
 });
+
+// PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 1: os botões da trade-overlay
+// (index.html) chamavam um evento sem nenhum listener. `handleUiEvent` é o
+// que os liga de verdade — mesmo formato de `player-panel-service.js`.
+describe('handleUiEvent — ponte pro trade-overlay (Fase 1)', () => {
+  it('trade:accept chama acceptTrade e devolve o mesmo booleano', async () => {
+    trade.requestTrade(A_ATOR, B_ATOR);
+    assert.strictEqual(await trade.handleUiEvent(B_ATOR, { type: 'trade:accept' }), true);
+    assert.strictEqual(trade._sessionOf(A_ATOR).state, trade.STATES.ACTIVE);
+  });
+
+  it('trade:confirm chama confirmTrade e devolve o mesmo booleano', async () => {
+    darItem(A_CHAR, ESPADA, 1);
+    const s = await abrirTroca({ ofertaA: [[ESPADA, 1]] });
+    assert.strictEqual(await trade.handleUiEvent(A_ATOR, { type: 'trade:confirm' }), true);
+    assert.strictEqual(s.a.confirmedVersion, s.version);
+  });
+
+  it('trade:cancel chama cancelTrade e encerra a sessao pros dois lados', async () => {
+    await abrirTroca();
+    assert.strictEqual(await trade.handleUiEvent(A_ATOR, { type: 'trade:cancel' }), true);
+    assert.strictEqual(trade._sessionOf(A_ATOR), null);
+    assert.strictEqual(trade._sessionOf(B_ATOR), null);
+  });
+
+  it('ignora tipo desconhecido e evento invalido sem lancar', async () => {
+    assert.strictEqual(await trade.handleUiEvent(A_ATOR, { type: 'trade:o-que-e-isso' }), false);
+    assert.strictEqual(await trade.handleUiEvent(A_ATOR, null), false);
+    assert.strictEqual(await trade.handleUiEvent(A_ATOR, {}), false);
+  });
+});

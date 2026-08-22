@@ -518,6 +518,10 @@ moduleRegistry.register({
     // assinado aqui, e não no `commands.js`, para que ele não conheça um
     // módulo que pode estar desligado.
     commands.onCharacterRemoved(tradeService.onDisconnect);
+    // Fase 1 de PLAYER_ACTION_SHORTCUTS_PLAN.md: os botões do trade-overlay
+    // (index.html) chamavam um evento sem nenhum listener — este registro é
+    // o que os liga de verdade, mesma linha que 'panel'/'interaction' já usam.
+    uiEventRouter.register('trade', tradeService.handleUiEvent);
   },
   shutdown: async () => {
     tradeService.sweep();

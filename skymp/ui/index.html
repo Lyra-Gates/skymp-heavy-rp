@@ -433,11 +433,15 @@
 <div id="trade-overlay">
   <div class="trade-title">⚖ Comércio Seguro</div>
   <p style="text-align:center; color:#aaa; font-size:14px;">
-    Interface de troca em desenvolvimento.<br>
-    Use <strong>/tradeaccept</strong> para confirmar ou <strong>/tradecancel</strong> para recusar.
+    Interface de troca em desenvolvimento — ainda não mostra os itens da
+    sessão, só os três controles.<br>
+    <code>/tradeadd &lt;baseId&gt; &lt;qtd&gt;</code> continua sendo o
+    único jeito de ofertar item.
   </p>
   <div style="text-align:center">
-    <button class="trade-btn" onclick="closeTrade()">Fechar</button>
+    <button class="trade-btn" onclick="acceptTrade()">Aceitar</button>
+    <button class="trade-btn" onclick="confirmTrade()">Confirmar</button>
+    <button class="trade-btn" onclick="closeTrade()">Cancelar</button>
   </div>
 </div>
 
@@ -1131,9 +1135,28 @@
   };
 
   // ── Trade Overlay ─────────────────────────────────────────────────────────
+  // Até 22/08/2026 os três (cancelar/aceitar/confirmar) chamavam
+  // `mp.trigger('cef::trade:*', {})` — sem NENHUM listener server-side (e
+  // `window.mp` nem é injetado na CEF do SkyMP, ver ui-event-gateway.js).
+  // `sendUiEvent` é o canal provado (mesmo que o painel e o menu de
+  // interação já usam); `trade-service.js handleUiEvent` responde pelos três
+  // tipos. Ver docs/technical/PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 1.
   function closeTrade() {
     document.getElementById('trade-overlay').classList.remove('open');
-    mp.trigger('cef::trade:cancel', {});
+    sendUiEvent('trade:cancel', {});
+  }
+
+  function acceptTrade() {
+    sendUiEvent('trade:accept', {});
+  }
+
+  function confirmTrade() {
+    // Não fecha a overlay: confirmar é só o lado de QUEM CLICOU — a troca só
+    // termina quando os dois confirmarem, e a overlay não tem hoje nenhum
+    // jeito de saber se o outro lado já fez o mesmo (ela não renderiza o
+    // estado da sessão, ver comentário fixo abaixo). Fechar aqui faria
+    // parecer que a troca terminou quando pode não ter.
+    sendUiEvent('trade:confirm', {});
   }
 
   // ── Interaction Menu ────────────────────────────────────────

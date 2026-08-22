@@ -504,6 +504,37 @@ function registerInteractions() {
   });
 }
 
+/**
+ * Ponte pro `trade-overlay` da CEF (`index.html`) — mesmo formato de
+ * `player-panel-service.js handleUiEvent`. Até 22/08/2026 o botão "Fechar"
+ * da overlay chamava `mp.trigger('cef::trade:cancel', {})`, que não tinha
+ * NENHUM listener server-side (grep confirmou) — aceitar/confirmar/cancelar
+ * dependiam 100% de `/tradeaccept`/`/tradeconfirm`/`/tradecancel`
+ * digitados, mesmo com uma UI na tela sugerindo o contrário. Ver
+ * `docs/technical/PLAYER_ACTION_SHORTCUTS_PLAN.md` Fase 1.
+ *
+ * As três funções (`acceptTrade`/`confirmTrade`/`cancelTrade`) já existem e
+ * já são o que os comandos de texto chamam — isto não duplica lógica, só
+ * dá a ela um segundo chamador.
+ * @param {number} actorId
+ * @param {{type?: string}} uiEvent
+ * @returns {Promise<boolean>|boolean}
+ */
+function handleUiEvent(actorId, uiEvent) {
+  if (!uiEvent || typeof uiEvent.type !== 'string') return false;
+
+  switch (uiEvent.type) {
+    case 'trade:accept':
+      return acceptTrade(actorId);
+    case 'trade:confirm':
+      return confirmTrade(actorId);
+    case 'trade:cancel':
+      return cancelTrade(actorId);
+    default:
+      return false;
+  }
+}
+
 function commandDefs() {
   return [
     {
@@ -568,6 +599,7 @@ module.exports = {
 
   registerInteractions,
   commandDefs,
+  handleUiEvent,
 
   // Só para teste: a sessão é memória, e o teste precisa envelhecê-la sem
   // esperar três minutos e inspecionar o estado sem passar pela UI.

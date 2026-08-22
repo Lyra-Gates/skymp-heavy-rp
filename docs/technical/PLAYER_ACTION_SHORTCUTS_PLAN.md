@@ -40,7 +40,19 @@ pela metade. Ordenado por (a) o que já tem toda a lógica de servidor
 pronta, só falta o fio até a tela, até (b) o que exige um padrão de UI que
 ainda não existe no projeto.
 
-### Fase 1 — Trade overlay: ligar de verdade (menor esforço, maior clareza)
+### Fase 1 — Trade overlay: ligar de verdade (menor esforço, maior clareza) ✅ implementado (22/08)
+
+`trade-service.js` ganhou `handleUiEvent`, registrado em `phase0-basic.js`
+(`uiEventRouter.register('trade', ...)`); `index.html` troca
+`mp.trigger('cef::trade:*')` por `sendUiEvent('trade:*', {})` e ganhou os
+botões Aceitar/Confirmar (Cancelar já existia, renomeado de "Fechar" pra
+não sugerir que é só fechar a tela). Aceitar/Confirmar não fecham a
+overlay — a troca continua depois dos dois, e a UI ainda não renderiza o
+estado da sessão pra saber quando fechar de verdade. 4 testes novos em
+`trade-service.test.js` (`handleUiEvent`), 1086 testes do gamemode
+passam. Verificado num navegador comum: os três botões mandam o payload
+certo pelo canal real. Não validado dentro da CEF do SkyMP.
+
 
 `acceptTrade`, `confirmTrade`, `cancelTrade` já existem como funções em
 `trade-service.js` (usadas por `/tradeaccept`/`/tradeconfirm`/
