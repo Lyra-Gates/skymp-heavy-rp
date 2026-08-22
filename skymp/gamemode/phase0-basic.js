@@ -295,6 +295,14 @@ moduleRegistry.register({
   phase: 'lab',
   version: '1.1.0',
   dependencies: ['governance', 'interaction'],
+  // 'character-dashboard-bridge' é quem registra o resolvedor SELF que
+  // stall.pack/stall.remove usam (Fase 3 de PLAYER_ACTION_SHORTCUTS_PLAN.md)
+  // — OPCIONAL, não obrigatória: ela mora atrás de ENABLE_INTERACTION_PROMPT,
+  // uma flag sem relação com barracas. Se tratasse como `dependencies`
+  // (obrigatória), o módulo inteiro de barracas falharia ao boot pra quem
+  // roda market-stalls sem o prompt `[E]` ligado — o resto da feature (
+  // /stallplace, /stallbuy, tudo) não deveria depender disso.
+  optionalDependencies: ['character-dashboard-bridge'],
   commands: marketStalls.commandDefs(),
   initialize: async () => {
     await marketStalls.initMarketStallsService();

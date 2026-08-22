@@ -1351,6 +1351,60 @@ function registerStallInteractions() {
       return buyItem(ctx.actorId, stall.id, ctx.data.itemId, ctx.data.count, ctx.requestId);
     }
   });
+
+  /**
+   * PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 3: `/stallpack` e `/stallremove`
+   * no menu de interação. Diferente de `stall.view`/`stall.buy` (o CLIENTE
+   * interagindo com o DONO), estas duas são o dono gerenciando a própria
+   * barraca — não há uma segunda pessoa envolvida, então o alvo é
+   * `TARGET_TYPES.SELF` (mesmo vocabulário que `character.dashboard` já
+   * usa, `core/character-dashboard-bridge.js`), não `PLAYER`.
+   *
+   * ⚠️ Acoplamento herdado, não introduzido aqui: o resolvedor de `SELF` só
+   * existe quando `character-dashboard-bridge` inicializa, e esse módulo
+   * está atrás de `ENABLE_INTERACTION_PROMPT` (`phase0-basic.js`) — a flag
+   * do prompt `[E]`, não uma flag própria de "o alvo SELF existe". Com essa
+   * flag desligada, estas duas ações ficam registradas mas inalcançáveis
+   * (o pedido falha no resolvedor com "tipo de alvo nao suportado", falha
+   * fechada e nomeada, não um menu quebrado em silêncio). Vale revisitar se
+   * `SELF` devia nascer com o módulo `interaction` em vez de com o prompt —
+   * fora do escopo desta fase.
+   */
+  async function temBarracaAtiva(actorId) {
+    const character = getCharacter(actorId);
+    return character ? stallDoAlvo(character.characterId) : null;
+  }
+
+  interactionRegistry.register({
+    module: MODULE,
+    id: 'stall.pack',
+    target: interactionRegistry.TARGET_TYPES.SELF,
+    section: 'barraca',
+    label: 'Recolher barraca',
+    order: 30,
+    audit: interactionRegistry.AUDIT_LEVELS.GAMEPLAY,
+    canSee: async ctx => Boolean(await temBarracaAtiva(ctx.actorId)),
+    execute: async ctx => {
+      const stall = await temBarracaAtiva(ctx.actorId);
+      if (!stall) throw new Error('Voce nao tem barraca ativa.');
+      return packStall(ctx.actorId, stall.id);
+    }
+  });
+
+  interactionRegistry.register({
+    module: MODULE,
+    id: 'stall.remove',
+    target: interactionRegistry.TARGET_TYPES.SELF,
+    section: 'barraca',
+    label: 'Remover item anunciado',
+    order: 31,
+    audit: interactionRegistry.AUDIT_LEVELS.GAMEPLAY,
+    schema: {
+      itemId: { type: 'int', label: 'ID do item anunciado', min: 1, required: true }
+    },
+    canSee: async ctx => Boolean(await temBarracaAtiva(ctx.actorId)),
+    execute: async ctx => removeItem(ctx.actorId, ctx.data.itemId)
+  });
 }
 
 async function initMarketStallsService() {

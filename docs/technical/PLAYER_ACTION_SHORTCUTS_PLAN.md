@@ -119,7 +119,41 @@ o menu sugere, o `execute` sempre revalida). Preciso ler
 `interaction-registry.js`/`interaction-service.js` inteiros antes de
 escrever isso — não vou assumir a API.
 
-### Fase 3 — `/stallpack` e `/stallremove` no menu `[E]`
+### Fase 3 — `/stallpack` e `/stallremove` no menu `[E]` ✅ implementado (22/08)
+
+O texto original desta fase (abaixo, mantido como registro) estava
+errado em dois pontos, corrigidos só ao ler o código de verdade:
+
+1. **Não é `TARGET_TYPES.OBJECT`.** `stall.view`/`stall.buy` (já
+   existentes) miram o **jogador dono** (`TARGET_TYPES.PLAYER`), não um
+   objeto físico — o comentário no próprio `market-stalls-service.js`
+   explica que não havia resolvedor de `object`/`container` quando aquilo
+   foi escrito (13/08). `stall.pack`/`stall.remove` não têm uma segunda
+   pessoa envolvida — é o dono agindo sobre a própria barraca — então o
+   alvo certo é `TARGET_TYPES.SELF`, o mesmo vocabulário que
+   `character.dashboard` já usa (`core/character-dashboard-bridge.js`,
+   Tarefa 11). Nenhum `physical-anchor-registry` envolvido.
+2. **Achado durante a implementação, não previsto no plano**: o
+   resolvedor de `SELF` só é registrado quando o módulo
+   `character-dashboard-bridge` inicializa — e esse módulo está atrás de
+   `ENABLE_INTERACTION_PROMPT` (a flag do prompt `[E]`), não de uma flag
+   própria. Declarar isso como `dependencies` obrigatória em
+   `market-stalls` derrubaria o módulo INTEIRO (incluindo `/stallplace`,
+   `/stallbuy`, tudo) pra quem roda barracas sem o prompt ligado — usei
+   `optionalDependencies` em vez disso (`phase0-basic.js`), que só ordena
+   o boot sem exigir. Sem essa flag, as duas ações ficam registradas mas
+   inalcançáveis — falha nomeada no resolvedor, não um menu quebrado.
+   Documentado no próprio código como acoplamento herdado, não
+   introduzido por esta fase, e candidato a revisão futura (o resolvedor
+   `SELF` provavelmente deveria nascer com o módulo `interaction` em vez
+   do prompt).
+
+6 testes novos (`market-stalls-service.interactions.test.js`, arquivo
+próprio — `stall.view`/`stall.buy` também nunca tiveram teste de
+interação, gap pré-existente não coberto aqui). 1096 testes do gamemode
+passam. Não validado em jogo.
+
+Texto original do plano:
 
 Diferente de `stall.view`/`stall.buy` (cliente comprando de OUTRO
 jogador), estas duas são o DONO gerenciando a própria barraca — o alvo é
