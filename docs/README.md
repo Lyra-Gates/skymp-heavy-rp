@@ -74,6 +74,14 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [technical/ENVIRONMENT_WEATHER_SPIKE.md](technical/ENVIRONMENT_WEATHER_SPIKE.md) | Spike de pesquisa — sincronização de clima (ForceWeather). Sem implementação; nenhum `weather-service.js` existe. |
 | [technical/UI_UX_INTERACTION_AUDIT.md](technical/UI_UX_INTERACTION_AUDIT.md) | Tarefa 11 — prompt de interação `[E]`, o mesmo menu de ações por tecla em vez de só clique, e a ponte `SELF` pro painel do jogador. |
 
+### Atalhos de teclado e menus de ação (22/08/2026)
+
+| Documento | Sobre |
+|---|---|
+| [technical/VOICE_MODE_KEY_AUDIT.md](technical/VOICE_MODE_KEY_AUDIT.md) | `Tab` cicla sussurro/normal/grito, `M` muta — ligando um backend de voz que já existia mas cujo cliente estava 100% morto (nenhuma tecla, nenhum botão, nenhum caminho até esta auditoria). Indicador persistente na CEF, decisão de acessibilidade. |
+| [technical/PLAYER_SHORTCUTS_AUDIT.md](technical/PLAYER_SHORTCUTS_AUDIT.md) | `F2` abre o `/painel`; inventário completo de todo comando `/` de jogador (18 arquivos varridos), categorizado por candidatura a atalho — o que já tinha caminho melhor, o que devia virar aba de painel, o que fica texto pra sempre. |
+| [technical/PLAYER_ACTION_SHORTCUTS_PLAN.md](technical/PLAYER_ACTION_SHORTCUTS_PLAN.md) | As 5 fases executadas a partir do inventário acima: trade-overlay consertada (os botões não chamavam nenhum listener), `/socorrer` e `/stallpack`/`/stallremove` no menu `[E]`, `/profissoes`/`/alma` como abas do painel, modal de escolha (`browserModal` tipo `'choice'`) pro pedido de revista. Corrige duas premissas erradas do próprio plano ao ler o código de verdade antes de codar. |
+
 ### Design de mundo
 
 | Documento | Sobre |

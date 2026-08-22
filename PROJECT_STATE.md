@@ -105,3 +105,42 @@ Estado da suíte depois dos dois: **1069 testes, 255 suítes, 0 falhas**;
 `check-schema-drift.js --list` segue linear até v24, sem colisão.
 `check-write-guards.js --all` continua nas mesmas 14 ocorrências
 pré-existentes (2 bloqueariam escrita nova) — nenhuma nova introduzida.
+
+- **Atalhos de teclado e menus de ação** (22/08/2026, mesmo padrão `lab`):
+  substitui parte do fluxo "digite o comando" por tecla e botão, sem
+  remover nenhum comando de texto (fallback continua funcionando).
+  - **Voz por proximidade**: `Tab` cicla sussurro/normal/grito, `M` muta —
+    ligando um backend que já existia mas cujo cliente estava morto (o
+    modo de voz e o mute não tinham NENHUM caminho até 22/08, nem tecla
+    nem botão). Indicador persistente na CEF. `/modovoz` e `/mutar` como
+    fallback de texto. Ver
+    [VOICE_MODE_KEY_AUDIT.md](docs/technical/VOICE_MODE_KEY_AUDIT.md).
+  - **`F2`** abre o `/painel` (`core/player-shortcuts-service.js`, novo
+    módulo `lab`, `ENABLE_PLAYER_SHORTCUTS`).
+  - **Trade overlay consertada**: os três botões (aceitar/confirmar/
+    cancelar) chamavam um evento sem nenhum listener server-side — agora
+    ligados de verdade via `trade-service.js handleUiEvent`.
+  - **`death.rescue`** (`/socorrer`) e **`stall.pack`/`stall.remove`**
+    (`/stallpack`/`/stallremove`) entram no menu de interação `[E]` —
+    o segundo usa `TARGET_TYPES.SELF` (dono agindo sobre a própria
+    barraca), com um acoplamento documentado: o resolvedor `SELF` só
+    existe atrás de `ENABLE_INTERACTION_PROMPT`, então `market-stalls`
+    declara essa dependência como opcional, não obrigatória.
+  - **`/profissoes` e `/alma` viram abas do `/painel`** — `soul-service.js`
+    já tinha `buildPanelPayload`, só sem painel nenhum chamando.
+  - **Modal de escolha** (`browserModal` tipo `'choice'`, novo em
+    `commands.sendChoice`): pedido de revista chega com botões
+    Aceitar/Recusar, não só texto — `/searchaccept`/`/searchdeny`
+    continuam funcionando, o modal é um segundo caminho pro mesmo
+    `approveSearch`.
+
+  Nenhum item acima foi validado numa sessão de jogo real — mesma
+  ressalva de todo módulo `lab` deste projeto; o que existe é teste
+  automatizado (servidor) e, para as partes de CEF que a ferramenta de
+  browser conseguiu carregar nesta sessão, verificação num navegador
+  comum fora do SkyMP. Plano completo, decisões e o que ficou de fora
+  em [PLAYER_ACTION_SHORTCUTS_PLAN.md](docs/technical/PLAYER_ACTION_SHORTCUTS_PLAN.md)
+  e [PLAYER_SHORTCUTS_AUDIT.md](docs/technical/PLAYER_SHORTCUTS_AUDIT.md).
+
+  Estado da suíte depois: **1107 testes, 264 suítes, 0 falhas**; typecheck
+  sem erro novo (mesmos 4 pré-existentes de antes desta rodada).
