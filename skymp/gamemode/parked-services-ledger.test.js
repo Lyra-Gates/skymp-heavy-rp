@@ -589,3 +589,17 @@ describe('a migration-v23 declara toda coluna que o gate de profissão do crafti
     });
   }
 });
+
+describe('a migration-v24 declara toda coluna que a Assinatura do Artesão usa', () => {
+  const sql = fs.readFileSync(
+    path.resolve(__dirname, '..', 'packages', 'database', 'migration-v24-crafted-item-signatures.sql'),
+    'utf8'
+  );
+  const criacao = sql.slice(sql.indexOf('CREATE TABLE'));
+
+  for (const coluna of ['base_id', 'recipe_id', 'maker_character_id', 'owner_character_id', 'signature_text', 'crafted_at']) {
+    it(`declara a coluna '${coluna}'`, () => {
+      assert.ok(criacao.includes(`\`${coluna}\``), `coluna '${coluna}' usada em crafting-service.js/governance-service.js mas ausente da migration-v24`);
+    });
+  }
+});

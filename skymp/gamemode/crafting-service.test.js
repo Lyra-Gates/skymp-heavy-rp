@@ -43,6 +43,8 @@ let exchangeResult = { ok: true };
 let hasProfessionImpl = async () => true;
 let getProfessionStateImpl = async () => ({ rank: 0 });
 let xpPerCraft = 0;
+let signatureMinRank = 2;
+let insertedSignatures = [];
 let hasPermissionImpl = () => true;
 let characters = new Map();
 
@@ -66,6 +68,10 @@ const dbMock = {
     if (/INSERT INTO crafting_ingredients/i.test(sql)) {
       insertedIngredients.push({ params });
       return { insertId: 2000 + insertedIngredients.length, affectedRows: 1 };
+    }
+    if (/INSERT INTO crafted_item_signatures/i.test(sql)) {
+      insertedSignatures.push({ params });
+      return { insertId: 3000 + insertedSignatures.length, affectedRows: 1 };
     }
     throw new Error(`SQL inesperado (dbMock.query): ${sql}`);
   }
@@ -91,7 +97,11 @@ const professionServiceMock = {
 };
 
 const serverOptionsMock = {
-  get: (key) => (key === 'crafting.xpPerCraft' ? xpPerCraft : undefined)
+  get: (key) => {
+    if (key === 'crafting.xpPerCraft') return xpPerCraft;
+    if (key === 'crafting.signatureMinRank') return signatureMinRank;
+    return undefined;
+  }
 };
 
 const adminServiceMock = {
@@ -149,11 +159,13 @@ function resetState(overrides = {}) {
   addXpCalls.length = 0;
   insertedRecipes = [];
   insertedIngredients = [];
+  insertedSignatures = [];
   characters = new Map([[ACTOR, { characterId: CHAR_A }]]);
   exchangeResult = { ok: true };
   hasProfessionImpl = async () => true;
   getProfessionStateImpl = async () => ({ rank: 0 });
   xpPerCraft = 0;
+  signatureMinRank = 2;
   hasPermissionImpl = () => true;
 
   const recipe = baseRecipe(overrides.recipe || {});
@@ -533,6 +545,63 @@ describe('crafting-service — XP [CURRENT CONTRACT]', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Assinatura do Artesão — docs/design/MAKERS_MARK.md
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('crafting-service — Assinatura do Artesão [CURRENT CONTRACT]', () => {
+  it('sem opts.signatureText: não grava nada, mesmo com rank suficiente', async () => {
+    resetState({ recipe: { required_profession: 'blacksmith' } });
+    getProfessionStateImpl = async () => ({ rank: 3 });
+    const ok = await crafting.craftItem(ACTOR, CHAR_A, RECIPE_ID, {});
+    assert.equal(ok, true);
+    assert.equal(insertedSignatures.length, 0);
+  });
+
+  it('receita sem required_profession: não grava, mesmo com signatureText — não há profissão pra checar rank contra', async () => {
+    resetState({ recipe: { required_profession: null } });
+    const ok = await crafting.craftItem(ACTOR, CHAR_A, RECIPE_ID, { signatureText: 'Para Lydia' });
+    assert.equal(ok, true);
+    assert.equal(insertedSignatures.length, 0);
+  });
+
+  it('rank abaixo de signatureMinRank: craft completa, mas assinatura é recusada e o jogador é avisado', async () => {
+    resetState({ recipe: { required_profession: 'blacksmith' } });
+    getProfessionStateImpl = async () => ({ rank: 1 });
+    signatureMinRank = 2;
+    const ok = await crafting.craftItem(ACTOR, CHAR_A, RECIPE_ID, { signatureText: 'Para Lydia' });
+    assert.equal(ok, true, 'rank insuficiente não desfaz o craft, só a assinatura');
+    assert.equal(insertedSignatures.length, 0);
+    assert.ok(notifications.some((n) => /ainda não permite assinar/.test(n.text)));
+  });
+
+  it('rank suficiente: grava a assinatura com maker/owner = quem craftou e a dedicatória truncada', async () => {
+    resetState({ recipe: { required_profession: 'blacksmith', result_base_id: 0xABCDEF } });
+    getProfessionStateImpl = async () => ({ rank: 2 });
+    signatureMinRank = 2;
+    const dedicatoriaLonga = 'x'.repeat(100);
+    const ok = await crafting.craftItem(ACTOR, CHAR_A, RECIPE_ID, { signatureText: dedicatoriaLonga });
+    assert.equal(ok, true);
+    assert.equal(insertedSignatures.length, 1);
+    const [, baseId, recipeId, makerCharacterId, ownerCharacterId, signatureText] = insertedSignatures[0].params;
+    assert.equal(baseId, 0xABCDEF);
+    assert.equal(recipeId, RECIPE_ID);
+    assert.equal(makerCharacterId, CHAR_A);
+    assert.equal(ownerCharacterId, CHAR_A);
+    assert.equal(signatureText.length, 64, 'dedicatória truncada em 64 caracteres');
+    assert.ok(notifications.some((n) => n.text === '✓ Trabalho assinado.'));
+  });
+
+  it('resultado.duplicate (reenvio idempotente): não tenta gravar assinatura de novo', async () => {
+    resetState({ recipe: { required_profession: 'blacksmith' } });
+    getProfessionStateImpl = async () => ({ rank: 2 });
+    exchangeResult = { ok: true, duplicate: true };
+    const ok = await crafting.craftItem(ACTOR, CHAR_A, RECIPE_ID, { signatureText: 'Para Lydia' });
+    assert.equal(ok, true);
+    assert.equal(insertedSignatures.length, 0, 'craftItem retorna antes de chegar no bloco de assinatura em reenvio');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // addRecipe / addIngredient — gate de permissão de staff
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -602,5 +671,24 @@ describe('crafting-service — commandDefs [CURRENT CONTRACT]', () => {
     const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
     await handler(ACTOR, `${RECIPE_ID} forge`);
     assert.equal(exchangeCalls.length, 1);
+  });
+
+  it('/craft com estação e dedicatória: separa station_type do texto livre', async () => {
+    resetState({ recipe: { required_profession: 'blacksmith' } });
+    getProfessionStateImpl = async () => ({ rank: 2 });
+    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
+    await handler(ACTOR, `${RECIPE_ID} forge Para Lydia, com carinho`);
+    assert.equal(exchangeCalls.length, 1);
+    assert.equal(insertedSignatures.length, 1);
+    assert.equal(insertedSignatures[0].params[5], 'Para Lydia, com carinho');
+  });
+
+  it('/craft sem estação, só dedicatória: o primeiro token não bate STATION_TYPES, então tudo depois do recipeId é dedicatória', async () => {
+    resetState({ recipe: { required_profession: 'blacksmith' } });
+    getProfessionStateImpl = async () => ({ rank: 2 });
+    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
+    await handler(ACTOR, `${RECIPE_ID} Para Lydia`);
+    assert.equal(exchangeCalls.length, 1);
+    assert.equal(insertedSignatures[0].params[5], 'Para Lydia');
   });
 });

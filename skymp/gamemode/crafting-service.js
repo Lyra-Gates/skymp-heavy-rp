@@ -36,6 +36,20 @@
  * a `blacksmith`, `smelter`, `tanner`, `enchanter` ou `cook` via `/addrecipe`.
  * `requires_perk` continua sem uso — não é este o campo que este gate lê.
  *
+ * ─── Assinatura do Artesão (22/08/2026) ─────────────────────────────────────
+ *
+ * Ver docs/design/MAKERS_MARK.md. Artesão com rank >=
+ * `crafting.signatureMinRank` pode gravar uma dedicatória em
+ * `crafted_item_signatures` (migration-v24) ao craftar uma receita presa a
+ * profissão. **Não é a mesma transação do `inventory.exchange`** — decisão
+ * deliberada, não descuido: `exchange()` (core/inventory.js) não expõe gancho
+ * de escrita externa, e estender esse arquivo (usado por trade/depot/
+ * market-stall/crafting) só a favor desta feature seria risco desproporcional
+ * ao ganho. A assinatura é metadado de flavor — não move ouro nem item — então
+ * uma falha isolada no `INSERT` fica só no log, sem exploit e sem perda de
+ * patrimônio, ao contrário do que valeria para uma transferência de item de
+ * verdade (ver `recordCraftSignature` abaixo).
+ *
  * ─── Por que este arquivo mudou ──────────────────────────────────────────────
  *
  * O `craftItem` anunciava `// 4. Consome ingredientes (transação segura: tudo
@@ -59,12 +73,36 @@
  * idempotência deixou de ser inútil (ver o passo 4 do `craftItem`).
  */
 
+const crypto = require('crypto');
 const db = require('./database');
 const commands = require('./commands');
 const inventory = require('./core/inventory');
 const professionService = require('./profession-service');
 const serverOptions = require('./core/server-options');
 const MODULE = 'crafting';
+
+function uuid() {
+  return crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+}
+
+/**
+ * Grava a Assinatura do Artesão (docs/design/MAKERS_MARK.md). Chamada DEPOIS
+ * do `inventory.exchange` já ter commitado — não é a mesma transação (ver o
+ * cabeçalho deste arquivo). Uma falha aqui não desfaz o craft: o jogador já
+ * recebeu o item, só não fica registrado quem assinou.
+ */
+async function recordCraftSignature({ baseId, recipeId, makerCharacterId, ownerCharacterId, signatureText }) {
+  try {
+    await db.query(
+      `INSERT INTO crafted_item_signatures
+        (id, base_id, recipe_id, maker_character_id, owner_character_id, signature_text, crafted_at)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [uuid(), baseId, recipeId, makerCharacterId, ownerCharacterId, signatureText]
+    );
+  } catch (err) {
+    console.error(`[crafting] falha ao gravar assinatura (recipe=${recipeId} maker=${makerCharacterId}):`, err.message);
+  }
+}
 
 // Tipos de estação e seus formDescs (objetos de referência do Skyrim)
 // Esses IDs são verificados por proximidade (futuro: mp.get distance)
@@ -101,8 +139,13 @@ async function listRecipes(actorId, stationType) {
  * @param {number} characterId
  * @param {number|string} recipeId
  * @param {object} [opts]
- * @param {string} [opts.stationType] estação em que o jogador diz estar
- * @param {string} [opts.requestId]   chave de idempotência vinda de quem pediu
+ * @param {string} [opts.stationType]    estação em que o jogador diz estar
+ * @param {string} [opts.requestId]      chave de idempotência vinda de quem pediu
+ * @param {string} [opts.signatureText]  dedicatória para a Assinatura do Artesão
+ *   (docs/design/MAKERS_MARK.md); só é gravada se a receita tiver
+ *   `required_profession` e o rank do personagem alcançar
+ *   `crafting.signatureMinRank`. Silenciosamente ignorada, sem falhar o
+ *   craft, quando o rank não alcança.
  */
 async function craftItem(actorId, characterId, recipeId, opts = {}) {
   // 1. Carrega a receita
@@ -244,6 +287,31 @@ async function craftItem(actorId, characterId, recipeId, opts = {}) {
     }
   }
 
+  // Assinatura do Artesão — ver o cabeçalho deste arquivo e
+  // docs/design/MAKERS_MARK.md. Só faz sentido para receita com dono
+  // (sem `required_profession` não há profissão pra checar rank contra).
+  if (recipe.required_profession && opts.signatureText) {
+    const estado = await professionService.getProfessionState(characterId, recipe.required_profession);
+    const minRank = serverOptions.get('crafting.signatureMinRank');
+    if (estado && estado.rank >= minRank) {
+      const texto = String(opts.signatureText).trim().slice(0, 64);
+      await recordCraftSignature({
+        baseId: recipe.result_base_id,
+        recipeId: recipe.id,
+        makerCharacterId: characterId,
+        ownerCharacterId: characterId,
+        signatureText: texto || null
+      });
+      if (typeof mp !== 'undefined') {
+        mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['✓ Trabalho assinado.']);
+      }
+    } else if (typeof mp !== 'undefined') {
+      mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
+        `Seu rank de ${recipe.required_profession} ainda não permite assinar este trabalho.`
+      ]);
+    }
+  }
+
   commands.broadcastProximityMessage(actorId, `* Trabalha com habilidade na estação.`, 500);
   console.log(`[crafting] Char ${characterId} crafted recipe ${recipeId}: ${recipe.name}`);
   return true;
@@ -293,6 +361,42 @@ async function addIngredient(actorId, recipeId, baseId, count) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Assinaturas para a Revista Institucional — mesmo padrão de
+// `crime-service.getStolenInstancesHeldBy`: resolve o nome do artesão aqui,
+// nunca devolve um characterId cru pra UI formatar.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Assinaturas de itens que `characterId` recebeu ao craftar, com o nome do
+ * artesão já resolvido. Ver a ressalva no cabeçalho deste arquivo e em
+ * `migration-v24-crafted-item-signatures.sql`: `owner_character_id` não é
+ * atualizado em troca/venda, então isto reflete quem RECEBEU no craft, não
+ * necessariamente quem tem o item agora.
+ *
+ * @param {number} characterId
+ * @returns {Promise<Array<{baseId:number, signatureText:string|null, makerName:string}>>}
+ */
+async function getSignaturesHeldBy(characterId) {
+  if (!Number.isSafeInteger(characterId) || characterId <= 0) return [];
+
+  const rows = await db.query(
+    `SELECT cis.base_id, cis.signature_text, c.first_name, c.last_name
+       FROM crafted_item_signatures cis
+       JOIN characters c ON c.id = cis.maker_character_id
+      WHERE cis.owner_character_id = ?
+      ORDER BY cis.crafted_at DESC
+      LIMIT 20`,
+    [characterId]
+  );
+
+  return rows.map((row) => ({
+    baseId: Number(row.base_id),
+    signatureText: row.signature_text || null,
+    makerName: `${row.first_name} ${row.last_name}`.trim()
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Comandos de chat — sem UI CEF, mesmo padrão de `jobs-service.commandDefs()`.
 // `/craft` e `/receitas` resolvem `characterId` aqui porque `craftItem` e
 // `listRecipes` recebem `characterId` já resolvido (craftItem precisa dele
@@ -318,21 +422,32 @@ function commandDefs() {
     },
     {
       name: '/craft',
-      description: '[Crafting] Fabrica um item numa estação',
-      usage: '/craft <recipeId> [estacao]',
+      description: '[Crafting] Fabrica um item numa estação, com dedicatória opcional',
+      usage: '/craft <recipeId> [estacao] [dedicatoria...]',
       handler: async (actorId, args) => {
         const characterId = _characterIdFor(actorId);
         if (!characterId) {
           if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Personagem não carregado.']);
           return;
         }
-        const [bruto, stationType] = String(args || '').trim().split(/\s+/);
-        const recipeId = Number.parseInt(bruto, 10);
+        const partes = String(args || '').trim().split(/\s+/);
+        const recipeId = Number.parseInt(partes[0], 10);
         if (!Number.isSafeInteger(recipeId)) {
-          if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Uso: /craft <recipeId> [estacao]']);
+          if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Uso: /craft <recipeId> [estacao] [dedicatoria...]']);
           return;
         }
-        await craftItem(actorId, characterId, recipeId, { stationType });
+        // `estacao` é sempre o primeiro token depois do recipeId, mas só se
+        // for um dos tipos conhecidos — qualquer outra coisa ali já é o
+        // começo da dedicatória (a Assinatura do Artesão é texto livre, ver
+        // docs/design/MAKERS_MARK.md).
+        let resto = partes.slice(1);
+        let stationType;
+        if (resto.length > 0 && STATION_TYPES.includes(resto[0])) {
+          stationType = resto[0];
+          resto = resto.slice(1);
+        }
+        const signatureText = resto.length > 0 ? resto.join(' ') : undefined;
+        await craftItem(actorId, characterId, recipeId, { stationType, signatureText });
       }
     },
     {
@@ -393,6 +508,7 @@ module.exports = {
   craftItem,
   addRecipe,
   addIngredient,
+  getSignaturesHeldBy,
   commandDefs,
   STATION_TYPES
 };

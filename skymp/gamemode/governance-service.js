@@ -36,6 +36,7 @@ const { actorRef } = require('./core/papyrus');
 // migration-v3-governance.sql — migration-v22-crime-interactions.sql so
 // acrescentou a coluna `item_instance_id`.
 const crimeService = require('./core/crime-service');
+const craftingService = require('./crafting-service');
 
 const { STATES } = characterState;
 
@@ -606,6 +607,7 @@ async function showInventorySnapshot(officerActorId, targetActorId, searchId) {
   await db.query('UPDATE guard_searches SET result_snapshot = ? WHERE id = ?', [snapshot, searchId]);
   notify(officerActorId, `Inventario do alvo: ${snapshot}`);
   await notifyStolenProvenance(officerActorId, target.characterId);
+  await notifyMakerSignatures(officerActorId, target.characterId);
 }
 
 /**
@@ -632,6 +634,35 @@ async function notifyStolenProvenance(officerActorId, targetCharacterId) {
     notify(
       officerActorId,
       `[Proveniencia] 0x${item.baseId.toString(16)} (${item.status}) — Este item pertence a ${item.originalOwnerName}!`
+    );
+  }
+}
+
+/**
+ * Assinatura do Artesão (docs/design/MAKERS_MARK.md): depois do snapshot
+ * comum, avisa o guarda sobre itens que o alvo carrega com dedicatória de
+ * artesão conhecida — mesmo padrão de `notifyStolenProvenance`, canal
+ * separado (autoria não é culpa).
+ *
+ * `crafting` é módulo `lab`: se estiver desligado, a revista continua
+ * funcionando exatamente como antes desta tarefa — só sem a seção extra.
+ */
+async function notifyMakerSignatures(officerActorId, targetCharacterId) {
+  if (!moduleRegistry.isEnabled('crafting')) return;
+  let signatures;
+  try {
+    signatures = await craftingService.getSignaturesHeldBy(targetCharacterId);
+  } catch (err) {
+    console.error('[governance] falha ao consultar assinaturas na revista:', err.message);
+    return;
+  }
+  if (!signatures || signatures.length === 0) return;
+
+  for (const item of signatures) {
+    const dedicatoria = item.signatureText ? `"${item.signatureText}"` : '(sem dedicatoria)';
+    notify(
+      officerActorId,
+      `[Assinatura] 0x${item.baseId.toString(16)} — trabalho de ${item.makerName} ${dedicatoria}`
     );
   }
 }

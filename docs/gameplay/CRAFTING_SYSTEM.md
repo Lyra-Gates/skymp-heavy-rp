@@ -180,6 +180,25 @@ sobreviver ao restart.
 
 ---
 
+## 6.5. Assinatura do Artesão (22/08/2026)
+
+Ver [MAKERS_MARK.md](../design/MAKERS_MARK.md) para o gamedesign completo.
+Resumo: um artesão com rank suficiente (`crafting.signatureMinRank`, default
+2) pode craftar com `opts.signatureText` (`/craft <recipeId> [estacao]
+[dedicatoria...]`) e o servidor grava uma linha em `crafted_item_signatures`
+(migration-v24) ligando o item ao artesão. A revista institucional da guarda
+(`governance-service.notifyMakerSignatures`, mesmo canal de
+`notifyStolenProvenance` do sistema de Crime) mostra essa autoria.
+
+Só faz sentido para receita com `required_profession` — sem profissão dona
+não há rank pra checar. Gravação NÃO é a mesma transação do
+`inventory.exchange` do craft: é metadado de flavor, não move ouro nem item,
+então uma falha isolada fica só no log (ver o cabeçalho de
+`crafting-service.js`). `owner_character_id` reflete quem recebeu no craft,
+não é atualizado por trade/venda/depósito.
+
+---
+
 ## 7. O que NÃO está feito
 
 - **Perk não é validado**, apesar da coluna existir.
@@ -193,7 +212,11 @@ sobreviver ao restart.
 - **Nenhuma receita de FORJAR arma/armadura existe** — `seed-forging.sql`
   só tem receitas de *derreter* sucata (Fundidor) e uma de curtume
   (Curtidor). O Ferreiro (`blacksmith`) tem o gate pronto e zero receita:
-  falta um `result_base_id` de arma/armadura confirmado, não inventado.
+  falta um `result_base_id` de arma/armadura confirmado, não inventado. É
+  também por isso que a Assinatura do Artesão (§6.5) não é demonstrável
+  fim-a-fim com uma receita real de Ferreiro hoje.
+- **Assinatura do Artesão não segue o item em trade/venda/depósito** (§6.5)
+  — `owner_character_id` fica com quem recebeu no craft.
 - **Nunca rodou numa sessão real.**
 
 ## 8. Cobertura
@@ -202,4 +225,8 @@ sobreviver ao restart.
 entrega commitam juntos (`['begin','commit']`, não três `begin`), falta de
 ingrediente reverte tudo sem nada chegar ao cliente, receita sem ingrediente não
 cria item do nada, erro de SQL não vai para a tela, e as seis linhas de razão
-somam zero por `transfer_id`.
+somam zero por `transfer_id`. `crafting-service.test.js` cobre o gate de
+profissão/rank e a Assinatura do Artesão isoladamente;
+`crafting-governance-integration.test.js` cobre o fluxo completo craft
+assinado → revista mostra autoria, atravessando `crafting-service.js` e
+`governance-service.js` de verdade.
