@@ -138,6 +138,13 @@ function _ticketKey(actorId, role) {
 // pra que falar e escrever cheguem exatamente nas mesmas pessoas.
 const { VOICE_RANGES } = require('./core/proximity-ranges');
 
+// Allowlist de `mode` pro handler `voice_mode` abaixo. Antes desta checagem
+// um `mode` desconhecido virava `VOICE_RANGES[mode] === undefined`, e
+// `calcVolume(dist, undefined)` devolvia `NaN` — sem log, sem erro visível,
+// só o locutor ficando inaudível pra todo mundo (`if (volume > 0)` recusa
+// `NaN`). Ver docs/technical/VOICE_MODE_KEY_AUDIT.md §0.
+const VOICE_MODE_VALUES = Object.freeze(Object.keys(VOICE_RANGES));
+
 // A regra de "o que conta como célula" mora num lugar só. Reaproveitar o
 // `getCell` daqui em vez de escrever mais uma cadeia de nomes de campo é o que
 // mantém voz, nametag e alcance de ação concordando sobre onde cada um está.
@@ -336,8 +343,14 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
         case 'voice_mode':
           // Modo de voz é do ator, não do socket: define o alcance com que a
           // pessoa é ouvida, e quem fala (helper) não é quem tem o seletor (UI).
+          // `mode` fora da allowlist é ignorado (fica no valor anterior) em vez
+          // de gravado cru — ver VOICE_MODE_VALUES acima pro porquê.
           if (clientActorId !== null && _isCurrentClientSocket(clientActorId, clientRole, ws)) {
-            voipClients.get(clientActorId).voiceMode = msg.mode || 'normal';
+            if (VOICE_MODE_VALUES.includes(msg.mode)) {
+              voipClients.get(clientActorId).voiceMode = msg.mode;
+            } else if (msg.mode !== undefined) {
+              console.warn(`[voip] Actor 0x${clientActorId.toString(16)} mandou voice_mode invalido: ${JSON.stringify(msg.mode)}`);
+            }
           }
           break;
 
@@ -714,6 +727,90 @@ function _exposeDebugTicket(actorId, senderTicket) {
   }
 }
 
+/**
+ * Scan codes DirectInput das teclas de voz — mesma ressalva de sempre
+ * (`docs/technical/VOICE_MODE_KEY_AUDIT.md` §13-14): leitura de tabela, não
+ * teste. `Tab` cicla whisper→normal→shout→whisper; `M` muta/desmuta.
+ */
+const SCAN_CODE_VOICE_CYCLE = 15; // Tab
+const SCAN_CODE_VOICE_MUTE = 50; // M
+
+/**
+ * Roda no cliente, dentro do Skyrim Platform, anexado ao MESMO `updateOwner`
+ * da property `voipTicket` (ver `phase0-basic.js`) — o ticket só chega
+ * quando o jogador roda `/voz`, que é exatamente o momento em que teclas de
+ * controle de voz passam a fazer sentido. Registrado uma vez, guarda em
+ * `ctx.state`, mesmo padrão de `interaction-prompt-service.js` e
+ * `player-shortcuts-service.js`.
+ *
+ * Este trecho NÃO decide o próximo modo nem o novo estado de mute — só avisa
+ * a CEF de qual tecla foi apertada. A decisão (qual é "o próximo modo",
+ * ligar ou desligar o mute) mora em `index.html`, que já guarda
+ * `state.voiceMode`/`state.muted` — o sandbox do Skyrim Platform não tem
+ * acesso a esse estado, só ao `keyPress` bruto.
+ */
+const VOICE_CONTROL_KEYS_SNIPPET = `
+  ctx.state.voiceControls = ctx.state.voiceControls || { registrouTecla: false };
+  var vc = ctx.state.voiceControls;
+
+  if (!vc.registrouTecla && ctx.sp && typeof ctx.sp.on === 'function') {
+    vc.registrouTecla = true;
+    ctx.sp.on('keyPress', function (key) {
+      if (!ctx.sp.browser || !ctx.sp.browser.executeJavaScript) return;
+      if (key === ${SCAN_CODE_VOICE_CYCLE}) {
+        ctx.sp.browser.executeJavaScript('window.handleVoiceCycleKey && window.handleVoiceCycleKey()');
+      } else if (key === ${SCAN_CODE_VOICE_MUTE}) {
+        ctx.sp.browser.executeJavaScript('window.handleVoiceMuteKey && window.handleVoiceMuteKey()');
+      }
+    });
+  }
+`;
+
+/**
+ * Fallback de texto pro Tab/M (docs/technical/VOICE_MODE_KEY_AUDIT.md §13-14
+ * decisão 4: os dois nascem juntos, não só a tecla — mesmo motivo do `[E]`
+ * ter mantido os comandos antigos vivos). Só ator com entrada em
+ * `voipClients` (isto é, que já rodou `/voz` ao menos uma vez) tem o que
+ * mudar.
+ *
+ * ⚠️ Limitação conhecida, documentada em vez de escondida: isto muda o
+ * `voiceMode`/`muted` que `tickProximity` usa pra decidir quem ouve quem —
+ * o efeito real (quem escuta o quê) acontece igual à tecla. O que este
+ * caminho NÃO faz é atualizar `state.voiceMode`/`state.muted` nem o
+ * indicador dentro da CEF, porque não existe hoje nenhum canal
+ * servidor→CEF pra isso fora do que `voipTicket` já cobre (handoff de
+ * conexão, não de estado corrente) — sincronizar os dois exigiria um canal
+ * novo, fora do escopo deste fallback. Enquanto o jogador não reabrir o
+ * indicador de outro jeito, ele fica desatualizado até a próxima tecla ou
+ * reconexão.
+ */
+const VOICE_MODE_ALIASES = { sussurro: 'whisper', normal: 'normal', grito: 'shout' };
+
+function setVoiceModeCommand(actorId, args) {
+  const entry = voipClients.get(actorId);
+  if (!entry) {
+    commands.sendNotification(actorId, 'Conecte-se a voz primeiro com /voz.');
+    return;
+  }
+  const alvo = VOICE_MODE_ALIASES[(args || '').trim().toLowerCase()];
+  if (!alvo) {
+    commands.sendNotification(actorId, 'Uso: /modovoz sussurro|normal|grito');
+    return;
+  }
+  entry.voiceMode = alvo;
+  commands.sendNotification(actorId, `Modo de voz: ${args.trim().toLowerCase()}.`);
+}
+
+function toggleMuteCommand(actorId) {
+  const entry = voipClients.get(actorId);
+  if (!entry) {
+    commands.sendNotification(actorId, 'Conecte-se a voz primeiro com /voz.');
+    return;
+  }
+  entry.muted = !entry.muted;
+  commands.sendNotification(actorId, entry.muted ? 'Microfone mudo.' : 'Microfone ativo.');
+}
+
 function commandDefs() {
   return [
     {
@@ -721,6 +818,18 @@ function commandDefs() {
       description: 'Conecta ao chat de voz por proximidade (opt-in)',
       usage: '/voz',
       handler: (actorId) => requestVoiceConnection(actorId)
+    },
+    {
+      name: ['/modovoz', '/voicemode'],
+      description: 'Muda o modo de voz (fallback de texto pro Tab — ver /voz)',
+      usage: '/modovoz <sussurro|normal|grito>',
+      handler: (actorId, args) => setVoiceModeCommand(actorId, args)
+    },
+    {
+      name: ['/mutar', '/mute'],
+      description: 'Muta/desmuta o microfone (fallback de texto pro M — ver /voz)',
+      usage: '/mutar',
+      handler: (actorId) => toggleMuteCommand(actorId)
     }
   ];
 }
@@ -749,6 +858,15 @@ module.exports = {
   // 'listener'. Ver `voipClients` e VOICE_NATIVE_HELPER.md §10.
   VOIP_ROLES,
   DEFAULT_VOIP_ROLE,
+  // Allowlist de `voice_mode` e snippet de teclas — ver VOICE_MODE_KEY_AUDIT.md
+  VOICE_MODE_VALUES,
+  VOICE_CONTROL_KEYS_SNIPPET,
+  SCAN_CODE_VOICE_CYCLE,
+  SCAN_CODE_VOICE_MUTE,
+  // Fallback de texto (/modovoz, /mutar) — expostos pra teste direto
+  VOICE_MODE_ALIASES,
+  setVoiceModeCommand,
+  toggleMuteCommand,
   // Exposto só pra testes
   _consumeTicket,
   _pendingTickets,

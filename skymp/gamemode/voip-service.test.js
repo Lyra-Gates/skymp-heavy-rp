@@ -114,6 +114,25 @@ describe('voip-service — handshake por ticket', () => {
     ws.close();
   });
 
+  it('voice_mode com valor fora da allowlist é ignorado, não gravado cru', async () => {
+    const ticket = voip.issueTicket(ACTOR_ID);
+    const ws = connect();
+    await new Promise((resolve) => ws.once('open', resolve));
+    ws.send(JSON.stringify({ type: 'auth', actorId: ACTOR_ID, ticket }));
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: 'voice_mode', mode: 'grito-supremo' }));
+    // Sem resposta síncrona pro cliente — dá um tick pro handler processar.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.strictEqual(voip._voipClients.get(ACTOR_ID).voiceMode, 'normal', 'valor inválido não deveria sobrescrever o default');
+
+    ws.send(JSON.stringify({ type: 'voice_mode', mode: 'shout' }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.strictEqual(voip._voipClients.get(ACTOR_ID).voiceMode, 'shout', 'valor válido continua sendo aceito');
+
+    ws.close();
+  });
+
   it('ticket é de uso único — replay do mesmo ticket falha', async () => {
     const ticket = voip.issueTicket(ACTOR_ID);
 
@@ -1048,6 +1067,69 @@ describe('voip-service — comando /voz', () => {
     assert.ok(def, '/voz deveria estar registrado');
     assert.ok(def.name.includes('/voice'));
     assert.strictEqual(typeof def.handler, 'function');
+  });
+
+  it('commandDefs registra /modovoz e /mutar', () => {
+    const defs = voip.commandDefs();
+    const modo = defs.find(d => Array.isArray(d.name) && d.name.includes('/modovoz'));
+    const mutar = defs.find(d => Array.isArray(d.name) && d.name.includes('/mutar'));
+    assert.ok(modo, '/modovoz deveria estar registrado');
+    assert.ok(modo.name.includes('/voicemode'));
+    assert.ok(mutar, '/mutar deveria estar registrado');
+    assert.ok(mutar.name.includes('/mute'));
+  });
+});
+
+describe('voip-service — fallback de texto (/modovoz, /mutar)', () => {
+  const ATOR = 0xff00c001;
+
+  beforeEach(() => {
+    global.mp = { set: () => {} };
+    voip._voipClients.clear();
+  });
+
+  afterEach(() => {
+    delete global.mp;
+    voip._voipClients.clear();
+  });
+
+  it('/modovoz sem /voz antes não lança e não cria entrada', () => {
+    assert.doesNotThrow(() => voip.setVoiceModeCommand(ATOR, 'grito'));
+    assert.strictEqual(voip._voipClients.has(ATOR), false);
+  });
+
+  it('/modovoz aceita sussurro/normal/grito e ignora o resto', () => {
+    voip._voipClients.set(ATOR, { listener: null, sender: null, voiceMode: 'normal', muted: false });
+
+    voip.setVoiceModeCommand(ATOR, 'sussurro');
+    assert.strictEqual(voip._voipClients.get(ATOR).voiceMode, 'whisper');
+
+    voip.setVoiceModeCommand(ATOR, 'GRITO');
+    assert.strictEqual(voip._voipClients.get(ATOR).voiceMode, 'shout', 'case-insensitive');
+
+    voip.setVoiceModeCommand(ATOR, 'sussa');
+    assert.strictEqual(voip._voipClients.get(ATOR).voiceMode, 'shout', 'valor inválido não muda o modo atual');
+  });
+
+  it('/mutar alterna o estado a cada chamada', () => {
+    voip._voipClients.set(ATOR, { listener: null, sender: null, voiceMode: 'normal', muted: false });
+
+    voip.toggleMuteCommand(ATOR);
+    assert.strictEqual(voip._voipClients.get(ATOR).muted, true);
+
+    voip.toggleMuteCommand(ATOR);
+    assert.strictEqual(voip._voipClients.get(ATOR).muted, false);
+  });
+
+  it('/mutar sem /voz antes não lança e não cria entrada', () => {
+    assert.doesNotThrow(() => voip.toggleMuteCommand(ATOR));
+    assert.strictEqual(voip._voipClients.has(ATOR), false);
+  });
+});
+
+describe('voip-service — allowlist de voice_mode (VOICE_MODE_VALUES)', () => {
+  it('só aceita os três modos que VOICE_RANGES conhece', () => {
+    assert.deepStrictEqual([...voip.VOICE_MODE_VALUES].sort(), ['normal', 'shout', 'whisper']);
   });
 });
 

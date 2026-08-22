@@ -76,6 +76,7 @@ const crimeService  = require(path.join(gamemodeDir, 'core', 'crime-service'));
 const interactionPromptService = require(path.join(gamemodeDir, 'core', 'interaction-prompt-service'));
 const characterDashboardBridge = require(path.join(gamemodeDir, 'core', 'character-dashboard-bridge'));
 const craftingService = require(path.join(gamemodeDir, 'crafting-service'));
+const playerShortcutsService = require(path.join(gamemodeDir, 'core', 'player-shortcuts-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -438,6 +439,24 @@ moduleRegistry.register({
   }
 });
 
+// LAB: Tecla `F2` abre o `/painel` (ver docs/technical/PLAYER_SHORTCUTS_AUDIT.md
+// §1). Flag própria — não depende de `interaction-prompt` nem de `voip`, só
+// reusa o mesmo padrão de tick+guarda que os dois já provaram. Ver
+// `core/player-shortcuts-service.js` pro porquê de um módulo à parte.
+moduleRegistry.register({
+  id: 'player-shortcuts',
+  enabledBy: 'ENABLE_PLAYER_SHORTCUTS',
+  phase: 'lab',
+  dependencies: [],
+  commands: [],
+  initialize: async () => {
+    playerShortcutsService.initPlayerShortcutsService();
+  },
+  shutdown: async () => {
+    playerShortcutsService.shutdownPlayerShortcutsService();
+  }
+});
+
 // LAB: Instrumentos de observação da Fase 0 para a questão de mobs hostis.
 //
 // Não são mecânica e não viram mecânica. São as Peças 1 e 2 da §16 do
@@ -675,11 +694,17 @@ if (typeof mp !== "undefined") {
   mp.makeProperty('voipTicket', {
     isVisibleByOwner: true,
     isVisibleByNeighbors: false,
+    // O relay do ticket pra CEF (linhas do `if`) roda toda vez que a
+    // property muda; o registro das teclas de voz (`VOICE_CONTROL_KEYS_
+    // SNIPPET`) só roda uma vez, guarda em `ctx.state` — ver o cabeçalho
+    // dele em voip-service.js pro porquê de morar aqui e não em property
+    // própria.
     updateOwner: `
       if (ctx.value && ctx.sp && ctx.sp.browser && ctx.sp.browser.executeJavaScript) {
         const payload = JSON.stringify(ctx.value);
         ctx.sp.browser.executeJavaScript('window.handleVoipTicket && window.handleVoipTicket(' + payload + ')');
       }
+      ${voipService.VOICE_CONTROL_KEYS_SNIPPET}
     `,
     updateNeighbor: ''
   });
@@ -705,6 +730,15 @@ if (typeof mp !== "undefined") {
     isVisibleByOwner: true,
     isVisibleByNeighbors: false,
     updateOwner: nametagService.SNIPPET_DO_CLIENTE,
+    updateNeighbor: ''
+  });
+
+  // `F2` abre o painel (docs/technical/PLAYER_SHORTCUTS_AUDIT.md §1) — mesmo
+  // padrão de tick+guarda do prompt `[E]` acima, ver player-shortcuts-service.js.
+  mp.makeProperty(playerShortcutsService.PROPERTY, {
+    isVisibleByOwner: true,
+    isVisibleByNeighbors: false,
+    updateOwner: playerShortcutsService.SNIPPET_DO_CLIENTE,
     updateNeighbor: ''
   });
 

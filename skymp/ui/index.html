@@ -112,6 +112,33 @@
        microfone pra falar. Verde mentiria e vermelho também. */
     #voip-status.warn .dot { background:#fb8c00; }
 
+    /* === INDICADOR DE MODO DE VOZ === */
+    /* Persistente (não some sozinho) enquanto a voz está conectada — decisão
+       de acessibilidade: alguém que dependa de conferir visualmente se está
+       mudo não pode perder essa informação porque um toast já sumiu. Mesma
+       família visual do #voip-status (pílula pequena, sem cobrir o centro
+       de mira), logo abaixo dele — ver VOICE_MODE_KEY_AUDIT.md §13. */
+    #voice-mode-indicator {
+      position: fixed;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 4px 14px;
+      font-size: 12px;
+      display: none;
+      gap: 6px;
+      align-items: center;
+      color: #ddd;
+    }
+    #voice-mode-indicator.visible { display: flex; }
+    #voice-mode-indicator.muted { border-color: rgba(229,57,53,0.6); color: #e53935; }
+    #voice-mode-indicator .mode-whisper { color: #9e9e9e; }
+    #voice-mode-indicator .mode-normal { color: #4caf50; }
+    #voice-mode-indicator .mode-shout { color: #fb8c00; }
+
     /* === TRADE OVERLAY === */
     #trade-overlay {
       display: none;
@@ -387,6 +414,10 @@
 <body>
 
 <!-- Status VOIP -->
+<div id="voice-mode-indicator" aria-live="polite">
+  <span id="voice-mode-text">Normal</span>
+</div>
+
 <div id="voip-status">
   <div class="dot"></div>
   <span id="voip-status-text">VOIP</span>
@@ -680,6 +711,7 @@
     switch (msg.type) {
       case 'auth_ok':
         setStatus('ok', 'VOZ ATIVA');
+        updateVoiceModeIndicator();
         await initMicrophone();
         break;
 
@@ -1038,6 +1070,32 @@
     document.getElementById('voip-status-text').textContent = text;
   }
 
+  // ── Indicador de modo de voz ─────────────────────────────────────────────
+  // Persistente enquanto a voz está conectada (decisão de acessibilidade,
+  // ver VOICE_MODE_KEY_AUDIT.md §13) — não é um toast que some sozinho.
+  const VOICE_MODE_ORDER = ['whisper', 'normal', 'shout'];
+  const VOICE_MODE_LABELS = { whisper: 'Sussurro', normal: 'Normal', shout: 'Grito' };
+
+  function updateVoiceModeIndicator() {
+    const el = document.getElementById('voice-mode-indicator');
+    const text = document.getElementById('voice-mode-text');
+    if (!el || !text) return;
+
+    // Só faz sentido mostrar depois que a voz conectou de verdade — antes
+    // disso (ou depois de cair) `state.voiceMode`/`state.muted` são só os
+    // defaults locais. `readyState` em vez de só `state.ws` truthy porque o
+    // socket nunca é anulado em `onclose` — mesmo checagem de `sendSignal`.
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+      el.classList.remove('visible');
+      return;
+    }
+
+    const label = VOICE_MODE_LABELS[state.voiceMode] || state.voiceMode;
+    text.textContent = state.muted ? `Mudo (${label})` : label;
+    el.className = 'visible' +
+      (state.muted ? ' muted' : ` mode-${state.voiceMode}`);
+  }
+
   // ── Controles Expostos para o Gamemode ────────────────────────────────────
   function toggleMute() {
     state.muted = !state.muted;
@@ -1046,12 +1104,31 @@
     }
     sendSignal({ type: 'mute', muted: state.muted });
     mp.trigger('cef::voip:mute_changed', { muted: state.muted });
+    updateVoiceModeIndicator();
   }
 
   function setVoiceMode(mode) {
     state.voiceMode = mode;
     sendSignal({ type: 'voice_mode', mode });
+    updateVoiceModeIndicator();
   }
+
+  // Tab (ver voip-service.js VOICE_CONTROL_KEYS_SNIPPET): cicla pro próximo
+  // modo da lista, voltando ao início depois do grito. A decisão de "qual é
+  // o próximo" mora aqui, não no sandbox do Skyrim Platform — ele só sabe
+  // que uma tecla foi apertada, não em que modo o jogador está agora.
+  window.handleVoiceCycleKey = function () {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return; // sem voz conectada, tecla não faz nada
+    const atual = VOICE_MODE_ORDER.indexOf(state.voiceMode);
+    const proximo = VOICE_MODE_ORDER[(atual + 1) % VOICE_MODE_ORDER.length];
+    setVoiceMode(proximo);
+  };
+
+  // M (ver voip-service.js VOICE_CONTROL_KEYS_SNIPPET): muta/desmuta.
+  window.handleVoiceMuteKey = function () {
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+    toggleMute();
+  };
 
   // ── Trade Overlay ─────────────────────────────────────────────────────────
   function closeTrade() {
@@ -1359,6 +1436,14 @@
     const msg = normalizePayload(payload);
     if (!msg || !msg.actorId || !msg.ticket) return;
     connectVoip(msg.actorId, msg.ticket, msg.host, msg.port);
+  };
+
+  // F2 (ver core/player-shortcuts-service.js SNIPPET_DO_CLIENTE): repassa pro
+  // servidor pelo MESMO caminho que qualquer clique de UI já usa —
+  // `sendUiEvent`, não um atalho novo. `panel:open` já é tratado por
+  // `player-panel-service.js` (o mesmo canal do comando `/painel`).
+  window.handlePlayerShortcutKey = (action) => {
+    if (action === 'panel:open') sendUiEvent('panel:open', {});
   };
 
   // Nametag (POC). Chamada pelo snippet de cliente do nametag-service, até
