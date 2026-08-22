@@ -58,7 +58,11 @@ const SPEC = {
 
   'economy.largeTransactionThreshold': { ...num(1, 2147483647), default: 5000, usedBy: 'core/economy-service.js (_auditLargeTransfer)' },
 
-  'depot.defaultCapacity': { ...num(1, 10000), default: 500, usedBy: 'core/depot-service.js (getOrCreateDepot)' }
+  'depot.defaultCapacity': { ...num(1, 10000), default: 500, usedBy: 'core/depot-service.js (getOrCreateDepot)' },
+
+  'crime.hotItemWindowMinutes': { ...num(1, 1440), default: 30, usedBy: 'core/crime-service.js (sweep: hot -> stolen)' },
+  'crime.combatLogGraceMinutes': { ...num(1, 1440), default: 15, usedBy: 'core/crime-service.js (sweep: restituicao apos deslogar com item hot)' },
+  'crime.sweepIntervalSeconds': { ...num(10, 3600), default: 60, usedBy: 'core/crime-service.js (initSweepTimer)' }
 };
 
 /**

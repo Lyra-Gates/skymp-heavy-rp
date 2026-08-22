@@ -27,6 +27,15 @@ const economyService = require('./core/economy-service');
 const debtService = require('./debt-service');
 const rangeUtils = require('./core/range-utils');
 const { actorRef } = require('./core/papyrus');
+// Tarefa 13: a Revista Institucional aprende a reconhecer proveniencia suja, e
+// o confisco aprende a rebaixar 'hot' -> 'stolen'. `crime` e modulo `lab`
+// (pode estar desligado); toda chamada abaixo passa por
+// `moduleRegistry.isEnabled('crime')` antes de usar isto, entao a governanca
+// nunca fica bloqueada por um modulo que o servidor optou por nao ligar.
+// `confiscations` (INSERT abaixo) e tabela deste arquivo desde
+// migration-v3-governance.sql — migration-v22-crime-interactions.sql so
+// acrescentou a coluna `item_instance_id`.
+const crimeService = require('./core/crime-service');
 
 const { STATES } = characterState;
 
@@ -596,6 +605,35 @@ async function showInventorySnapshot(officerActorId, targetActorId, searchId) {
   const snapshot = rows.map(r => `0x${Number(r.base_id).toString(16)}x${r.count}`).join(', ') || 'sem itens registrados';
   await db.query('UPDATE guard_searches SET result_snapshot = ? WHERE id = ?', [snapshot, searchId]);
   notify(officerActorId, `Inventario do alvo: ${snapshot}`);
+  await notifyStolenProvenance(officerActorId, target.characterId);
+}
+
+/**
+ * Revista Institucional (Tarefa 13, §2/§3): depois do snapshot comum, avisa o
+ * guarda sobre qualquer item de proveniência suja (`hot`/`stolen`) que o alvo
+ * carrega — com o NOME do dono original, nunca um veredito do servidor
+ * ("ele é ladrão"). Quem decide o que fazer com a informação é o jogador.
+ *
+ * `crime` é módulo `lab`: se estiver desligado, a revista continua
+ * funcionando exatamente como antes desta tarefa — só sem a seção extra.
+ */
+async function notifyStolenProvenance(officerActorId, targetCharacterId) {
+  if (!moduleRegistry.isEnabled('crime')) return;
+  let stolenItems;
+  try {
+    stolenItems = await crimeService.getStolenInstancesHeldBy(targetCharacterId);
+  } catch (err) {
+    console.error('[governance] falha ao consultar proveniencia na revista:', err.message);
+    return;
+  }
+  if (!stolenItems || stolenItems.length === 0) return;
+
+  for (const item of stolenItems) {
+    notify(
+      officerActorId,
+      `[Proveniencia] 0x${item.baseId.toString(16)} (${item.status}) — Este item pertence a ${item.originalOwnerName}!`
+    );
+  }
 }
 
 async function issueWarrant(officerActorId, targetActorId, severity, reason) {
@@ -778,10 +816,25 @@ async function confiscateItem(officerActorId, targetActorId, baseId, count, reas
     notify(officerActorId, 'O alvo nao possui esse item em quantidade suficiente no banco.');
     return;
   }
+
+  // Evidencia (Tarefa 13, §4): se este item era uma instancia rastreada
+  // (roubado), ela perde 'hot' mas continua 'stolen' — nunca vira 'clean' por
+  // confisco sozinho. A maioria dos confiscos e de item comum, sem instancia
+  // nenhuma (`no_instance`), e isso nao e erro.
+  let itemInstanceId = null;
+  if (moduleRegistry.isEnabled('crime')) {
+    try {
+      const marked = await crimeService.markItemConfiscated({ characterId: target.characterId, baseId: itemId });
+      if (marked.ok) itemInstanceId = marked.data.instanceId;
+    } catch (err) {
+      console.error('[governance] falha ao marcar instancia confiscada:', err.message);
+    }
+  }
+
   await db.query(
-    `INSERT INTO confiscations (target_character_id, officer_character_id, base_id, count, reason)
-     VALUES (?, ?, ?, ?, ?)`,
-    [target.characterId, officer.characterId, itemId, amount, reason]
+    `INSERT INTO confiscations (target_character_id, officer_character_id, base_id, count, reason, item_instance_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [target.characterId, officer.characterId, itemId, amount, reason, itemInstanceId]
   );
   await audit(officerActorId, targetActorId, 'guard:confiscate', `baseId=0x${itemId.toString(16)} count=${amount} reason=${reason}`);
   notify(officerActorId, 'Item confiscado e registrado como evidencia.');

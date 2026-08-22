@@ -72,6 +72,7 @@ const faunaCensus   = require(path.join(gamemodeDir, 'fauna-census'));
 const corpseProbe   = require(path.join(gamemodeDir, 'corpse-probe'));
 const tradeService  = require(path.join(gamemodeDir, 'trade-service'));
 const depotService  = require(path.join(gamemodeDir, 'core', 'depot-service'));
+const crimeService  = require(path.join(gamemodeDir, 'core', 'crime-service'));
 const interactionPromptService = require(path.join(gamemodeDir, 'core', 'interaction-prompt-service'));
 const characterDashboardBridge = require(path.join(gamemodeDir, 'core', 'character-dashboard-bridge'));
 
@@ -517,6 +518,28 @@ moduleRegistry.register({
   commands: depotService.commandDefs(),
   initialize: async () => {
     depotService.registerInteractions({ sendModal });
+  }
+});
+
+// LAB: Crime & Proveniência (Tarefa 12 fundação + Tarefa 13 interações,
+// 21/08/2026). `interaction` é dependência OBRIGATÓRIA agora — `crime.surrender`
+// e `crime.rob` precisam do framework de pé pra se registrar. `depot`
+// continua OPCIONAL: sem ele a restituição fica pendente na varredura em vez
+// de impedir o boot do módulo (ver core/crime-service.js, cabeçalho).
+moduleRegistry.register({
+  id: 'crime',
+  enabledBy: 'ENABLE_CRIME_SYSTEM',
+  phase: 'lab',
+  version: '1.1.0',
+  dependencies: ['interaction'],
+  optionalDependencies: ['depot'],
+  initialize: async () => {
+    commands.onCharacterRemoved(crimeService.onCharacterDisconnected);
+    crimeService.initSweepTimer();
+    crimeService.registerInteractions();
+  },
+  shutdown: async () => {
+    crimeService.stopSweepTimer();
   }
 });
 

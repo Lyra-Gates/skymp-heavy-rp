@@ -9,6 +9,8 @@
  *   DOWNED      - Abatido, aguardando socorro (persistente no BD)
  *   DEAD        - Morto (transição para DOWNED após estabilização falhar)
  *   RESTRAINED  - Algemado/amarrado (persistente no BD via character_restraints)
+ *   SURRENDERED - Rendeu-se voluntariamente (sessão; ver core/crime-service.js
+ *                 `crime.surrender` — vulnerável a `crime.rob` enquanto durar)
  *   IMPRISONED  - Na prisão (persistente no BD via prison_records)
  *   IN_TRADE    - Em negociação com outro jogador
  *   IN_CRAFT    - Em processo de fabricação
@@ -31,6 +33,7 @@ const STATES = Object.freeze({
   DOWNED:       'DOWNED',
   DEAD:         'DEAD',
   RESTRAINED:   'RESTRAINED',
+  SURRENDERED:  'SURRENDERED',
   IMPRISONED:   'IMPRISONED',
   IN_TRADE:     'IN_TRADE',
   IN_CRAFT:     'IN_CRAFT',
