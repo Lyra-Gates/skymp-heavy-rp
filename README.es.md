@@ -18,6 +18,7 @@ Pensada para *rol estricto*: el servidor manda sobre economía, identidad y cons
 |---|---|
 | Entender lo que el proyecto **quiere ser** | [CONSTITUICAO.md](docs/CONSTITUICAO.md) — la constitución de diseño (en portugués) |
 | Entender el estado real del proyecto | [Informe de QA](docs/technical/QA_REPORT_2026-08.md) — incluye lo que **no** está listo |
+| Ver qué hace el framework hoy, tras la unificación del 22/08 | [PROJECT_STATE.md](PROJECT_STATE.md) — Identidad + Economía + Profesiones + Depot + Persistencia + UX (en portugués) |
 | Entender cómo se comunican las piezas | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir código | [CONTRIBUTING.es.md](CONTRIBUTING.es.md) — las reglas que no son obvias leyendo el código |
 | Saber si un mod funciona en el servidor | [Contrato mods × gamemode](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |

@@ -2,7 +2,7 @@
 
 Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
-> **Última conferência contra o código: 11/08/2026.** README, arquitetura, plano principal, design da Alma, roadmap ativo e changelog foram reconciliados com o commit `c23179d`. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
+> **Última conferência contra o código: 22/08/2026.** README, `docs/README.md` e `PROJECT_STATE.md` foram reconciliados com a unificação de main (Profissões #34 + Economia/Vault #44 + Depot #46 + UX #45). Os demais documentos técnicos foram reconciliados em 11/08/2026 com o commit `c23179d` e podem estar defasados sobre os módulos novos — ver [PROJECT_STATE.md](../PROJECT_STATE.md) para o estado consolidado atual. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
 
 ---
 
@@ -12,6 +12,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 |---|---|---|
 | 0 | [CONSTITUICAO.md](CONSTITUICAO.md) | **A constituição de design.** O que o projeto é, o que nunca criar, e por que toda mecânica precisa responder "como isso gera histórias?". O Anexo A traz as tensões conhecidas dela. |
 | 1 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | **O estado real de cada componente**, incluindo o que não está pronto e o plano priorizado. É o documento mais honesto do projeto. |
+| 1.1 | [../PROJECT_STATE.md](../PROJECT_STATE.md) | **O que o framework faz hoje**, pós-unificação de 22/08/2026 (Profissões + Economia/Vault + Depot + UX). Registra a ponte Depot↔Profissão como próximo passo, não implementada. |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | Como banco, painel web, bot, API do jogo, launcher e gamemode conversam. |
 | 2.1 | [research/ADMIN_PLATFORM_AUDIT.md](research/ADMIN_PLATFORM_AUDIT.md) | **O estado real do painel de staff.** Doze rotas administrativas, zero verificações de permissão — e o que mais a auditoria de 13/08 encontrou. Leia antes de `skyadmin/`. |
 | 2.2 | [skyadmin/README.md](skyadmin/README.md) | Centro de orientação do painel de staff: escopo, arquitetura, plano, segurança, operação e referências. **É projeto, não estado** — ver a §7 da auditoria acima. |
@@ -59,6 +60,18 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [HOSTILE_MOB_ACTIVATION_DECISION.md](technical/HOSTILE_MOB_ACTIVATION_DECISION.md) | Responde a terceira delas — criaturas hostis ficam ativas —, e derruba a premissa de que havia algo a "ativar": o `npc-cleaner` é inerte, então o mundo provavelmente já está cheio de lobos e ursos. Análise de 15 pontos. **A mecânica continua sem uma linha de código**; os dois instrumentos que a decidem existem desde 08/08 — ver [FAUNA_CENSUS_PROTOCOL.md](technical/FAUNA_CENSUS_PROTOCOL.md). |
 | [NAMETAG_IDENTITY_SYSTEM.md](technical/NAMETAG_IDENTITY_SYSTEM.md) | Por que o nome exibido depende de quem está olhando. |
 | [MARKET_STALL_VISUAL_ASSET_PLAN.md](technical/MARKET_STALL_VISUAL_ASSET_PLAN.md) | Assets visuais das barracas, com análise de licença mod a mod. |
+
+### Unificação de 22/08/2026: Profissões, Economia/Vault, Depot, Ambiente, UX
+
+| Documento | Sobre |
+|---|---|
+| [gameplay/PROFESSION_FRAMEWORK.md](gameplay/PROFESSION_FRAMEWORK.md) | Profession Core implementado e testado, atrás de `ENABLE_PROFESSION_SERVICE`. Nenhuma das 13 profissões tem gameplay própria ainda — a plataforma existe, os consumidores não. |
+| [technical/ADR_008_PROFESSION_SPECIALIZATION_BOUNDARY.md](technical/ADR_008_PROFESSION_SPECIALIZATION_BOUNDARY.md) | A decisão sobre onde termina Profession e começa Specialization. |
+| [technical/ECONOMY_VAULT_AUDIT.md](technical/ECONOMY_VAULT_AUDIT.md) | Os 3 gaps sobre a infraestrutura de economia já existente: anti-cheat de ouro físico e auditoria de transação grande. |
+| [technical/DEPOT_SERVICE_AUDIT.md](technical/DEPOT_SERVICE_AUDIT.md) | Armazenamento regional de itens por hold — recuperado de um commit de auto-save nunca finalizado e mesclado na unificação de 22/08. Sem reserva de ouro própria, sem checagem de combate. |
+| [technical/ENVIRONMENT_AUDIT.md](technical/ENVIRONMENT_AUDIT.md) | Time Sync: relógio autoritativo do servidor, heartbeat de correção de deriva, persistência entre restarts. |
+| [technical/ENVIRONMENT_WEATHER_SPIKE.md](technical/ENVIRONMENT_WEATHER_SPIKE.md) | Spike de pesquisa — sincronização de clima (ForceWeather). Sem implementação; nenhum `weather-service.js` existe. |
+| [technical/UI_UX_INTERACTION_AUDIT.md](technical/UI_UX_INTERACTION_AUDIT.md) | Tarefa 11 — prompt de interação `[E]`, o mesmo menu de ações por tecla em vez de só clique, e a ponte `SELF` pro painel do jogador. |
 
 ### Design de mundo
 

@@ -16,6 +16,7 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 |---|---|
 | Entender o que o projeto **quer ser** | [CONSTITUICAO.md](docs/CONSTITUICAO.md) — a constituição de design |
 | Entender o estado real do projeto | [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) — inclui o que **não** está pronto |
+| Ver o que o framework faz hoje, pós-unificação de 22/08 | [PROJECT_STATE.md](PROJECT_STATE.md) — Identidade + Economia + Profissões + Depot + Persistência + UX |
 | Entender como as peças conversam | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Contribuir com código | [CONTRIBUTING.md](CONTRIBUTING.md) — as regras que não são óbvias lendo o código |
 | Saber se um mod funciona no servidor | [MODS_AND_GAMEMODE_CONTRACT.md](docs/technical/MODS_AND_GAMEMODE_CONTRACT.md) §4 |
@@ -35,6 +36,8 @@ Focada em *Roleplay Estrito*: autoridade do servidor sobre economia, identidade 
 - **Painel do Jogador (in-game)**: Comando `/painel` abre um HUD in-game com 4 abas — Status (vida/magicka/stamina/ouro/estado RP), Governança (cargo, mandados, multas), Economia (barracas, imposto local) e Social (rostos conhecidos). Agrega dados dos serviços existentes sem duplicar lógica de negócio; ativado via `ENABLE_PLAYER_PANEL_SERVICE=true`. Ver [player-panel-service.js](skymp/gamemode/player-panel-service.js).
 - **Launcher App**: Um Launcher em React + Electron (Vite) em `apps/launcher`, controlando autenticação, configurações e boot da build. Na auditoria de agosto ele estava quebrado ponta a ponta (nenhuma variável de ambiente era carregada) e o client secret do Discord ia embutido no instalador — ambos corrigidos, mas ainda sem validação em runtime. Ver [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) 2.1 e 2.2.
 - **Fase Inicial (Fase 0)**: As fundações locais (conexão, persistência base em banco MariaDB via scripts SQL migrados) já foram garantidas em ambiente de laboratório.
+
+- **Profissões, Economia/Vault, Depot, Ambiente e Interaction Hub (unificação de 22/08/2026)**: quatro frentes foram consolidadas em `main` — **Profession Core** (grant/revoke/rank/XP, `/profissoes`, `ENABLE_PROFESSION_SERVICE`), **anti-cheat de ouro físico** (`core/economy-physical-sync.js`), **Depot Service** (armazenamento regional de itens por hold, `ENABLE_DEPOT_SERVICE`), **Time Sync** (relógio autoritativo do servidor, `ENABLE_ENVIRONMENT_SERVICE`) e o **Interaction Hub** (prompt de interação `[E]` e ponte SELF→`/painel`, `ENABLE_INTERACTION_PROMPT`). Todos nascem desligados, fase `lab`, sem gameplay ligada entre Profissões e Depot ainda. Ver [PROJECT_STATE.md](PROJECT_STATE.md) e [PROFESSION_FRAMEWORK.md](docs/gameplay/PROFESSION_FRAMEWORK.md).
 
 - **Afinidade da Alma**: `core/soul.js` contém o domínio puro (28 testes), enquanto `soul-service.js` persiste almas, entrega sinais, grava marcas, avança árvores e expõe `/alma`. O serviço está registrado atrás de `ENABLE_SOUL_SERVICE`, desligado por padrão e ainda aguarda homologação in-game. Desenho em [SOUL_AFFINITY.md](docs/design/SOUL_AFFINITY.md).
 
@@ -58,7 +61,7 @@ Isso irá despachar simultaneamente:
 - O Painel Web do Staff (`apps/web`, porta 3001)
 - O Bot de Autenticação do Discord (`apps/bot-discord`, porta 3002)
 - A API do Jogo (`apps/game-api`, porta 7758 — paridade de modpack e fila)
-- O Servidor SkyMP Nativo (`skymp/gamemode`, porta 7777)
+- O Servidor SkyMP Nativo (`skymp/gamemode`, porta 7777) — os módulos novos (Profissões, Depot, Ambiente, Interaction Hub) sobem junto, mas ficam inertes até a flag `ENABLE_*` correspondente ser ligada no `.env`
 
 O script pré-checa `.env` e `node_modules` de cada serviço e diz o que não vai subir, em vez de reportar sucesso com um serviço morto.
 
