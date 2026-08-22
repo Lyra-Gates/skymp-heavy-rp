@@ -199,10 +199,15 @@ moduleRegistry.register({
   id: 'death',
   enabledBy: 'ENABLE_DEATH_SERVICE',
   phase: 'lab',
-  dependencies: [],
+  // Fase 2 de PLAYER_ACTION_SHORTCUTS_PLAN.md: /socorrer entra no menu [E].
+  // Mesma dependência de boot-order que 'trade' já declara — registrar em
+  // interactionRegistry não exige a instância de interactionService viva,
+  // mas a convenção do projeto é declarar mesmo assim.
+  dependencies: ['interaction'],
   commands: deathService.commandDefs(),
   initialize: async () => {
     deathService.initDeathService();
+    deathService.registerInteractions();
   }
 });
 

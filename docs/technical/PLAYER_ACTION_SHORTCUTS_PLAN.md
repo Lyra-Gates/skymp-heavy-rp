@@ -74,7 +74,23 @@ certo pelo canal real. Não validado dentro da CEF do SkyMP.
 Sem decisão de produto pendente — é consertar um caminho que já deveria
 funcionar, não desenhar um novo.
 
-### Fase 2 — `/socorrer` no menu `[E]`
+### Fase 2 — `/socorrer` no menu `[E]` ✅ implementado (22/08)
+
+Lido `interaction-registry.js`/`interaction-service.js` por completo antes
+de codar (conforme prometido). Achado: `canSee(ctx) => boolean` já é
+exatamente o mecanismo de "ação condicional ao estado do alvo" —
+`trade.request` já usa isso pra sumir do menu de quem está numa troca.
+Nada novo precisou entrar no framework.
+
+`death.rescue` registrado com `canSee` checando `_downedPlayers.has(target
+.characterId)`, `execute` chamando `rescueTarget` direto (que já revalida
+tudo — auto-socorro, alcance, DOWNED — e já manda as próprias
+notificações, por isso `execute` não retorna `message`). `dependencies:
+['interaction']` no módulo `death`, mesma convenção de `trade`. 4 testes
+novos (`death.rescue no menu de interação`), 1090 testes do gamemode
+passam. Não validado em jogo.
+
+Texto original do plano, mantido como registro de como cheguei lá:
 
 Hoje `death-service.js` não registra nada em `interactionRegistry` (grep
 confirma). Precisa de uma entrada nova, no mesmo padrão de

@@ -127,6 +127,7 @@ function setNeighbors(actorId, neighborIds) {
 
 const commands = require('./commands');
 const characterState = require('./core/character-state');
+const interactionRegistry = require('./core/interaction-registry');
 const { STATES } = characterState;
 const deathService = require('./death-service');
 
@@ -158,6 +159,7 @@ describe('death-service', () => {
     auditEntries.length = 0;
     goldLedger.length = 0;
     deathService._downedPlayers.clear();
+    interactionRegistry._reset();
   });
 
   it('handlePlayerDowned coloca o personagem em DOWNED', async () => {
@@ -202,6 +204,54 @@ describe('death-service', () => {
       await deathService._handlePlayerDowned(VICTIM_ACTOR_ID);
       await deathService.rescueTarget(VICTIM_ACTOR_ID, VICTIM_ACTOR_ID);
       assert.strictEqual(deathService.isDowned(VICTIM_CHARACTER_ID), true);
+    });
+  });
+
+  // PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 2: /socorrer no menu [E].
+  describe('death.rescue no menu de interação', () => {
+    function ctxFor(actorId, targetActorId) {
+      return { actorId, target: { actorId: targetActorId } };
+    }
+
+    it('registra a acao com o alcance de RESCUE_RANGE', () => {
+      deathService.registerInteractions();
+      const acao = interactionRegistry.get('death.rescue');
+      assert.ok(acao, 'death.rescue precisa existir no registro');
+      assert.strictEqual(acao.target, interactionRegistry.TARGET_TYPES.PLAYER);
+    });
+
+    it('canSee: só aparece quando o alvo está DOWNED', async () => {
+      deathService.registerInteractions();
+      const acao = interactionRegistry.get('death.rescue');
+      const ctx = ctxFor(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID);
+
+      assert.strictEqual(await acao.canSee(ctx), false, 'vitima ainda em pe, nao deveria aparecer');
+
+      await deathService._handlePlayerDowned(VICTIM_ACTOR_ID);
+      assert.strictEqual(await acao.canSee(ctx), true);
+    });
+
+    it('canSee: some do menu assim que o alvo e socorrido', async () => {
+      deathService.registerInteractions();
+      const acao = interactionRegistry.get('death.rescue');
+      const ctx = ctxFor(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID);
+
+      await deathService._handlePlayerDowned(VICTIM_ACTOR_ID);
+      assert.strictEqual(await acao.canSee(ctx), true);
+
+      await deathService.rescueTarget(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID);
+      assert.strictEqual(await acao.canSee(ctx), false);
+    });
+
+    it('execute chama rescueTarget de verdade (o menu nao duplica a logica)', async () => {
+      deathService.registerInteractions();
+      const acao = interactionRegistry.get('death.rescue');
+      await deathService._handlePlayerDowned(VICTIM_ACTOR_ID);
+
+      await acao.execute(ctxFor(RESCUER_ACTOR_ID, VICTIM_ACTOR_ID));
+
+      assert.strictEqual(characterState.get(VICTIM_CHARACTER_ID), STATES.NORMAL);
+      assert.strictEqual(deathService.isDowned(VICTIM_CHARACTER_ID), false);
     });
   });
 

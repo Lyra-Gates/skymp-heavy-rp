@@ -32,6 +32,7 @@ const deathEvents = require('./core/death-events');
 // duplicada aqui, corrigir `core/papyrus.js` nao alcancava este arquivo.
 const { actorRef } = require('./core/papyrus');
 const skymp = require('./core/skymp-adapter');
+const interactionRegistry = require('./core/interaction-registry');
 
 const RESPAWN_POS = [-150, -100, -200]; // Coordenadas ficticias do Templo de Kynareth
 
@@ -346,6 +347,42 @@ async function rescueTarget(rescuerActorId, targetActorId) {
   commands.sendNotification(targetActorId, 'Voce foi socorrido e recobra a consciencia, fraco.');
   commands.broadcastProximityMessage(rescuerActorId, '* Presta socorro a um ferido caído por perto.', 600);
   panelRefreshBus.requestRefresh(targetActorId, 'status');
+}
+
+/**
+ * Fase 2 de docs/technical/PLAYER_ACTION_SHORTCUTS_PLAN.md: `/socorrer` no
+ * menu `[E]`, não só como comando digitado.
+ *
+ * `canSee` é o mecanismo do próprio framework pra "ação condicional ao
+ * estado do alvo" (o mesmo que `trade.request` já usa pra sumir do menu de
+ * quem já está numa troca) — não precisei inventar nada novo em
+ * `interaction-registry.js`. Só aparece pra quem está DOWNED de verdade;
+ * quem tentar contra outro estado nunca vê o botão, e o `execute` roda
+ * exatamente `rescueTarget`, que já revalida tudo do zero (auto-socorro,
+ * personagem ativo, DOWNED, alcance) — o menu sugere, `rescueTarget`
+ * decide, mesma garantia que o resto do Interaction Framework já tem.
+ *
+ * `rescueTarget` já manda as próprias notificações de sucesso/falha —
+ * `execute` não retorna `message`, pra não duplicar.
+ */
+function registerInteractions() {
+  interactionRegistry.register({
+    id: 'death.rescue',
+    module: 'death',
+    target: interactionRegistry.TARGET_TYPES.PLAYER,
+    label: 'Socorrer',
+    section: 'social',
+    order: 15,
+    distance: RESCUE_RANGE,
+    audit: interactionRegistry.AUDIT_LEVELS.GAMEPLAY,
+    canSee: async ctx => {
+      const target = commands.getActiveCharacterData(ctx.target.actorId);
+      return Boolean(target && _downedPlayers.has(target.characterId));
+    },
+    execute: async ctx => {
+      await rescueTarget(ctx.actorId, ctx.target.actorId);
+    }
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -682,6 +719,7 @@ module.exports = {
   commandDefs,
   initDeathService,
   rescueTarget,
+  registerInteractions,
   bleedOut,
   executeRespawn,
   logDeathContext,
