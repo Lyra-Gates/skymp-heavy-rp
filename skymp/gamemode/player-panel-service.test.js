@@ -43,6 +43,16 @@ Module._load = function(request, parent, isMain) {
           return [{ id: 1, name: 'Barraca do Jorah', status: 'active', items: 3 }];
         }
         if (/FROM cities/i.test(sql)) return [];
+        if (/FROM character_professions/i.test(sql)) {
+          return [{
+            character_id: 501, profession_code: 'blacksmith', status: 'active',
+            rank: 2, xp: 150, granted_by_character_id: null,
+            joined_at: '2026-01-01', updated_at: '2026-01-01'
+          }];
+        }
+        if (/FROM character_signs/i.test(sql)) return [];
+        if (/FROM character_marks/i.test(sql)) return [];
+        if (/FROM character_paths/i.test(sql)) return [];
         return [];
       },
       init: () => {}
@@ -122,6 +132,40 @@ describe('player-panel-service', () => {
     });
   });
 
+  // PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 4: /profissoes e /alma como abas.
+  describe('buildProfessionsSnapshot', () => {
+    it('retorna null para ator sem personagem ativo', async () => {
+      const snapshot = await playerPanel.buildProfessionsSnapshot(0xdeadbeef);
+      assert.strictEqual(snapshot, null);
+    });
+
+    it('mapeia profession_code pro label do registry', async () => {
+      const snapshot = await playerPanel.buildProfessionsSnapshot(ACTOR_ID);
+      assert.ok(snapshot);
+      assert.strictEqual(snapshot.professions.length, 1);
+      assert.strictEqual(snapshot.professions[0].code, 'blacksmith');
+      assert.strictEqual(snapshot.professions[0].label, 'Ferreiro');
+      assert.strictEqual(snapshot.professions[0].rank, 2);
+      assert.strictEqual(snapshot.professions[0].xp, 150);
+      assert.strictEqual(snapshot.professions[0].status, 'active');
+    });
+  });
+
+  describe('buildSoulSnapshot', () => {
+    it('retorna null para ator sem personagem ativo', async () => {
+      const snapshot = await playerPanel.buildSoulSnapshot(0xdeadbeef);
+      assert.strictEqual(snapshot, null);
+    });
+
+    it('devolve o mesmo formato de soul-service.buildPanelPayload (sinais/marcas/caminhos)', async () => {
+      const snapshot = await playerPanel.buildSoulSnapshot(ACTOR_ID);
+      assert.ok(snapshot);
+      assert.ok(Array.isArray(snapshot.sinais));
+      assert.ok(Array.isArray(snapshot.marcas));
+      assert.ok(Array.isArray(snapshot.caminhos));
+    });
+  });
+
   describe('renameKnownPerson', () => {
     it('renomeia uma pessoa JÁ CONHECIDA e retorna true', async () => {
       const ok = await playerPanel.renameKnownPerson(ACTOR_ID, 42, 'O Cocheiro');
@@ -154,6 +198,11 @@ describe('player-panel-service', () => {
     it('trata panel:refresh:status sem lançar erro', async () => {
       const handled = await playerPanel.handleUiEvent(ACTOR_ID, { type: 'panel:refresh:status' });
       assert.strictEqual(handled, true);
+    });
+
+    it('trata panel:refresh:professions e panel:refresh:soul sem lançar erro', async () => {
+      assert.strictEqual(await playerPanel.handleUiEvent(ACTOR_ID, { type: 'panel:refresh:professions' }), true);
+      assert.strictEqual(await playerPanel.handleUiEvent(ACTOR_ID, { type: 'panel:refresh:soul' }), true);
     });
 
     it('ignora eventos de tipo desconhecido', async () => {

@@ -23,6 +23,9 @@ const transactionService = require('./core/transaction-service');
 const governance = require('./governance-service');
 const marketStalls = require('./market-stalls-service');
 const identity = require('./identity-service');
+const professionService = require('./profession-service');
+const professionRegistry = require('./core/profession-registry');
+const soulService = require('./soul-service');
 const panelRefreshBus = require('./core/panel-refresh-bus');
 // Mesmo motivo do death-service: a forma do `self` tem um lugar so.
 const { actorRef } = require('./core/papyrus');
@@ -122,6 +125,41 @@ async function buildSocialSnapshot(actorId) {
 }
 
 /**
+ * PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 4: `/profissoes` como aba, não só
+ * comando. Mesma leitura que o comando já faz (`getCharacterProfessions` +
+ * `professionRegistry` pro rótulo) — não duplica lógica, só reaproveita.
+ */
+async function buildProfessionsSnapshot(actorId) {
+  const character = commands.getActiveCharacterData(actorId);
+  if (!character) return null;
+
+  const estados = await professionService.getCharacterProfessions(character.characterId);
+  return {
+    professions: estados.map((estado) => {
+      const prof = professionRegistry.get(estado.professionCode);
+      return {
+        code: estado.professionCode,
+        label: prof ? prof.label : estado.professionCode,
+        status: estado.status,
+        rank: estado.rank,
+        xp: estado.xp
+      };
+    })
+  };
+}
+
+/**
+ * PLAYER_ACTION_SHORTCUTS_PLAN.md Fase 4: `/alma` como aba. `buildPanelPayload`
+ * já existia em `soul-service.js` — o nome já dizia "painel", só nunca tinha
+ * um painel de verdade chamando. Zero lógica nova aqui.
+ */
+async function buildSoulSnapshot(actorId) {
+  const character = commands.getActiveCharacterData(actorId);
+  if (!character) return null;
+  return soulService.buildPanelPayload(character.characterId);
+}
+
+/**
  * Renomeia (apelida) uma pessoa já conhecida direto pela aba Social do painel.
  * Não exige que o alvo esteja online — `character_known_identities` é indexada
  * por characterId, então isso funciona mesmo com o alvo desconectado — MAS exige
@@ -202,12 +240,26 @@ async function pushSocial(actorId) {
   sendPanelData(actorId, 'social', snapshot);
 }
 
+async function pushProfessions(actorId) {
+  const snapshot = await buildProfessionsSnapshot(actorId);
+  if (!snapshot) return;
+  sendPanelData(actorId, 'professions', snapshot);
+}
+
+async function pushSoul(actorId) {
+  const snapshot = await buildSoulSnapshot(actorId);
+  if (!snapshot) return;
+  sendPanelData(actorId, 'soul', snapshot);
+}
+
 async function pushAllSections(actorId) {
   await Promise.all([
     pushStatus(actorId),
     pushGovernance(actorId),
     pushEconomy(actorId),
-    pushSocial(actorId)
+    pushSocial(actorId),
+    pushProfessions(actorId),
+    pushSoul(actorId)
   ]);
 }
 
@@ -215,7 +267,9 @@ const PUSH_BY_CHANNEL = {
   status: pushStatus,
   governance: pushGovernance,
   economy: pushEconomy,
-  social: pushSocial
+  social: pushSocial,
+  professions: pushProfessions,
+  soul: pushSoul
 };
 
 /**
@@ -344,7 +398,7 @@ async function handleUiEvent(actorId, uiEvent) {
   // `panel:refresh:<aba>` é mandado pelo `switchTab` da UI a cada troca de aba.
   // Guardar qual foi a última é o que permite o laço de vitals pular quem não
   // está olhando o Status — ver `_activeTab`.
-  const trocaDeAba = /^panel:refresh:(status|governance|economy|social)$/.exec(uiEvent.type);
+  const trocaDeAba = /^panel:refresh:(status|governance|economy|social|professions|soul)$/.exec(uiEvent.type);
   if (trocaDeAba) _activeTab.set(actorId, trocaDeAba[1]);
 
   switch (uiEvent.type) {
@@ -365,6 +419,12 @@ async function handleUiEvent(actorId, uiEvent) {
       return true;
     case 'panel:refresh:social':
       await pushSocial(actorId);
+      return true;
+    case 'panel:refresh:professions':
+      await pushProfessions(actorId);
+      return true;
+    case 'panel:refresh:soul':
+      await pushSoul(actorId);
       return true;
     case 'panel:social:rename': {
       const payload = validateRenamePayload(uiEvent.data);
@@ -418,6 +478,8 @@ module.exports = {
   cleanup,
   buildStatusSnapshot,
   buildSocialSnapshot,
+  buildProfessionsSnapshot,
+  buildSoulSnapshot,
   renameKnownPerson,
   validateRenamePayload,
   handlePanelRefreshRequest,

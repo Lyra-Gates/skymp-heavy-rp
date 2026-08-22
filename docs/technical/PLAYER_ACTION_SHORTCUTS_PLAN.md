@@ -164,7 +164,31 @@ jogador), estas duas são o DONO gerenciando a própria barraca — o alvo é
 é recolhida — trabalho novo em `market-stalls-service.js`, não só
 `interactionRegistry.register`.
 
-### Fase 4 — `/profissoes` e `/alma` como abas do `/painel`
+### Fase 4 — `/profissoes` e `/alma` como abas do `/painel` ✅ implementado (22/08)
+
+Achado bom: `soul-service.js` já tinha `buildPanelPayload(characterId)` —
+o nome já dizia "painel" desde antes de existir um painel de verdade
+chamando. Zero lógica nova para a aba Alma, só o fio até `player-panel-
+service.js` (mesmo padrão de `buildSocialSnapshot`/`pushSocial`) e o
+render na CEF (`renderProfessions`/`renderSoul` em `player-panel.js`,
+reusando o helper `row()` que as outras quatro abas já usam). Duas abas
+novas em `index.html` (`Ofícios`/`Alma`), `_activeTab` e `handleUiEvent`
+em `player-panel-service.js` estendidos pros dois canais novos. 12 testes
+novos em `player-panel-service.test.js`, 1101 testes do gamemode passam.
+
+**Ressalva desta rodada**: a verificação em navegador que confirmou
+visualmente as Fases 0/1 (`Tab`/`M`/`F2`, botões de troca) não foi
+possível aqui — uma falha de sessão na ferramenta de browser (`No site is
+open in this tab` mesmo logo após `navigate`) impediu carregar o
+`player-panel.js` externo pra testar `renderProfessions`/`renderSoul` ao
+vivo. Verificado por: checagem de sintaxe (`new Function()` nos dois
+arquivos, sem erro) e leitura cuidadosa — o padrão reusa `row()`/`pp-h`/
+`pp-empty`, os mesmos que já renderizam as outras quatro abas, sem
+técnica de DOM nova. Diferente das fases anteriores, o lado CEF desta
+fase fica na mesma categoria "não validado" que o resto dos labs, não
+confirmado.
+
+Texto original do plano:
 
 Sem alvo, sem toggle de estado — é leitura pura, mesmo formato de
 `status`/`governance`/`economy`/`social` já em `player-panel-service.js`

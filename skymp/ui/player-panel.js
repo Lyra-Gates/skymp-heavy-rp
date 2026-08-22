@@ -22,8 +22,10 @@
   const ppState = {
     open: false,
     activeTab: 'status',
-    data: { status: null, governance: null, economy: null, social: null }
+    data: { status: null, governance: null, economy: null, social: null, professions: null, soul: null }
   };
+
+  const PROFESSION_STATUS_LABELS = { active: 'Ativa', suspended: 'Suspensa', revoked: 'Revogada' };
 
   const STATE_LABELS = {
     NORMAL: 'Em ordem', BUSY: 'Ocupado', DOWNED: 'Abatido', DEAD: 'Morto',
@@ -95,6 +97,8 @@
     else if (tab === 'governance') renderGovernance(data);
     else if (tab === 'economy') renderEconomy(data);
     else if (tab === 'social') renderSocial(data);
+    else if (tab === 'professions') renderProfessions(data);
+    else if (tab === 'soul') renderSoul(data);
   }
 
   /** Nome e chip de status no cabeçalho — sempre visíveis, qualquer que seja a aba aberta. */
@@ -222,6 +226,57 @@
     `;
 
     bindSocialRenameHandlers(body);
+  }
+
+  function renderProfessions(data) {
+    const body = $('pp-section-professions');
+    if (!data) {
+      body.innerHTML = '<div class="pp-empty">Sem dados de profissão ainda.</div>';
+      return;
+    }
+
+    const linhas = (data.professions || [])
+      .map(p => row(p.label, `rank ${p.rank}`, {
+        sub: ` · ${PROFESSION_STATUS_LABELS[p.status] || p.status} · xp ${p.xp}`,
+        valueClass: p.status === 'suspended' ? 'warn' : ''
+      }))
+      .join('') || '<div class="pp-empty">Você não tem nenhuma profissão.</div>';
+
+    body.innerHTML = `
+      <div class="pp-h">Ofícios</div>
+      ${linhas}
+    `;
+  }
+
+  /**
+   * Alma: só frases, nunca número — mesma regra que `soul-service.
+   * buildPanelPayload` já segue (ver `/alma`). Sinais e marcas chegam prontos
+   * do servidor; este arquivo não decide o texto, só o exibe.
+   */
+  function renderSoul(data) {
+    const body = $('pp-section-soul');
+    if (!data) {
+      body.innerHTML = '<div class="pp-empty">Sem dados da alma ainda.</div>';
+      return;
+    }
+
+    const sinais = (data.sinais || []).map(s => `<div class="pp-empty">${escapeHtml(s)}</div>`).join('');
+    const marcas = (data.marcas || []).map(m => `<div class="pp-empty">${escapeHtml(m.texto)}</div>`).join('');
+    const caminhos = (data.caminhos || [])
+      .map(c => row(c.arvore, c.no))
+      .join('');
+
+    const nada = !sinais && !marcas && !caminhos;
+
+    body.innerHTML = nada
+      ? '<div class="pp-empty">Ainda não há nada que você saiba sobre si mesmo.</div>'
+      : `
+        <div class="pp-h">Sinais</div>
+        ${sinais || '<div class="pp-empty">Nenhum sinal revelado.</div>'}
+        <div class="pp-h">Marcas</div>
+        ${marcas || '<div class="pp-empty">Nenhuma marca.</div>'}
+        ${caminhos ? `<div class="pp-h">Caminho</div>${caminhos}` : ''}
+      `;
   }
 
   /** Delegação de clique/submit pros botões "Apelidar" recém-criados via innerHTML. */
