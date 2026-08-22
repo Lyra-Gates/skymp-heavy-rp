@@ -1,0 +1,57 @@
+/* ============================================================================
+ * interaction-prompt.css
+ * Tema "Heavy RP" (pedra/pergaminho, borda metálica) — mesmos tokens de cor
+ * usados no painel do Depósito (Tarefa 10), pra uniformidade quando os dois
+ * existirem lado a lado.
+ * ==========================================================================*/
+
+#interaction-prompt {
+  --ip-parchment: #e8dcc0;
+  --ip-metal: #8a7a52;
+  --ip-metal-bright: #c9b877;
+  --ip-font: 'Bookman Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+
+  position: fixed;
+  left: 50%;
+  bottom: 14%;
+  transform: translate(-50%, 8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px 7px 10px;
+  border-radius: 999px;
+  background: rgba(20, 17, 12, 0.72);
+  border: 1px solid var(--ip-metal);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-family: var(--ip-font);
+  color: var(--ip-parchment);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 150; /* abaixo dos modais (200+), acima do HUD de voz */
+}
+/* Discreto, some rápido — este prompt existe pra não atrapalhar a visão em
+ * perigo (§15), não pra chamar atenção. */
+#interaction-prompt.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.ip-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--ip-metal-bright);
+  background: rgba(201, 184, 119, 0.16);
+  color: var(--ip-metal-bright);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ip-label {
+  font-size: 13.5px;
+  white-space: nowrap;
+}

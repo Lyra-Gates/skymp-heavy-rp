@@ -381,7 +381,17 @@ function registerCoreCommands() {
       console.error('[identity] Failed to introduce character:', err.message);
       sendNotification(actorId, 'Nao foi possivel registrar a apresentacao.');
     });
-  }, { module: 'identity', phase: 'core', description: 'Apresenta seu personagem a outro', usage: '/apresentar <actorId>' });
+  }, {
+    module: 'identity', phase: 'core',
+    description: 'Apresenta seu personagem a outro', usage: '/apresentar <actorId>',
+    // Tarefa 11 (Legacy Command Cleanup): redundante desde que virou
+    // `identity.introduce` no Interaction Framework (linha 352 deste
+    // arquivo) — some do menu de interação quando o alvo já conhece o
+    // personagem, e o prompt `[E]` chega no mesmo lugar. O comando continua
+    // registrado (fallback de rede ruim/staff), só não aparece num /help
+    // futuro que passe `playerFacing: true`.
+    hidden: true
+  });
 
   commandRegistry.register(['/apelido', '/alias'], (actorId, args) => {
     handleAliasCommand(actorId, args).catch(err => {

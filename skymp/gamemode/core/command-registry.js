@@ -27,6 +27,11 @@ const _commands = new Map();
  * @param {string} [opts.phase] - Fase do módulo ('core', 'lab', 'parked')
  * @param {string} [opts.description] - Descrição para /help
  * @param {string} [opts.usage] - Exemplo de uso
+ * @param {boolean} [opts.hidden] - Tarefa 11 (Legacy Command Cleanup): não
+ *   aparece na listagem voltada pro jogador (`list({ playerFacing: true })`),
+ *   mas continua registrado e funcional — é pra debug/staff/fallback de rede
+ *   ruim, não pra sumir. Comando que virou ação contextual real (o menu de
+ *   interação, o prompt `[E]`) marca `hidden: true` em vez de ser removido.
  */
 function register(command, handler, opts = {}) {
   const commands = Array.isArray(command) ? command : [command];
@@ -40,7 +45,8 @@ function register(command, handler, opts = {}) {
       module: opts.module || 'unknown',
       phase: opts.phase || 'core',
       description: opts.description || '',
-      usage: opts.usage || normalized
+      usage: opts.usage || normalized,
+      hidden: Boolean(opts.hidden)
     });
   }
 }
@@ -98,18 +104,27 @@ function has(command) {
 }
 
 /**
- * Lista todos os comandos registrados.
- * Usado por /help e painel de staff.
- * @returns {Array<{command: string, module: string, phase: string, description: string, usage: string}>}
+ * Lista comandos registrados.
+ *
+ * Sem opções, lista TUDO — inclusive `hidden` — porque é isso que um painel
+ * de staff/debug precisa ver. Ainda não existe um `/help` neste projeto (Tarefa
+ * 11 não inventou um); quando um for escrito, ele é quem passa
+ * `playerFacing: true`, não este arquivo quem decide sozinho o que o jogador
+ * vê.
+ *
+ * @param {{playerFacing?: boolean}} [opcoes]
+ * @returns {Array<{command: string, module: string, phase: string, description: string, usage: string, hidden: boolean}>}
  */
-function list() {
-  return Array.from(_commands.entries()).map(([cmd, entry]) => ({
+function list(opcoes = {}) {
+  const todos = Array.from(_commands.entries()).map(([cmd, entry]) => ({
     command: cmd,
     module: entry.module,
     phase: entry.phase,
     description: entry.description,
-    usage: entry.usage
+    usage: entry.usage,
+    hidden: entry.hidden
   }));
+  return opcoes.playerFacing ? todos.filter((c) => !c.hidden) : todos;
 }
 
 module.exports = { register, unregister, dispatch, has, list };

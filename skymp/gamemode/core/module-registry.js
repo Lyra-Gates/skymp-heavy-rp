@@ -301,7 +301,8 @@ async function bootAll() {
           module: id,
           phase: mod.phase,
           description: cmdDef.description || '',
-          usage: cmdDef.usage || cmdDef.name
+          usage: cmdDef.usage || cmdDef.name,
+          hidden: cmdDef.hidden
         });
       }
 

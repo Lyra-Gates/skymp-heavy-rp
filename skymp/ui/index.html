@@ -5,6 +5,7 @@
   <title>SkyMP Heavy RP - UI</title>
   <link rel="stylesheet" href="player-panel.css">
   <link rel="stylesheet" href="depot-panel.css">
+  <link rel="stylesheet" href="interaction-prompt.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -476,6 +477,12 @@
   </div>
 </div>
 
+<!-- Prompt de interação [E] (Tarefa 11: Interaction Hub) -->
+<div id="interaction-prompt" aria-hidden="true">
+  <span class="ip-key">E</span>
+  <span class="ip-label" id="interaction-prompt-label">Interagir</span>
+</div>
+
 <!-- Painel do Jogador -->
 <div id="player-panel" aria-hidden="true">
   <div class="pp-head">
@@ -555,6 +562,7 @@
     localStream: null,
     interaction: {
       targetActorId: null,
+      targetType: null,
       sections: [],
       selectedAction: null
     }
@@ -1098,6 +1106,11 @@
   function openInteractionMenu(data) {
     const d = normalizePayload(data);
     state.interaction.targetActorId = d.targetActorId || d.target || d.actorId || null;
+    // Tarefa 11: o prompt `[E]` pode mandar um alvo do tipo `object` (Depot),
+    // não só `player`. Sem isso, `interaction:query` sempre perguntaria pelo
+    // resolvedor errado e o menu voltaria vazio pra qualquer alvo que não
+    // fosse ator.
+    state.interaction.targetType = d.targetType || INTERACTION_TARGET_TYPE;
     state.interaction.sections = [];
     state.interaction.selectedAction = null;
 
@@ -1111,7 +1124,7 @@
 
     if (state.interaction.targetActorId) {
       sendUiEvent('interaction:query', {
-        targetType: INTERACTION_TARGET_TYPE,
+        targetType: state.interaction.targetType,
         targetId: formatActorId(state.interaction.targetActorId)
       });
     }
@@ -1124,7 +1137,7 @@
     // clicar em "Prender" achando que e outra pessoa.
     const alvoDaResposta = d.target && d.target.id ? d.target.id : null;
     const alvoAtual = state.interaction.targetActorId
-      ? `${INTERACTION_TARGET_TYPE}:${parseInt(String(formatActorId(state.interaction.targetActorId)).replace(/^0x/i, ''), 16)}`
+      ? `${state.interaction.targetType || INTERACTION_TARGET_TYPE}:${parseInt(String(formatActorId(state.interaction.targetActorId)).replace(/^0x/i, ''), 16)}`
       : null;
     if (alvoDaResposta && alvoAtual && alvoDaResposta !== alvoAtual) return;
 
@@ -1138,6 +1151,7 @@
     document.getElementById('interaction-menu').classList.remove('open');
     document.getElementById('interaction-menu').setAttribute('aria-hidden', 'true');
     state.interaction.targetActorId = null;
+    state.interaction.targetType = null;
     state.interaction.sections = [];
     state.interaction.selectedAction = null;
     clearInteractionDetail();
@@ -1408,5 +1422,6 @@
 </script>
 <script src="player-panel.js"></script>
 <script src="depot-panel.js"></script>
+<script src="interaction-prompt.js"></script>
 </body>
 </html>
