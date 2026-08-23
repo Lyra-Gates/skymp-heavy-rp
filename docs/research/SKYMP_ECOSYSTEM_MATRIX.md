@@ -14,11 +14,13 @@ A regra do projeto é marcar de onde vem cada afirmação. Sem isso, uma matriz 
 |---|---|---|
 | **Red House** | Leitura de código anterior, 434 linhas | [`REFERENCE_STUDY_SKYMP_RED_HOUSE.md`](../technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md) §4.1 é leitura de fonte |
 | **Divine Comedy** | **Completa** — repositório inteiro lido (30 arquivos, 38 KB) | Afirmações são leitura de código |
-| **Hijos de las Nieves** | **Completa no que importa** — diff commit a commit contra upstream | Só 7 commits próprios; todos inspecionados |
+| **Hijos de las Nieves** | **Completa no que importa** — diff commit a commit contra upstream | Só 7 commits próprios; todos inspecionados ⚠️ desatualizado, ver nota |
 | **Mereth** | Documento de design lido; **código não é público** | O repositório é a wiki publicada, não a fonte |
 | **Frostfall (TESV-RP)** | **Rasa** — árvore de arquivos + 1 módulo lido | 57 módulos listados, 1 verificado. Ver aviso abaixo |
 | **Crows RP** | **Rasa** — árvore de arquivos + README + layout de infra | Nenhum arquivo de lógica lido |
 | **Planet Nirn** | Linhagem e histórico de commits | Suficiente: o resultado é que não há o que ler |
+
+> ⚠️ **A linha do Hijos está desatualizada.** [`SKYMP_FORK_DIFF_MATRIX.md`](SKYMP_FORK_DIFF_MATRIX.md) §1.2 (14/08) achou oito branches nunca mescladas com o conteúdo mais relevante para nós — "7 commits" cobre só a `main`.
 
 > ⚠️ **Frostfall e Crows estão sub-pesquisados em relação ao seu valor aparente.** Frostfall tem 57 módulos de gameplay Heavy RP e é o acervo mais denso que o ecossistema tem; Crows tem a stack de operação mais completa. Nenhum dos dois foi lido a fundo. As linhas dessas colunas dizem **o que existe**, não **se é bom**. Aprofundar é a tarefa `RES-001` do roadmap.
 

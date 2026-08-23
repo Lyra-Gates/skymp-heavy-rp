@@ -74,6 +74,8 @@ MIT, então tudo é reutilizável com atribuição. Na prática, quase nada vale
 
 É um fork do `skyrim-multiplayer/skymp` que, segundo o próprio README, contém **apenas modificações de build do SkyrimPlatform**. O gameplay é mantido separado e não é público. Isso torna o projeto fácil de auditar: são 7 commits próprios, todos prefixados `HDN` ou `fix(skyrim-platform)`.
 
+> ⚠️ **Corrigido em 14/08/2026** por [`SKYMP_FORK_DIFF_MATRIX.md`](SKYMP_FORK_DIFF_MATRIX.md) §1.2: a contagem de "7 commits" cobre só a `main`. Há **oito branches** com trabalho que nunca foi mesclado — incluindo `HdnVanillaMenuPolicy` (autoridade fail-closed sobre menus vanilla) e `ItemPreviewApi` (preview real de item no CEF) — e é nelas que está o conteúdo mais relevante para o Heavy RP.
+
 ### O que eles realmente mudaram
 
 | Commit | Mudança | Nosso interesse |

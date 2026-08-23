@@ -126,6 +126,7 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 
 | Documento | Sobre |
 |---|---|
+| [research/SKYMP_FORK_RESEARCH_INDEX.md](research/SKYMP_FORK_RESEARCH_INDEX.md) | **Leia primeiro.** Mapa das três rodadas abaixo, o que cada uma cobre, e quais fatos de rodadas antigas já foram corrigidos por uma mais nova. |
 | [research/SKYMP_FORK_DIFF_MATRIX.md](research/SKYMP_FORK_DIFF_MATRIX.md) | **Rodada de 14/08**, e a primeira feita por comparação de commits em vez de leitura de árvore. Corrige duas afirmações registradas como fato: o "fork do Red House" não tem um commit próprio na `main`, e o Hijos tem o dobro do que estava documentado. |
 | [research/SKYMP_ECOSYSTEM_MATRIX.md](research/SKYMP_ECOSYSTEM_MATRIX.md) | **Rodada de 13/08.** Matriz de 37 sistemas contra sete projetos, com licença e profundidade de verificação de cada um — três deles não têm licença, e são justamente os que têm o que nos falta. |
 | [research/SKYMP_ECOSYSTEM_DEEP_DIVE.md](research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) | Relatório por projeto. Traz os quatro achados acionáveis, os dois resultados negativos, e onde nós estamos à frente. |
