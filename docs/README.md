@@ -172,6 +172,8 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 | [platform/MOD_DISTRIBUTION_POLICY.md](platform/MOD_DISTRIBUTION_POLICY.md) | O que pode ser redistribuído e o que só pode ser verificado. Quatro categorias, e como o manifesto as codifica. |
 | [testing/LAUNCHER_PLATFORM_TEST_MATRIX.md](testing/LAUNCHER_PLATFORM_TEST_MATRIX.md) | Instalação limpa, update, repair, manifesto adversário, backend fora do ar, fila, tickets. O que já é coberto, o que só uma máquina com Skyrim prova, e onde investir primeiro. |
 | [technical/LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | O que o código faz **hoje** — canais, manifestos, login, assinatura do instalador. |
+| [technical/LAUNCHER_UI_GUIDE.md](technical/LAUNCHER_UI_GUIDE.md) | Sistema de design do launcher, por que a Home é assimétrica, e as três credenciais do Discord que se confundem. |
+| [research/MO2_LAUNCHER_INTEGRATION_RESEARCH.md](research/MO2_LAUNCHER_INTEGRATION_RESEARCH.md) | **Pesquisa, não implementação.** Rodar o jogo via Mod Organizer 2 em vez de `skse64_loader.exe` direto — USVFS, precedente do Wabbajack, licença GPL-3.0, e o bloqueador real: compatibilidade SkyrimPlatform+USVFS nunca testada neste projeto. Plano faseado começando por bancada manual. |
 
 ---
 
