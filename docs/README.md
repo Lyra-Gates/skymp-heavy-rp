@@ -40,6 +40,15 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [OPERATIONS.md](technical/OPERATIONS.md) | Runbook: subir, conferir schema, quem pode o quê, portas, e o que fazer quando algo dá errado. |
 | [SERVER_OPTIONS_SCHEMA.md](technical/SERVER_OPTIONS_SCHEMA.md) | Opções de gameplay — **e quais delas realmente fazem efeito hoje**. |
 
+### Frameworks centrais
+
+| Documento | Sobre |
+|---|---|
+| [framework/MODULE_SYSTEM.md](framework/MODULE_SYSTEM.md) | O `module-registry`: ciclo de vida de módulo, a diferença entre PARKED e desligado por flag, ordenação topológica. Lista o que é PARKED de verdade hoje. |
+| [framework/INTERACTION_FRAMEWORK.md](framework/INTERACTION_FRAMEWORK.md) | O único caminho de interação desde 13/08 (`ADR-002`), 96 testes. Ver [testing/INTERACTION_TEST_MATRIX.md](testing/INTERACTION_TEST_MATRIX.md) para o que ainda falta provar em sessão real. |
+| [framework/INVENTORY_FRAMEWORK.md](framework/INVENTORY_FRAMEWORK.md) | O caminho obrigatório para qualquer item que muda de dono. Ver [testing/INVENTORY_TRANSACTION_MATRIX.md](testing/INVENTORY_TRANSACTION_MATRIX.md). |
+| [framework/ECONOMY_FRAMEWORK.md](framework/ECONOMY_FRAMEWORK.md) | Como saber que seu módulo está mexendo em ouro do jeito errado. Ver [testing/ECONOMY_SECURITY_MATRIX.md](testing/ECONOMY_SECURITY_MATRIX.md). |
+
 ### Distribuição e publicação
 
 | Documento | Sobre |
@@ -81,6 +90,22 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [technical/VOICE_MODE_KEY_AUDIT.md](technical/VOICE_MODE_KEY_AUDIT.md) | `Tab` cicla sussurro/normal/grito, `M` muta — ligando um backend de voz que já existia mas cujo cliente estava 100% morto (nenhuma tecla, nenhum botão, nenhum caminho até esta auditoria). Indicador persistente na CEF, decisão de acessibilidade. |
 | [technical/PLAYER_SHORTCUTS_AUDIT.md](technical/PLAYER_SHORTCUTS_AUDIT.md) | `F2` abre o `/painel`; inventário completo de todo comando `/` de jogador (18 arquivos varridos), categorizado por candidatura a atalho — o que já tinha caminho melhor, o que devia virar aba de painel, o que fica texto pra sempre. |
 | [technical/PLAYER_ACTION_SHORTCUTS_PLAN.md](technical/PLAYER_ACTION_SHORTCUTS_PLAN.md) | As 5 fases executadas a partir do inventário acima: trade-overlay consertada (os botões não chamavam nenhum listener), `/socorrer` e `/stallpack`/`/stallremove` no menu `[E]`, `/profissoes`/`/alma` como abas do painel, modal de escolha (`browserModal` tipo `'choice'`) pro pedido de revista. Corrige duas premissas erradas do próprio plano ao ler o código de verdade antes de codar. |
+
+### Economia: contratos, dívida, troca e crafting (reativados 20/08/2026)
+
+| Documento | Sobre |
+|---|---|
+| [gameplay/CONTRACTS.md](gameplay/CONTRACTS.md) | Um jogador publica trabalho, outro aceita, escrow trava no post. Saiu de PARKED em 20/08 — `LAB`, atrás de `ENABLE_CONTRACTS_SERVICE`. |
+| [gameplay/DEBT_SYSTEM.md](gameplay/DEBT_SYSTEM.md) | Registro de dívida selado quando um contrato não pode ser pago — nunca cobrança automática. Continua PARKED de verdade. |
+| [gameplay/TRADE_SYSTEM.md](gameplay/TRADE_SYSTEM.md) | Troca direta entre jogadores. Implementado e testado, sem UI CEF, nunca rodou numa sessão real. |
+| [gameplay/CRAFTING_SYSTEM.md](gameplay/CRAFTING_SYSTEM.md) | Receitas com gate de `required_profession`/`required_rank`. Reativado em 20/08; ganhou a Assinatura do Artesão em 22/08 — ver seção abaixo. |
+
+### Crime & Proveniência e Assinatura do Artesão (21-22/08/2026)
+
+| Documento | Sobre |
+|---|---|
+| [technical/CRIME_SYSTEM_AUDIT.md](technical/CRIME_SYSTEM_AUDIT.md) | `item_instances` rastreia posse de item roubado, janela "quente", restituição automática por combat-log, revista institucional revela o dono original. |
+| [design/MAKERS_MARK.md](design/MAKERS_MARK.md) | Artesão com rank suficiente assina o que craft (`crafted_item_signatures`); a revista institucional da guarda mostra essa autoria. |
 
 ### Design de mundo
 
@@ -200,6 +225,7 @@ As duas rodadas cobrem conjuntos **diferentes** de projetos e se somam. A de 12/
 |---|---|
 | [roadmap/PHASE_0_TEST_LOG.md](roadmap/PHASE_0_TEST_LOG.md) | Evidências dos testes da Fase 0 (11/07/2026 — boot de servidor, `offlineMode=true`). |
 | [roadmap/FASE_0_LOG_2026-08-06.md](roadmap/FASE_0_LOG_2026-08-06.md) | Registro da execução do [roteiro atual](technical/FASE_0_ROTEIRO.md). Etapa 0 preenchida; o resto aguarda a sessão com dois jogadores. |
+| [archive/README.md](archive/README.md) | Documentos que se autodeclaram superados — não deletados, preservados como registro histórico. |
 
 ---
 
