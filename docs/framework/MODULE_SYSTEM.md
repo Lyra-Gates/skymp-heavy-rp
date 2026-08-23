@@ -121,7 +121,7 @@ Erro no `shutdown` de um módulo não impede o desligamento dos demais, e o mód
 
 `CONTRIBUTING.md` §3.3 é explícito: nunca importe um módulo PARKED diretamente. `moduleRegistry.isEnabled()` é o portão, e ele só responde `true` para módulo que o registry inicializou de fato.
 
-PARKED hoje: `economy-regional`, `jobs-service`, `crafting-service`, `housing-service`, `trade-service`, `horse-service`.
+PARKED hoje: `economy-regional`, `housing-service`, `horse-service` (só aparecem em comentário no `phase0-basic.js`, sem `moduleRegistry.register`). `jobs-service`, `crafting-service` e `trade-service` **não são mais PARKED** — têm descritor registrado (`id: 'jobs'` / `id: 'crafting'` / `id: 'trade'`) em `phase0-basic.js`, atrás de `ENABLE_JOBS_SERVICE`/`ENABLE_CRAFTING_SERVICE`/`ENABLE_TRADE_SERVICE` (nascem `false`); jobs/crafting saíram em 20/08/2026 (ver `PARKED_SERVICES_DECISION.md` §"Terceira rodada"), trade já estava registrado antes disso.
 
 ---
 

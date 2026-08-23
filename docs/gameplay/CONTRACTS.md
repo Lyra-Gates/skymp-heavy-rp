@@ -10,10 +10,11 @@ o registro.** Sem NPC, sem fila de staff, sem arbitragem automática.
   Reimplementação a partir da ideia publicada, não port
   ([pesquisa](../research/SKYMP_ECOSYSTEM_DEEP_DIVE.md) §4).
 
-> ⚠️ **PARKED.** O serviço não está registrado no `core/module-registry.js` e
-> não roda. Ele é transacional e testado, mas nunca foi visto num servidor com
-> gente dentro. Ligar é outra decisão, depois da
-> [Fase 0](../technical/FASE_0_ROTEIRO.md).
+> ⚠️ **LAB.** Reativado em 20/08/2026 — saiu de PARKED, tem descritor
+> registrado (`id: 'contracts'`) em `phase0-basic.js`, atrás de
+> `ENABLE_CONTRACTS_SERVICE` (nasce `false`). Transacional e testado, mas
+> nunca foi visto num servidor com gente dentro. Ligar de verdade é outra
+> decisão, depois da [Fase 0](../technical/FASE_0_ROTEIRO.md).
 
 ---
 
