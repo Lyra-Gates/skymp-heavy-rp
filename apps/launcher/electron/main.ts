@@ -717,6 +717,19 @@ ipcMain.handle('discord-login', async () => {
       }
     });
 
+    // Sem isto, uma falha de listen() (porta 19847 ainda presa por uma
+    // tentativa de login anterior que nao fechou limpo) virava um evento
+    // 'error' sem listener no servidor HTTP -- e o comportamento padrao do
+    // Node pra 'error' sem handler e' lancar e derrubar o processo inteiro,
+    // exigindo reiniciar o launcher pra tentar de novo.
+    callbackServer.on('error', (err) => {
+      console.error('OAuth2 callback server error:', err);
+      if (authWindow && !authWindow.isDestroyed()) {
+        authWindow.close();
+      }
+      finish(null);
+    });
+
     callbackServer.listen(19847, '127.0.0.1', () => {
       console.log('OAuth2 callback server listening on 127.0.0.1:19847');
     });
