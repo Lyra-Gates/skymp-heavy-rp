@@ -82,6 +82,8 @@ O painel também devolve um **`sessionToken`** (`launcher_sessions`, migration v
 
 Achado ajudando um fork externo, que reportava "token error" e "preciso reiniciar o launcher toda vez que tento jogar de novo" — o restart não corrigia a causa raiz, só forçava um relogin que coincidentemente emitia um `launchTicket` novo.
 
+**Quando mesmo a sessão está morta** (expirou, foi revogada, ou o painel recusa por qualquer motivo), `join-queue`/`poll-queue` acabam devolvendo `invalid_ticket`/`not_authenticated` de qualquer forma. Antes disso, `Home.tsx` mostrava esse código de erro cru na tela (`"Erro: invalid_ticket"`), sem indicar o que fazer. Agora esses dois casos disparam `handleSessionExpired()`: desloga localmente (`discordLogout`, que também revoga a sessão no painel) e volta pra tela de login com uma mensagem clara, em vez de deixar o jogador preso num botão JOGAR que nunca vai funcionar sem uma ação que a tela não sugeria.
+
 ### O que acontece com o ticket depois
 
 O `launch-game` grava o ticket de sessão em `skymp_config.json` como `session`. Isso não é invenção nossa: é o campo que o servidor SkyMP lê quando `offlineMode: false`. Ele então resolve a sessão contra o master API — que passou a ser o nosso próprio painel (`ARCHITECTURE.md` 1.2.1) — e o `id` que voltar vira o `profileId` do gamemode.
@@ -189,3 +191,5 @@ A correção, achada e testada por um fork externo, depois verificada aqui com `
 - `main.ts`: `preload: path.join(__dirname, 'preload.mjs')`.
 
 **Efeito colateral que também precisou de correção:** com o preload em `.mjs`, o sandbox padrão do Electron pra scripts de preload tinha uma aresta mal resolvida — o arquivo carregava sem erro, mas `contextBridge.exposeInMainWorld` nunca rodava, e o renderer via `window.electronAPI === undefined`. `sandbox: false` na `BrowserWindow` principal resolve. `contextIsolation` continua `true` — é essa flag que isola o preload do conteúdo da página; o sandbox é uma camada a mais especificamente sobre chamadas de sistema do próprio preload, e o preload aqui é código nosso, não conteúdo de terceiro carregado na janela.
+
+**Tentativa de evitar o `sandbox: false` (revertida):** dava pra manter o sandbox ligado se o preload saísse em CommonJS em vez de ESM — o `.mjs` é a causa da aresta mal resolvida, não o sandbox em si. Na prática não funcionou: `vite-plugin-electron` nesta versão mira Vite 8/Rolldown e lê `build.rolldownOptions`, não `build.rollupOptions` — `format: 'cjs'` passado por `rollupOptions.output` era silenciosamente ignorado, e o arquivo saía com extensão `.cjs` mas conteúdo ESM (`import`/`export`) de verdade por dentro, o que quebraria ao carregar (pior que o estado anterior). Testado com `npm run build` e revertido antes de commitar. Se alguém quiser tentar de novo: a via certa provavelmente passa por `build.rolldownOptions` diretamente, ou por atualizar o `vite-plugin-electron` pra uma versão com suporte mais claro a isso — não foi investigado a fundo.

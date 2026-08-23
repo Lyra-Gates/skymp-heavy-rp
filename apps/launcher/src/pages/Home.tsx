@@ -50,6 +50,22 @@ export function Home({ auth, setAuth }: HomeProps) {
     return () => stopQueuePolling();
   }, []);
 
+  // `invalid_ticket`/`not_authenticated` do apps/game-api significam que nem
+  // a sessao de launcher (30 dias, ver migration-v25) conseguiu emitir um
+  // ticket valido — a unica saida real e' logar de novo. Antes disto o
+  // jogador so via "Erro: invalid_ticket" cru na tela, sem indicacao de que
+  // precisava relogar.
+  const isSessionExpiredMessage = (message: unknown) =>
+    message === 'invalid_ticket' || message === 'not_authenticated';
+
+  const handleSessionExpired = async () => {
+    stopQueuePolling();
+    setIsPlaying(false);
+    setStatus('Sessao expirada. Faca login novamente...');
+    await window.electronAPI.discordLogout();
+    setTimeout(() => setAuth(null), 1500);
+  };
+
   const startQueuePolling = (gamePath: string) => {
     stopQueuePolling();
     queuePollRef.current = setInterval(async () => {
@@ -65,6 +81,10 @@ export function Home({ auth, setAuth }: HomeProps) {
           setIsPlaying(true);
           await window.electronAPI.launchGame(gamePath, pollRes.ticket);
           setIsPlaying(false);
+          return;
+        }
+        if (isSessionExpiredMessage(pollRes.message)) {
+          await handleSessionExpired();
           return;
         }
         setStatus(`Erro: ${pollRes.message || 'fila indisponivel'}`);
@@ -128,6 +148,10 @@ export function Home({ auth, setAuth }: HomeProps) {
       if (queueRes.status === 'success') {
         setStatus('Iniciando Skyrim...');
         await window.electronAPI.launchGame(gamePath, queueRes.ticket);
+        return;
+      }
+      if (isSessionExpiredMessage(queueRes.message)) {
+        await handleSessionExpired();
         return;
       }
       setStatus(`Erro: ${queueRes.message || 'fila indisponivel'}`);

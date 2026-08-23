@@ -52,6 +52,14 @@ export default defineConfig(({ mode }) => {
           // Sem a extensao explicita, o instalador empacotado falhava com
           // "entry file not found" procurando o `.js` de antes dentro do
           // ASAR. Ver electron-builder.json e package.json "main".
+          //
+          // Tentativa de forcar o preload pra CJS (`format: 'cjs'`) foi
+          // revertida: esta versao do vite-plugin-electron mira Vite 8
+          // (Rolldown) e le `build.rolldownOptions`, nao `rollupOptions` —
+          // o `format` daqui era silenciosamente ignorado, e o arquivo saia
+          // com extensao `.cjs` mas `import`/`export` de verdade por dentro,
+          // o que quebraria ao carregar (pior que antes). Ver
+          // docs/technical/LAUNCHER_DISTRIBUTION.md §7.
           output: {
             entryFileNames: '[name].mjs',
           },

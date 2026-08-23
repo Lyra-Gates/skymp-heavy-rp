@@ -83,6 +83,11 @@ CREATE TABLE IF NOT EXISTS `character_professions` (
 
   CONSTRAINT `fk_charprof_character`   FOREIGN KEY (`character_id`)            REFERENCES `characters` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_charprof_granted_by`  FOREIGN KEY (`granted_by_character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL
+-- Sem risco hoje: as duas FKs acima sao INT (character_id), collation nao se
+-- aplica. Mas se um FK de VARCHAR for adicionado aqui contra uma tabela com
+-- COLLATE explicito (ex: `holds`), vai quebrar do mesmo jeito que
+-- migration-v20-depot-service.sql quebrou — ver o comentario la. Declare
+-- COLLATE=utf8mb4_unicode_ci explicito se isso acontecer.
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─────────────────────────────────────────────────────────────────────────────

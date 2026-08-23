@@ -51,4 +51,8 @@ CREATE TABLE IF NOT EXISTS `world_time_state` (
 
   PRIMARY KEY (`id`),
   CONSTRAINT `chk_world_time_single_row` CHECK (`id` = 1)
+-- Sem FK nenhuma aqui, entao sem risco hoje. Se um FK de VARCHAR for
+-- adicionado contra uma tabela com COLLATE explicito (ex: `holds`), vai
+-- quebrar do mesmo jeito que migration-v20-depot-service.sql quebrou — ver o
+-- comentario la. Declare COLLATE=utf8mb4_unicode_ci explicito se acontecer.
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

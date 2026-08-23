@@ -82,6 +82,15 @@ function createWindow() {
       // — isso ja isola o preload do conteudo da pagina; o sandbox e' uma
       // camada a mais especificamente sobre chamadas de sistema do proprio
       // preload, e o nosso preload e' codigo nosso, nao conteudo de terceiro.
+      //
+      // Tentei trocar o preload pra CommonJS pra manter o sandbox ligado
+      // (22/08/2026) e reverti: o vite-plugin-electron desta versao mira
+      // Vite 8/Rolldown e ignora silenciosamente `format: 'cjs'` passado por
+      // `rollupOptions` — o arquivo saia `.cjs` por fora, ESM por dentro, o
+      // que quebraria ao carregar. Sem uma via confirmada de configurar o
+      // formato do preload nesta versao do plugin, `sandbox: false` continua
+      // sendo a correcao que de fato funciona. Ver
+      // docs/technical/LAUNCHER_DISTRIBUTION.md §7.
       sandbox: false,
     },
   });
