@@ -144,3 +144,20 @@ pré-existentes (2 bloqueariam escrita nova) — nenhuma nova introduzida.
 
   Estado da suíte depois: **1107 testes, 264 suítes, 0 falhas**; typecheck
   sem erro novo (mesmos 4 pré-existentes de antes desta rodada).
+
+## Housekeeping de documentação (23/08/2026)
+
+Sem mudança de código. Auditoria de ~150 arquivos `.md` do repositório (local
+e branches remotas) achou banners de status desatualizados e conferiu contra
+`phase0-basic.js`, não só contra outro documento:
+
+- `docs/gameplay/CONTRACTS.md` e `docs/framework/MODULE_SYSTEM.md` ainda
+  diziam PARKED para `jobs`, `crafting` e `trade` — os três têm descritor
+  registrado (`moduleRegistry.register`) desde antes ou desde a reativação de
+  20/08. PARKED de verdade hoje: `economy-regional`, `housing-service`,
+  `horse-service` (commit `a4cb389`).
+- Seis documentos de pesquisa de forks em `docs/research/` (três rodadas sobre
+  conjuntos diferentes de projetos, não duplicatas) ganharam um índice único
+  ([`SKYMP_FORK_RESEARCH_INDEX.md`](docs/research/SKYMP_FORK_RESEARCH_INDEX.md))
+  e duas notas de correção onde um fato datado de 14/08 não tinha propagado
+  para os documentos de 13/08 que ele corrigia (commit `531233c`).
