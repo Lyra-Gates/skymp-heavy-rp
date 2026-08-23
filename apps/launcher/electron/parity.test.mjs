@@ -182,6 +182,60 @@ describe('comparação com o manifesto do servidor', () => {
     assert.equal(r.success, true);
   });
 
+  it('hasheia mais de um arquivo por vez quando concurrency > 1', async () => {
+    // Achado real: hash sequencial de um manifesto grande levou ~5 minutos
+    // com o disco ocioso entre leituras. Prova que o worker pool de fato
+    // sobrepõe chamadas em vez de esperar uma terminar pra começar a outra.
+    let emVoo = 0;
+    let picoEmVoo = 0;
+    const hashOfLento = async (nome) => {
+      emVoo++;
+      picoEmVoo = Math.max(picoEmVoo, emVoo);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      emVoo--;
+      return { 'a.esm': 'h1', 'b.esp': 'h2', 'c.esp': 'h3', 'd.esp': 'h4' }[nome.toLowerCase()];
+    };
+
+    const r = await compareMods({
+      serverMods: [
+        { filename: 'A.esm', hash: 'h1' },
+        { filename: 'B.esp', hash: 'h2' },
+        { filename: 'C.esp', hash: 'h3' },
+        { filename: 'D.esp', hash: 'h4' }
+      ],
+      localFiles: ['A.esm', 'B.esp', 'C.esp', 'D.esp'],
+      hashOf: hashOfLento,
+      concurrency: 4
+    });
+
+    assert.equal(r.success, true);
+    assert.ok(picoEmVoo > 1, `esperava mais de 1 hash simultâneo, pico foi ${picoEmVoo}`);
+  });
+
+  it('acusa o mod com o menor índice no manifesto quando mais de um diverge', async () => {
+    // Com hashing em paralelo, a ordem de conclusão não é mais a ordem do
+    // manifesto -- confirma que o erro reportado continua determinístico
+    // (sempre o de menor índice), não "qual terminou primeiro".
+    const hashOfForaDeOrdem = async (nome) => {
+      const atraso = { 'a.esp': 30, 'b.esp': 0 }[nome.toLowerCase()] ?? 0;
+      await new Promise(resolve => setTimeout(resolve, atraso));
+      return 'ERRADO';
+    };
+
+    const r = await compareMods({
+      serverMods: [
+        { filename: 'A.esp', hash: 'h1' },
+        { filename: 'B.esp', hash: 'h2' }
+      ],
+      localFiles: ['A.esp', 'B.esp'],
+      hashOf: hashOfForaDeOrdem,
+      concurrency: 2
+    });
+
+    assert.equal(r.success, false);
+    assert.match(r.error, /A\.esp/, 'deveria acusar A.esp (menor indice), mesmo B.esp terminando primeiro');
+  });
+
   it('manifesto inválido reprova em vez de aprovar por omissão', async () => {
     // Lista vazia passaria em qualquer laco. Se o servidor mandar lixo, a
     // resposta segura e "nao", nunca "sim".

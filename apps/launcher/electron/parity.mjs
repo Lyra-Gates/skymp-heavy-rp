@@ -102,15 +102,23 @@ export function parsePluginHeader(buffer) {
  * antes de hashear) força o Node a alocar o arquivo inteiro na heap de uma
  * vez por mod — em manifestos com dezenas de mods, isso estourava a memória
  * do processo do launcher antes mesmo do jogo abrir. `hashOf` assíncrono
- * (ex: hash via stream) deixa o chamador controlar isso; o `for` sequencial
- * abaixo garante que só um arquivo esteja "em voo" por vez.
+ * (ex: hash via stream) deixa o chamador controlar isso.
+ *
+ * Os hashes rodam com `concurrency` arquivos "em voo" ao mesmo tempo, não
+ * um de cada vez: hashear sequencialmente um manifesto com dezenas de BSAs
+ * de referência deixava o disco majoritariamente ocioso entre leituras e
+ * levava minutos (achado real: ~5 min num modpack de fork externo). Isso
+ * não reabre o problema de memória que motivou o streaming — cada stream
+ * ainda só segura um pedaço do arquivo por vez, `concurrency` só controla
+ * quantos arquivos DIFERENTES estão sendo lidos ao mesmo tempo.
  *
  * @param {Object}   params
  * @param {{filename: string, hash: string}[]} params.serverMods
  * @param {string[]} params.localFiles  nomes dos arquivos em `Data/`
  * @param {(filename: string) => (string | Promise<string>)} params.hashOf  hash do arquivo local
+ * @param {number}   [params.concurrency]  arquivos hasheados em paralelo (padrão 4)
  */
-export async function compareMods({ serverMods, localFiles, hashOf }) {
+export async function compareMods({ serverMods, localFiles, hashOf, concurrency = 4 }) {
   if (!Array.isArray(serverMods)) {
     return { success: false, error: 'Manifesto invalido do servidor.' };
   }
@@ -118,15 +126,37 @@ export async function compareMods({ serverMods, localFiles, hashOf }) {
   // Windows não distingue caixa; o manifesto é gerado noutra máquina.
   const porNomeMinusculo = new Map(localFiles.map(f => [f.toLowerCase(), f]));
 
+  // Falta de arquivo é checagem barata (só olha o Map) — resolve tudo antes
+  // de gastar I/O com hash, na ordem do manifesto, pra mensagem de erro
+  // continuar previsível quando um mod faltando vem antes de um hash ruim.
+  const resolvidos = [];
   for (const mod of serverMods) {
     const local = porNomeMinusculo.get(String(mod.filename).toLowerCase());
     if (!local) {
       return { success: false, error: `Mod faltando: ${mod.filename}` };
     }
-    const hash = await hashOf(local);
-    if (hash !== mod.hash) {
-      return { success: false, error: `O mod ${mod.filename} esta modificado ou corrompido!` };
+    resolvidos.push({ mod, local });
+  }
+
+  let cursor = 0;
+  let divergencia = null;
+
+  async function worker() {
+    while (cursor < resolvidos.length) {
+      const indice = cursor++;
+      const { mod, local } = resolvidos[indice];
+      const hash = await hashOf(local);
+      if (hash !== mod.hash && (divergencia === null || indice < divergencia.indice)) {
+        divergencia = { indice, filename: mod.filename };
+      }
     }
+  }
+
+  const trabalhadores = Math.max(1, Math.min(concurrency, resolvidos.length));
+  await Promise.all(Array.from({ length: trabalhadores }, worker));
+
+  if (divergencia) {
+    return { success: false, error: `O mod ${divergencia.filename} esta modificado ou corrompido!` };
   }
 
   return { success: true };

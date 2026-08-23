@@ -33,6 +33,9 @@ export function compareMods(params: {
   // uma vez (ex: fs.readFileSync) estourava a memoria do processo antes do
   // jogo abrir. hashOf assincrono deixa o chamador usar hash via stream.
   hashOf: (filename: string) => string | Promise<string>;
+  // Arquivos hasheados em paralelo (padrao 4) -- sequencial deixava
+  // manifestos grandes levarem minutos com o disco ocioso entre leituras.
+  concurrency?: number;
 }): Promise<{ success: boolean; error?: string }>;
 
 export function analyzePlugins(params: {
