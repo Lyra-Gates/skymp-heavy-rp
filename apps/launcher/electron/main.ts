@@ -5,8 +5,14 @@ import fs from 'fs';
 import http from 'http';
 import https from 'https';
 import crypto from 'crypto';
-import { URL } from 'url';
+import { URL, fileURLToPath } from 'url';
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
+
+// package.json tem "type": "module", entao o Vite empacota este arquivo como
+// ESM — __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
+// qualquer `npm start` falhava na primeira BrowserWindow com
+// "ReferenceError: __dirname is not defined", antes mesmo da janela abrir.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ─── Constants & Env ───
 // Estes valores são substituídos em tempo de build pelo `define` do
