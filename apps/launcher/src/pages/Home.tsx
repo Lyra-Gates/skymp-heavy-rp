@@ -1,13 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthData } from '../types/electron';
-import { Play, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import { Play, Settings as SettingsIcon, LogOut, FolderOpen, RefreshCw } from 'lucide-react';
 import heroBg from '../assets/launcher-bg.png';
 
 interface HomeProps {
   auth: AuthData;
   setAuth: (auth: AuthData | null) => void;
 }
+
+type AppInfo = {
+  launcherVersion: string;
+  clientVersion: string | null;
+  modsVersion: string | null;
+  gamePath: string | null;
+};
 
 const QUEUE_POLL_INTERVAL_MS = 4000;
 const SERVER_STATUS_POLL_INTERVAL_MS = 15000;
@@ -20,7 +27,14 @@ export function Home({ auth, setAuth }: HomeProps) {
   // sem nenhuma chamada por tras — bolinha verde e texto que nunca mudavam
   // mesmo com o apps/game-api fora do ar.
   const [serverOnline, setServerOnline] = useState<boolean | null>(null);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateResult, setUpdateResult] = useState<string>('');
   const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadAppInfo = () => {
+    window.electronAPI.getAppInfo().then(setAppInfo).catch(() => {});
+  };
 
   const stopQueuePolling = () => {
     if (queuePollRef.current !== null) {
@@ -49,6 +63,10 @@ export function Home({ auth, setAuth }: HomeProps) {
 
   useEffect(() => {
     return () => stopQueuePolling();
+  }, []);
+
+  useEffect(() => {
+    loadAppInfo();
   }, []);
 
   // `invalid_ticket`/`not_authenticated` do apps/game-api significam que nem
@@ -100,6 +118,37 @@ export function Home({ auth, setAuth }: HomeProps) {
     stopQueuePolling();
     await window.electronAPI.discordLogout();
     setAuth(null);
+  };
+
+  const handleChangePath = async () => {
+    const selected = await window.electronAPI.selectGamePath();
+    if (!selected) return;
+    const valid = await window.electronAPI.saveGamePath(selected);
+    if (valid.ok) loadAppInfo();
+  };
+
+  // Mesma checagem que Configuracoes ja fazia (handleCheckUpdates) — so
+  // reexposta aqui pra nao obrigar o jogador a sair da Home pra saber se ha
+  // atualizacao. A instalacao em si continua so em Configuracoes.
+  const handleCheckUpdates = async () => {
+    if (!appInfo?.gamePath) {
+      navigate('/settings');
+      return;
+    }
+    setCheckingUpdates(true);
+    setUpdateResult('');
+    try {
+      const client = await window.electronAPI.checkClientUpdate(appInfo.gamePath);
+      const mods = await window.electronAPI.checkModsUpdate(appInfo.gamePath);
+      const parts: string[] = [];
+      if (client.updateAvailable) parts.push(`cliente ${client.version}`);
+      if (mods.updateAvailable) parts.push(`mods ${mods.version}`);
+      setUpdateResult(parts.length > 0 ? `Atualização disponível: ${parts.join(', ')}.` : 'Tudo atualizado.');
+    } catch (e: any) {
+      setUpdateResult(`Erro: ${e.message}`);
+    } finally {
+      setCheckingUpdates(false);
+    }
   };
 
   const handlePlay = async () => {
@@ -167,8 +216,8 @@ export function Home({ auth, setAuth }: HomeProps) {
   const statusLabel = serverOnline === null ? 'Verificando' : serverOnline ? 'Online' : 'Offline';
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <nav className="nav-bar">
+    <div className="hero-shell has-image" style={{ ['--hero-image' as any]: `url(${heroBg})` }}>
+      <nav className="dashboard-nav">
         <div className="nav-brand">
           <img src="/logo.png" alt="" />
           <span>Skyrim Heavy RP</span>
@@ -200,15 +249,58 @@ export function Home({ auth, setAuth }: HomeProps) {
         </div>
       </nav>
 
-      <div className="hero-shell has-image" style={{ ['--hero-image' as any]: `url(${heroBg})` }}>
-        <div className="hero-content">
-          <h1 className="brand-title" style={{ fontSize: '40px' }}>Skyrim Heavy RP</h1>
+      <div className="dashboard-body">
+        <aside className="info-sidebar hud-panel">
+          <div>
+            <div className="info-section-title">Informações</div>
+            <div className="info-row">
+              <span className="info-row-label">Launcher</span>
+              <span className="info-row-value">v{appInfo?.launcherVersion ?? '—'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-row-label">Cliente</span>
+              <span className="info-row-value">{appInfo?.clientVersion ?? '—'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-row-label">Mods</span>
+              <span className="info-row-value">{appInfo?.modsVersion ?? '—'}</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="info-section-title">Diretório do Jogo</div>
+            <div className="info-path">{appInfo?.gamePath || 'Não configurado'}</div>
+            <div className="maintenance-list">
+              <button className="maintenance-btn" onClick={handleChangePath}>
+                <FolderOpen size={14} /> Trocar Pasta
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="info-section-title">Manutenção</div>
+            <div className="maintenance-list">
+              <button className="maintenance-btn" onClick={handleCheckUpdates} disabled={checkingUpdates}>
+                <RefreshCw size={14} /> {checkingUpdates ? 'Verificando...' : 'Verificar Atualizações'}
+              </button>
+              <button className="maintenance-btn" onClick={() => navigate('/settings')}>
+                <SettingsIcon size={14} /> Configurações Avançadas
+              </button>
+            </div>
+            {updateResult && (
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '10px' }}>{updateResult}</p>
+            )}
+          </div>
+        </aside>
+
+        <div className="dashboard-main">
+          <h1 className="brand-title" style={{ fontSize: '36px' }}>Skyrim Heavy RP</h1>
 
           <div className="brand-flourish">
             <span className="brand-flourish-mark" />
           </div>
 
-          <div className="status-card">
+          <div className="status-card hud-panel">
             <div className="status-card-label">Status do Servidor</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
               <span className={`status-dot ${statusDotClass}`} style={{ width: '10px', height: '10px' }} />

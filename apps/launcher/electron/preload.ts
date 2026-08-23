@@ -4,6 +4,7 @@ const api = {
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowClose: () => ipcRenderer.send('window-close'),
   getLauncherConfig: () => ipcRenderer.invoke('get-launcher-config'),
+  getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   saveGamePath: (folderPath: string) => ipcRenderer.invoke('save-game-path', folderPath),
   selectGamePath: () => ipcRenderer.invoke('select-game-path'),
   checkGamePath: (folderPath: string) => ipcRenderer.invoke('check-game-path', folderPath),

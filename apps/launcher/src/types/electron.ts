@@ -10,6 +10,7 @@ export interface ElectronAPI {
   windowMinimize: () => void;
   windowClose: () => void;
   getLauncherConfig: () => Promise<{ gamePath?: string; display?: { width?: number; height?: number; mode?: string } }>;
+  getAppInfo: () => Promise<{ launcherVersion: string; clientVersion: string | null; modsVersion: string | null; gamePath: string | null }>;
   saveGamePath: (folderPath: string) => Promise<{ ok: boolean; reason?: string }>;
   selectGamePath: () => Promise<string | null>;
   checkGamePath: (folderPath: string) => Promise<{ ok: boolean; reason: string }>;

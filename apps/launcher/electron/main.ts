@@ -155,6 +155,24 @@ app.on('activate', () => {
 ipcMain.on('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('window-close', () => { if (mainWindow) mainWindow.close(); });
 
+// ─── Info do App (Home) ───
+//
+// Tudo aqui já existia em algum canto do processo main — só nunca tinha sido
+// exposto pra tela inicial. `launcherVersion` já era lido em
+// report-recent-crashes; `clientVersion`/`modsVersion` já eram lidos via
+// readStamp() pelos handlers de update. Sem chamada de rede: os stamps são
+// arquivos locais gravados na última instalação/atualização bem-sucedida.
+ipcMain.handle('get-app-info', async () => {
+  const config = readLauncherConfig();
+  const gamePath = config.gamePath || null;
+  return {
+    launcherVersion: app.getVersion(),
+    clientVersion: gamePath ? readStamp(gamePath, CLIENT_VERSION_FILENAME) : null,
+    modsVersion: gamePath ? readStamp(gamePath, MODS_VERSION_FILENAME) : null,
+    gamePath,
+  };
+});
+
 // ─── Local Config ───
 function readLauncherConfig(): LauncherConfig {
   try {
