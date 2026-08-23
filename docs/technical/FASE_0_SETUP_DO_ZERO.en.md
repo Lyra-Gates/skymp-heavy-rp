@@ -105,6 +105,15 @@ Should finish with `Installed server artifact into ...`.
   fails (and the code only shows a generic message, not the real reason).
 - "Application ID" = "Client ID" (same value) → `DISCORD_CLIENT_ID`
   (apps\web, apps\bot-discord) and `VITE_DISCORD_CLIENT_ID` (apps\launcher).
+- **Don't confuse it with the "Public Key"** — a different value shown next to
+  the Application ID in the Portal, used to verify bot/slash-command
+  interaction signatures, not the Client ID. Using it as `DISCORD_CLIENT_ID`
+  breaks Discord login with `client_id: Value "..." is not snowflake`.
+- `DISCORD_CLIENT_SECRET` (OAuth2 tab, "Reset Secret") goes **only** in
+  `apps\web\.env` — never in `apps\launcher`. The panel is what trades `code`
+  for a token; embedding the secret in the launcher would expose it to any
+  player who extracts the installer. Full table of the three values in
+  `LAUNCHER_UI_GUIDE.md` §4 (Portuguese only for now).
 
 ## 8. Tunnel / public domain
 In `apps\web\.env`:
@@ -202,3 +211,13 @@ instead of the token.
 Without `TRUST_PROXY=true`, Express sees the Cloudflare Tunnel's IP instead
 of the player's — the rate limit keeps responding normally, it just counts
 the entire world as a single visitor.
+
+### `client_id: Value "SEU_CLIENT_ID_AQUI" is not snowflake` on Discord login
+`apps\launcher\.env.example` ships with `VITE_DISCORD_CLIENT_ID=SEU_CLIENT_ID_AQUI`
+as a placeholder — an "is the variable empty?" check passes right through it,
+because the placeholder isn't empty, just wrong. Check the actual **value**
+(the Discord Application ID, a long number like `123456789012345678`), not
+just whether the line exists. After fixing it, restart `npm run dev` — Vite
+inlines these variables at build time, it doesn't hot-reload when `.env`
+changes. More detail (including the "Public Key" trap) in
+`LAUNCHER_UI_GUIDE.md` §4 (Portuguese only for now).

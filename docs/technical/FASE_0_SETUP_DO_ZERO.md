@@ -102,6 +102,16 @@ Deve terminar com `Installed server artifact into ...`.
   uma mensagem genérica, não o motivo real).
 - "Application ID" = "Client ID" (mesmo valor) → `DISCORD_CLIENT_ID`
   (apps\web, apps\bot-discord) e `VITE_DISCORD_CLIENT_ID` (apps\launcher).
+- **Não confunda com a "Chave pública" (Public Key)** — é outro valor, mostrado
+  perto do Application ID no Portal, mas serve pra verificar assinatura de
+  interação de bot/slash command, não é o Client ID. Usá-la como
+  `DISCORD_CLIENT_ID` derruba o login do Discord com
+  `client_id: Valor "..." não é snowflake`.
+- `DISCORD_CLIENT_SECRET` (aba OAuth2, "Reset Secret") vai **só** em
+  `apps\web\.env` — nunca em `apps\launcher`. É o painel que troca `code` por
+  token; embutir o secret no launcher o exporia a qualquer jogador que
+  extraia o instalador. Detalhes e a tabela completa dos três valores em
+  `LAUNCHER_UI_GUIDE.md` §4.
 
 ## 8. Túnel/domínio público
 Em `apps\web\.env`:
@@ -197,3 +207,13 @@ Dois sistemas de config diferentes, comportamento diferente:
 Sem `TRUST_PROXY=true`, o Express enxerga o IP do Cloudflare Tunnel em vez do
 IP do jogador — o rate limit continua respondendo normalmente, só que conta o
 mundo inteiro como um único visitante.
+
+### `client_id: Valor "SEU_CLIENT_ID_AQUI" não é snowflake` no login do Discord
+`apps\launcher\.env.example` vem com `VITE_DISCORD_CLIENT_ID=SEU_CLIENT_ID_AQUI`
+como placeholder — uma checagem de "a variável está vazia?" passa batido,
+porque o placeholder não é vazio, só é errado. Confira o **valor** de verdade
+(o Application ID do Discord, um número longo tipo `123456789012345678`), não
+só se a linha existe. Depois de corrigir, reinicie `npm run dev` — o Vite
+injeta essas variáveis em tempo de build, não recarrega sozinho quando o
+`.env` muda. Mais detalhes (incluindo a armadilha da "Chave pública") em
+`LAUNCHER_UI_GUIDE.md` §4.
