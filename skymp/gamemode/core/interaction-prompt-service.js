@@ -54,7 +54,7 @@
 
 'use strict';
 
-const commands = require('./commands');
+const commands = require('../commands');
 const rangeUtils = require('./range-utils');
 const { RANGES } = require('./proximity-ranges');
 const { TARGET_TYPES } = require('./interaction-registry');

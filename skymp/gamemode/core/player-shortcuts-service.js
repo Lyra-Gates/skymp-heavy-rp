@@ -31,7 +31,7 @@
 
 'use strict';
 
-const commands = require('./commands');
+const commands = require('../commands');
 
 /** Property por onde o "sinal de pronto" chega ao cliente. */
 const PROPERTY = 'playerShortcuts';
