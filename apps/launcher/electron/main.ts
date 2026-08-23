@@ -686,6 +686,10 @@ ipcMain.handle('discord-login', async () => {
           // e não prova nada. Vem ausente se a conta ainda não existe no painel
           // (jogador que nunca pediu whitelist).
           launchTicket: user.launchTicket || null,
+          // Multiuso, ~30 dias — troca por um launchTicket novo em
+          // /api/launcher/session/refresh-ticket sem repetir este popup.
+          // Ver migration-v25-launcher-sessions.sql.
+          sessionToken: user.sessionToken || null,
           loginDate: new Date().toISOString(),
         };
 
@@ -773,6 +777,18 @@ ipcMain.handle('discord-login', async () => {
 });
 
 ipcMain.handle('discord-logout', async () => {
+  // Melhor esforço: se o painel estiver fora do ar, o logout local acontece
+  // do mesmo jeito. Sem isto, um auth.json roubado do disco continuaria
+  // rendendo launch tickets novos mesmo depois do dono deslogar.
+  try {
+    const auth = readAuthFile();
+    if (auth && auth.sessionToken) {
+      await postJsonToUrl(`${PANEL_URL}/api/launcher/session/revoke`, { sessionToken: auth.sessionToken });
+    }
+  } catch (e) {
+    console.error('Error revoking launcher session:', e);
+  }
+  currentQueueTicket = null;
   clearAuthFile();
   return true;
 });
@@ -803,9 +819,35 @@ ipcMain.handle('get-auth-status', async () => {
  */
 let currentQueueTicket: string | null = null;
 
-function nextQueueTicket(): string | null {
+/**
+ * Antes desta função trocar sempre por um ticket fresco via `sessionToken`,
+ * uma segunda tentativa de jogar na mesma sessão do launcher — sem `pollTicket`
+ * em memória, ex: a fila admitiu direto na primeira vez, sem fila de espera —
+ * reenviava o `launchTicket` do login, que já tinha sido consumido. O servidor
+ * respondia 401 invalid_ticket, e a única saída era refazer o OAuth do Discord
+ * inteiro. Ver migration-v25-launcher-sessions.sql.
+ */
+async function nextQueueTicket(): Promise<string | null> {
+  // Um pollTicket em memória (emitido pelo game-api enquanto na fila) sempre
+  // vence: já está fresco e foi emitido pra esta consulta específica.
+  if (currentQueueTicket) return currentQueueTicket;
+
   const auth = readAuthFile();
-  return currentQueueTicket || (auth && auth.launchTicket) || null;
+  if (!auth) return null;
+
+  if (auth.sessionToken) {
+    const refresh = await postJsonToUrl(`${PANEL_URL}/api/launcher/session/refresh-ticket`, {
+      sessionToken: auth.sessionToken,
+    });
+    if (refresh.status === 200 && refresh.data && typeof refresh.data.launchTicket === 'string') {
+      return refresh.data.launchTicket;
+    }
+    // Sessão expirada/revogada (ex: usuário deslogou de outra máquina): cai
+    // pro launchTicket abaixo, que na pior das hipóteses dá o mesmo
+    // 401 invalid_ticket que já existia antes desta mudança.
+  }
+
+  return auth.launchTicket || null;
 }
 
 function rememberQueueTicket(response: any) {
@@ -817,7 +859,7 @@ function rememberQueueTicket(response: any) {
 }
 
 ipcMain.handle('join-queue', async () => {
-  const ticket = nextQueueTicket();
+  const ticket = await nextQueueTicket();
   if (!ticket) return { status: 'error', message: 'not_authenticated' };
 
   const response = await postJsonToUrl(
@@ -835,7 +877,7 @@ ipcMain.handle('join-queue', async () => {
 // é credencial — quem o tem consulta a fila como aquela conta. Ver
 // `SEC-QS-01` em docs/roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md.
 ipcMain.handle('poll-queue', async () => {
-  const ticket = nextQueueTicket();
+  const ticket = await nextQueueTicket();
   if (!ticket) return { status: 'error', message: 'not_authenticated' };
 
   const response = await postJsonToUrl(

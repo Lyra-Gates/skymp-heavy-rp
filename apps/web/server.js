@@ -744,6 +744,35 @@ async function issueLaunchTicket(accountId, discordId, issuedIp) {
   return token;
 }
 
+// Sessão de launcher: multiuso e de vida longa, ao contrário do launch ticket
+// (uso único, ~5 min). Serve só pra uma coisa — pedir um launch ticket novo
+// sem repetir o OAuth do Discord inteiro. Ver migration-v25-launcher-sessions.sql
+// para o problema que isto resolve (token error após a primeira partida).
+const LAUNCHER_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+
+/** Emite uma sessão de launcher ligada a uma conta. Guarda só o hash. */
+async function issueLauncherSession(accountId, discordId, issuedIp) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await db(
+    `INSERT INTO launcher_sessions (session_hash, account_id, discord_id, expires_at, issued_ip)
+     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?)`,
+    [hashTicket(token), accountId, discordId, Math.floor(LAUNCHER_SESSION_TTL_MS / 1000), issuedIp || null]
+  );
+  return token;
+}
+
+/** Valida uma sessão de launcher. Não consome — é multiuso até expirar ou ser revogada. */
+async function resolveLauncherSession(token) {
+  if (typeof token !== 'string' || token.length < 32) return null;
+  const rows = await db(
+    `SELECT account_id, discord_id FROM launcher_sessions
+     WHERE session_hash = ? AND revoked_at IS NULL AND expires_at > NOW()`,
+    [hashTicket(token)]
+  );
+  if (rows.length === 0) return null;
+  return { accountId: rows[0].account_id, discordId: rows[0].discord_id };
+}
+
 
 // Troca do `code` do OAuth do Discord por um perfil, feita pelo painel.
 //
@@ -812,6 +841,7 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
     // (apps/game-api), que não teria como verificar nada sozinha.
     if (accountId) {
       profile.launchTicket = await issueLaunchTicket(accountId, user.id, ip);
+      profile.sessionToken = await issueLauncherSession(accountId, user.id, ip);
     }
 
     res.json(profile);
@@ -819,6 +849,48 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
     console.error('[/api/launcher/oauth/exchange]', err);
     res.status(500).json({ error: 'Erro interno do servidor' });
   }
+});
+
+// O launcher troca a sessão (multiuso, 30 dias) por um launch ticket novo
+// (uso único, ~5 min) antes de cada tentativa de entrar na fila — em vez de
+// reenviar um ticket que a primeira partida já consumiu. Ver
+// migration-v25-launcher-sessions.sql.
+app.post('/api/launcher/session/refresh-ticket', async (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (isRateLimited(`session-refresh:${ip}`, 30, 60 * 1000)) {
+    return res.status(429).json({ error: 'Muitas tentativas, aguarde um minuto.' });
+  }
+
+  const { sessionToken } = req.body || {};
+  const session = await resolveLauncherSession(sessionToken);
+  if (!session) return res.status(401).json({ error: 'invalid_session' });
+
+  try {
+    await db(`UPDATE launcher_sessions SET last_used_at = NOW() WHERE session_hash = ?`, [hashTicket(sessionToken)]);
+    const launchTicket = await issueLaunchTicket(session.accountId, session.discordId, ip);
+    res.json({ launchTicket });
+  } catch (err) {
+    console.error('[/api/launcher/session/refresh-ticket]', err);
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+});
+
+// Chamado no logout do launcher. Sempre responde 200 — não é o launcher quem
+// decide se o token existia ou já estava revogado, e não há nada de sensível
+// pra esconder atrás de um erro diferente aqui.
+app.post('/api/launcher/session/revoke', async (req, res) => {
+  const { sessionToken } = req.body || {};
+  if (typeof sessionToken === 'string' && sessionToken.length >= 32) {
+    try {
+      await db(
+        `UPDATE launcher_sessions SET revoked_at = NOW() WHERE session_hash = ? AND revoked_at IS NULL`,
+        [hashTicket(sessionToken)]
+      );
+    } catch (err) {
+      console.error('[/api/launcher/session/revoke]', err);
+    }
+  }
+  res.json({ ok: true });
 });
 
 // Aqui existia um `GET /api/launcher/manifest` que devolvia um manifesto fixo
@@ -843,4 +915,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, validateApplication, issueLaunchTicket, hashTicket, pruneCrashReports, CRASH_REPORT_DIR };
+module.exports = { app, validateApplication, issueLaunchTicket, issueLauncherSession, resolveLauncherSession, hashTicket, pruneCrashReports, CRASH_REPORT_DIR };

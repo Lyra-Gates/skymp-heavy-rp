@@ -44,7 +44,7 @@ process.env.SESSION_SECRET = 'test-session-secret';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DISCORD_CLIENT_SECRET = 'test-client-secret';
 
-const { app, validateApplication, hashTicket } = require(path.join(__dirname, 'server.js'));
+const { app, validateApplication, hashTicket, issueLauncherSession, resolveLauncherSession } = require(path.join(__dirname, 'server.js'));
 
 Module._load = realLoad;
 
@@ -194,6 +194,82 @@ describe('ticket de lançamento', () => {
     assert.equal(hash.length, 64);
     assert.notEqual(hash, token);
     assert.equal(hashTicket(token), hash, 'o hash precisa ser determinístico');
+  });
+});
+
+describe('sessão de launcher (refresh de ticket sem reOAuth)', () => {
+  test('issueLauncherSession grava só o hash, nunca o token em claro', async () => {
+    let inserted = null;
+    queryHandler = (sql, params) => {
+      if (sql.includes('INSERT INTO launcher_sessions')) {
+        inserted = params;
+        return { insertId: 1, affectedRows: 1 };
+      }
+      return [];
+    };
+
+    const token = await issueLauncherSession(42, 'discord-123', '127.0.0.1');
+    assert.equal(typeof token, 'string');
+    assert.ok(token.length >= 32);
+    // params: [session_hash, account_id, discord_id, ttl_seconds, issued_ip]
+    assert.equal(inserted[0], hashTicket(token));
+    assert.notEqual(inserted[0], token, 'o token em claro nao pode ir pro banco');
+    assert.equal(inserted[1], 42);
+  });
+
+  test('resolveLauncherSession rejeita token curto sem consultar o banco', async () => {
+    let queried = false;
+    queryHandler = () => { queried = true; return []; };
+    const result = await resolveLauncherSession('curto-demais');
+    assert.equal(result, null);
+    assert.equal(queried, false, 'token obviamente invalido nao devia gerar query');
+  });
+
+  test('resolveLauncherSession retorna null quando a query nao acha linha (expirada/revogada/inexistente)', async () => {
+    queryHandler = (sql) => {
+      assert.match(sql, /revoked_at IS NULL/);
+      assert.match(sql, /expires_at > NOW\(\)/);
+      return [];
+    };
+    const result = await resolveLauncherSession('x'.repeat(64));
+    assert.equal(result, null);
+  });
+
+  test('POST /api/launcher/session/refresh-ticket rejeita sessão inválida', async () => {
+    queryHandler = () => [];
+    const res = await post('/api/launcher/session/refresh-ticket', { sessionToken: 'nao-existe' });
+    assert.equal(res.status, 401);
+    assert.equal((await res.json()).error, 'invalid_session');
+  });
+
+  test('POST /api/launcher/session/refresh-ticket emite um launch ticket novo pra sessão válida', async () => {
+    const token = 'x'.repeat(64);
+    const hash = hashTicket(token);
+    queryHandler = (sql, params) => {
+      if (sql.includes('SELECT account_id, discord_id FROM launcher_sessions')) {
+        assert.equal(params[0], hash);
+        return [{ account_id: 7, discord_id: 'discord-7' }];
+      }
+      if (sql.includes('UPDATE launcher_sessions SET last_used_at')) return { affectedRows: 1 };
+      if (sql.includes('INSERT INTO launch_tickets')) return { insertId: 1, affectedRows: 1 };
+      return [];
+    };
+
+    const res = await post('/api/launcher/session/refresh-ticket', { sessionToken: token });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(typeof body.launchTicket, 'string');
+    assert.ok(body.launchTicket.length >= 32);
+  });
+
+  test('POST /api/launcher/session/revoke sempre responde ok (não vaza se o token existia)', async () => {
+    queryHandler = (sql) => {
+      if (sql.includes('UPDATE launcher_sessions SET revoked_at')) return { affectedRows: 0 };
+      return [];
+    };
+    const res = await post('/api/launcher/session/revoke', { sessionToken: 'y'.repeat(64) });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
   });
 });
 
