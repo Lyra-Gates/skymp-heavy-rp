@@ -37,12 +37,14 @@ Regras que o código já aplica (`apps/launcher/electron/main.ts`):
 
 Antes de jogar, o launcher roda dois passos:
 
-1. **`verify-mods`** — baixa `http://<SERVER_IP>:<API_PORT>/mods.json`, no formato `{ mods: [{ filename, hash }], loadOrder: [...] }`, e compara o hash de cada arquivo correspondente em `Data/`. **Este passo usa MD5**, não SHA-256 — é uma checagem de integridade/paridade, não uma barreira criptográfica, e é diferente do SHA-256 usado no download (seção 2).
+1. **`verify-mods`** — baixa `http://<SERVER_IP>:<API_PORT>/mods.json`, no formato `{ mods: [{ filename, hash }], loadOrder: [...] }`, e compara o hash de cada arquivo correspondente em `Data/`. **Este passo usa MD5**, não SHA-256 — é uma checagem de integridade/paridade, não uma barreira criptográfica, e é diferente do SHA-256 usado no download (seção 2). O hash é tirado por **stream** (`hashFileMd5` em `electron/main.ts`), não `fs.readFileSync` do arquivo inteiro — um `Skyrim.esm` de referência passa de 280 MB, e ler cada mod inteiro pra memória antes de hashear estourava o processo do launcher antes do jogo abrir (achado 22/08/2026, ajudando um fork externo). `compareMods` (`parity.mjs`) é `async` e faz `await hashOf(...)` por mod, sequencial — só um arquivo "em voo" de cada vez.
 2. **`analyze-plugins`** — lê o header de cada `.esp`/`.esl`/`.esm`, confere que todo master existe localmente e aparece **antes** do dependente na ordem informada pelo servidor.
 
 Os dois juntos é que fecham o contrato de FormID descrito em `docs/technical/MODS_AND_GAMEMODE_CONTRACT.md` seção 3: o (1) garante conteúdo igual, o (2) garante ordem igual.
 
 Quem serve esses endpoints é o **`apps/game-api`**.
+
+`GET /health` também é dele — devolve `{ ok, manifest, queue }`. Até 22/08/2026 não tinha consumidor: a tela inicial do launcher mostrava "Online" fixo no JSX, bolinha verde de mentira, sem chamada nenhuma por trás. `check-server-status` (IPC) consulta `/health` no carregamento da tela e a cada 15s; o botão JOGAR desabilita quando a resposta é offline.
 
 ### Gerando o `mods.json`
 
@@ -170,3 +172,20 @@ Para um servidor mantido por uma pessoa, o **Azure Trusted Signing** é o caminh
 3. Executar e anotar exatamente o que aparece: nada, "Mais informações", ou bloqueio.
 
 Registre o resultado aqui quando acontecer. Enquanto esta seção não tiver esse registro, o item 3.3 do QA continua **aberto**, mesmo com o workflow verde — pela mesma razão que vale para o resto do projeto: *build verde significa que não quebrou o que já era verificado, não que funciona na mão do jogador.*
+
+---
+
+## 7. Empacotamento: por que os arquivos do Electron são `.mjs` (22/08/2026)
+
+`apps/launcher/package.json` tem `"type": "module"` — o `apps/launcher/electron/main.ts` usa `import`, e `parity.mjs` é ESM de propósito (ver o próprio arquivo). Isso funciona sozinho pro `npm start` em dev (`electron .` lê `dist-electron/main.js` e o interpreta como ESM porque o `package.json` diz `"type": "module"`, e `__dirname` vira `path.dirname(fileURLToPath(import.meta.url))` no lugar do global de CommonJS — ver o comentário em `main.ts`).
+
+**Não é suficiente pro build empacotado.** O `electron-builder` não lê o `"type"` do `package.json` real — ele lê `extraMetadata.main` do `electron-builder.json`, que sobrescreve o manifesto do app empacotado. Antes desta correção, isso apontava pra um `main.js` cujo conteúdo era ESM mas cujo nome não dizia isso pra nada dentro do processo de empacotamento/ASAR — o instalador gerado falhava ao abrir com "entry file not found", procurando o arquivo pelo nome errado dentro do arquivo empacotado.
+
+A correção, achada e testada por um fork externo, depois verificada aqui com `npm run build` de ponta a ponta:
+
+- `vite.config.ts`: `rollupOptions.output.entryFileNames: '[name].mjs'` no build do `main` e do `preload` — os arquivos saem como `main.mjs`/`preload.mjs`, não `main.js`/`preload.js`. O conteúdo não muda, só o nome.
+- `package.json`: `"main": "dist-electron/main.mjs"`.
+- `electron-builder.json`: `extraMetadata.main: "dist-electron/main.mjs"`.
+- `main.ts`: `preload: path.join(__dirname, 'preload.mjs')`.
+
+**Efeito colateral que também precisou de correção:** com o preload em `.mjs`, o sandbox padrão do Electron pra scripts de preload tinha uma aresta mal resolvida — o arquivo carregava sem erro, mas `contextBridge.exposeInMainWorld` nunca rodava, e o renderer via `window.electronAPI === undefined`. `sandbox: false` na `BrowserWindow` principal resolve. `contextIsolation` continua `true` — é essa flag que isola o preload do conteúdo da página; o sandbox é uma camada a mais especificamente sobre chamadas de sistema do próprio preload, e o preload aqui é código nosso, não conteúdo de terceiro carregado na janela.
