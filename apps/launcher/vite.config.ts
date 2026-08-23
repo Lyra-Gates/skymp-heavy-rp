@@ -45,6 +45,17 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: 'dist-electron',
         minify: mode === 'production',
+        rollupOptions: {
+          // `.mjs`, nao `.js` — package.json tem "type": "module", mas o
+          // electron-builder empacota olhando so o campo `main` do
+          // extraMetadata dele, sem confiar no "type" do package.json real.
+          // Sem a extensao explicita, o instalador empacotado falhava com
+          // "entry file not found" procurando o `.js` de antes dentro do
+          // ASAR. Ver electron-builder.json e package.json "main".
+          output: {
+            entryFileNames: '[name].mjs',
+          },
+        },
       },
     },
   })

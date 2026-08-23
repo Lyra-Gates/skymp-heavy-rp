@@ -18,6 +18,7 @@ export interface ElectronAPI {
   discordLogin: () => Promise<AuthData | null>;
   discordLogout: () => Promise<boolean>;
   getAuthStatus: () => Promise<AuthData | null>;
+  checkServerStatus: () => Promise<{ online: boolean }>;
   joinQueue: () => Promise<any>;
   pollQueue: () => Promise<any>;
   getLocalPlugins: (folderPath: string) => Promise<any>;

@@ -9,11 +9,16 @@ interface HomeProps {
 }
 
 const QUEUE_POLL_INTERVAL_MS = 4000;
+const SERVER_STATUS_POLL_INTERVAL_MS = 15000;
 
 export function Home({ auth, setAuth }: HomeProps) {
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
   const [status, setStatus] = useState<string>('');
+  // null = ainda checando. Antes disto o card mostrava "Online" fixo no JSX,
+  // sem nenhuma chamada por tras — bolinha verde e texto que nunca mudavam
+  // mesmo com o apps/game-api fora do ar.
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopQueuePolling = () => {
@@ -22,6 +27,24 @@ export function Home({ auth, setAuth }: HomeProps) {
       queuePollRef.current = null;
     }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkStatus = async () => {
+      try {
+        const result = await window.electronAPI.checkServerStatus();
+        if (!cancelled) setServerOnline(result.online);
+      } catch {
+        if (!cancelled) setServerOnline(false);
+      }
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, SERVER_STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     return () => stopQueuePolling();
@@ -154,8 +177,15 @@ export function Home({ auth, setAuth }: HomeProps) {
         }}>
           <h2 style={{ fontSize: '16px', color: 'var(--text-muted)', marginBottom: '16px', textTransform: 'uppercase' }}>Status do Servidor</h2>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--success)' }} />
-            <span style={{ fontSize: '20px', fontWeight: 600 }}>Online</span>
+            <div style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              backgroundColor: serverOnline === null ? 'var(--text-muted)' : serverOnline ? 'var(--success)' : 'var(--error)'
+            }} />
+            <span style={{ fontSize: '20px', fontWeight: 600 }}>
+              {serverOnline === null ? 'Verificando...' : serverOnline ? 'Online' : 'Offline'}
+            </span>
           </div>
           <p style={{ color: 'var(--text-muted)' }}>Mods validados automaticamente</p>
         </div>
@@ -164,7 +194,7 @@ export function Home({ auth, setAuth }: HomeProps) {
           className="btn-primary"
           style={{ width: '100%', maxWidth: '400px', padding: '20px', fontSize: '24px' }}
           onClick={handlePlay}
-          disabled={isPlaying}
+          disabled={isPlaying || serverOnline === false}
         >
           <Play size={28} />
           {isPlaying ? 'AGUARDE' : 'JOGAR'}

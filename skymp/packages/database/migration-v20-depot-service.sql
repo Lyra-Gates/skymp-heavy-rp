@@ -35,6 +35,21 @@
 -- `MpObjectReference`" em "qual hold é esse".
 --
 -- ═══════════════════════════════════════════════════════════════════════════
+-- COLLATE explicito nas tres tabelas (22/08/2026)
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- `holds.id` (schema.sql) nao declara COLLATE proprio: herda
+-- `utf8mb4_unicode_ci` do `CREATE DATABASE ... COLLATE utf8mb4_unicode_ci`
+-- (schema.sql linha 3). Mas `DEFAULT CHARSET=utf8mb4` SEM `COLLATE` explicito
+-- numa CREATE TABLE nao herda o collate do banco — usa o collate PADRAO DO
+-- SERVIDOR para aquele charset. Em instalacoes de MariaDB onde o default de
+-- `utf8mb4` mudou (ex: `utf8mb4_uca1400_ai_ci` em versoes 10.10+/11.x, no
+-- lugar do antigo `utf8mb4_general_ci`), `hold_id VARCHAR(32)` nascia com um
+-- collate diferente do `holds.id` que ele referencia — e a FK falhava na
+-- criacao da tabela. Migration nunca testada contra uma instalacao de MariaDB
+-- com esse default; achado ajudando um fork externo a rodar isto pela
+-- primeira vez.
+-- ═══════════════════════════════════════════════════════════════════════════
 
 USE `skymp_rp`;
 
@@ -54,7 +69,7 @@ CREATE TABLE IF NOT EXISTS `character_depots` (
 
   CONSTRAINT `fk_depot_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_depot_hold`      FOREIGN KEY (`hold_id`)      REFERENCES `holds` (`id`)      ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `depot_inventory` (
   `id`         INT AUTO_INCREMENT PRIMARY KEY,
@@ -70,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `depot_inventory` (
   UNIQUE KEY `uk_depot_inventory_item` (`depot_id`, `base_id`),
 
   CONSTRAINT `fk_depot_inventory_depot` FOREIGN KEY (`depot_id`) REFERENCES `character_depots` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `depot_terminals` (
   -- FormDesc do MpObjectReference no mundo — hex SEM prefixo `0x`, dois-pontos,
@@ -80,7 +95,7 @@ CREATE TABLE IF NOT EXISTS `depot_terminals` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
   CONSTRAINT `fk_depot_terminal_hold` FOREIGN KEY (`hold_id`) REFERENCES `holds` (`id`) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE `character_depots`
   ADD INDEX IF NOT EXISTS `idx_depot_character` (`character_id`),

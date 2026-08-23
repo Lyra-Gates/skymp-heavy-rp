@@ -29,8 +29,11 @@ export function parsePluginHeader(buffer: Buffer | null | undefined): PluginHead
 export function compareMods(params: {
   serverMods: ServerMod[] | null | undefined;
   localFiles: string[];
-  hashOf: (filename: string) => string;
-}): { success: boolean; error?: string };
+  // Assincrono de proposito: hashear um .esm/.bsa de referencia inteiro de
+  // uma vez (ex: fs.readFileSync) estourava a memoria do processo antes do
+  // jogo abrir. hashOf assincrono deixa o chamador usar hash via stream.
+  hashOf: (filename: string) => string | Promise<string>;
+}): Promise<{ success: boolean; error?: string }>;
 
 export function analyzePlugins(params: {
   localPlugins: string[];

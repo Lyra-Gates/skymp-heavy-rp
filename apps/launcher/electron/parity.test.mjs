@@ -134,8 +134,8 @@ describe('cabeçalho TES4', () => {
 describe('comparação com o manifesto do servidor', () => {
   const hashOf = (nome) => ({ 'a.esm': 'h1', 'b.esp': 'h2', 'c.esp': 'ERRADO' })[nome.toLowerCase()];
 
-  it('aprova quando tudo bate', () => {
-    const r = compareMods({
+  it('aprova quando tudo bate', async () => {
+    const r = await compareMods({
       serverMods: [{ filename: 'A.esm', hash: 'h1' }, { filename: 'B.esp', hash: 'h2' }],
       localFiles: ['A.esm', 'B.esp'],
       hashOf
@@ -143,8 +143,8 @@ describe('comparação com o manifesto do servidor', () => {
     assert.equal(r.success, true);
   });
 
-  it('ignora diferença de caixa — o manifesto vem de outra máquina', () => {
-    const r = compareMods({
+  it('ignora diferença de caixa — o manifesto vem de outra máquina', async () => {
+    const r = await compareMods({
       serverMods: [{ filename: 'a.ESM', hash: 'h1' }],
       localFiles: ['A.esm'],
       hashOf
@@ -152,8 +152,8 @@ describe('comparação com o manifesto do servidor', () => {
     assert.equal(r.success, true, 'Windows nao distingue caixa; a verificacao tambem nao pode');
   });
 
-  it('reprova mod ausente, dizendo qual', () => {
-    const r = compareMods({
+  it('reprova mod ausente, dizendo qual', async () => {
+    const r = await compareMods({
       serverMods: [{ filename: 'Faltando.esp', hash: 'h9' }],
       localFiles: ['A.esm'],
       hashOf
@@ -162,8 +162,8 @@ describe('comparação com o manifesto do servidor', () => {
     assert.match(r.error, /Faltando\.esp/);
   });
 
-  it('reprova mod com hash diferente', () => {
-    const r = compareMods({
+  it('reprova mod com hash diferente', async () => {
+    const r = await compareMods({
       serverMods: [{ filename: 'C.esp', hash: 'h3' }],
       localFiles: ['C.esp'],
       hashOf
@@ -172,11 +172,21 @@ describe('comparação com o manifesto do servidor', () => {
     assert.match(r.error, /modificado ou corrompido/);
   });
 
-  it('manifesto inválido reprova em vez de aprovar por omissão', () => {
+  it('hashOf assíncrono (ex: hash via stream) funciona igual ao síncrono', async () => {
+    const hashOfAsync = async (nome) => hashOf(nome);
+    const r = await compareMods({
+      serverMods: [{ filename: 'A.esm', hash: 'h1' }],
+      localFiles: ['A.esm'],
+      hashOf: hashOfAsync
+    });
+    assert.equal(r.success, true);
+  });
+
+  it('manifesto inválido reprova em vez de aprovar por omissão', async () => {
     // Lista vazia passaria em qualquer laco. Se o servidor mandar lixo, a
     // resposta segura e "nao", nunca "sim".
-    assert.equal(compareMods({ serverMods: null, localFiles: [], hashOf }).success, false);
-    assert.equal(compareMods({ serverMods: undefined, localFiles: [], hashOf }).success, false);
+    assert.equal((await compareMods({ serverMods: null, localFiles: [], hashOf })).success, false);
+    assert.equal((await compareMods({ serverMods: undefined, localFiles: [], hashOf })).success, false);
   });
 });
 

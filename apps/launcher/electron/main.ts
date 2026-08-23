@@ -70,11 +70,19 @@ function createWindow() {
     transparent: false,
     backgroundColor: '#0a0a0a',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: true,
       backgroundThrottling: false,
+      // O sandbox padrao do Electron para o preload script tem arestas mal
+      // resolvidas com preload em ESM (`.mjs`): o arquivo carrega sem erro,
+      // mas o contextBridge.exposeInMainWorld nunca roda, e o renderer ve
+      // `window.electronAPI === undefined`. contextIsolation continua ligado
+      // — isso ja isola o preload do conteudo da pagina; o sandbox e' uma
+      // camada a mais especificamente sobre chamadas de sistema do proprio
+      // preload, e o nosso preload e' codigo nosso, nao conteudo de terceiro.
+      sandbox: false,
     },
   });
 
@@ -509,6 +517,21 @@ function sha256File(filePath: string): Promise<string> {
   });
 }
 
+// Mesmo raciocinio do sha256File acima, mas MD5 (algoritmo que o manifesto de
+// mods usa). A verificacao de paridade fazia fs.readFileSync do arquivo
+// inteiro antes de hashear -- para um Skyrim.esm de referencia (~280 MB) isso
+// aloca o arquivo inteiro na heap de uma vez, por mod, e estourava a memoria
+// do processo do launcher antes do jogo abrir. Stream evita isso.
+function hashFileMd5(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('md5');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
+}
+
 function extractZip(zipPath: string, destDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tar = spawn('tar', ['-xf', zipPath, '-C', destDir], { windowsHide: true });
@@ -858,6 +881,34 @@ function rememberQueueTicket(response: any) {
   return response;
 }
 
+// ─── Status do Servidor ───
+//
+// A tela inicial mostrava "Online" fixo no JSX, sem checagem nenhuma por
+// trás — um bolinha verde e um texto que nunca mudavam, independente do
+// apps/game-api estar de pé ou não. `GET /health` já existe no game-api
+// (usado só por operação manual); isto é o primeiro consumidor real dele.
+ipcMain.handle('check-server-status', async () => {
+  const online = await new Promise<boolean>((resolve) => {
+    const req = http.get(
+      `http://${SERVER_IP}:${API_PORT}/health`,
+      { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } },
+      (res) => {
+        res.resume(); // não precisa do corpo, só confirmar que respondeu
+        resolve(res.statusCode === 200);
+      }
+    );
+    req.on('error', () => resolve(false));
+    // Curto de propósito: isto roda no boot da tela e num intervalo — um
+    // timeout de 20s (padrão do httpGetJson) deixaria a UI travada "carregando"
+    // por muito tempo toda vez que o servidor estiver mesmo fora do ar.
+    req.setTimeout(4000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+  return { online };
+});
+
 ipcMain.handle('join-queue', async () => {
   const ticket = await nextQueueTicket();
   if (!ticket) return { status: 'error', message: 'not_authenticated' };
@@ -962,13 +1013,9 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
     }
 
     const allFiles = fs.readdirSync(dataPath);
-    const hashOf = (filename: string) => {
-      const h = crypto.createHash('md5');
-      h.update(fs.readFileSync(path.join(dataPath, filename)));
-      return h.digest('hex');
-    };
+    const hashOf = (filename: string) => hashFileMd5(path.join(dataPath, filename));
 
-    const resultado = compareMods({ serverMods: modsJson.mods, localFiles: allFiles, hashOf });
+    const resultado = await compareMods({ serverMods: modsJson.mods, localFiles: allFiles, hashOf });
     if (!resultado.success) return resultado;
 
     return { success: true, loadOrder: modsJson.loadOrder };

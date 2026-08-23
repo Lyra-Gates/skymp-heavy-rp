@@ -97,12 +97,20 @@ export function parsePluginHeader(buffer) {
 /**
  * Compara o conteúdo local com o manifesto do servidor.
  *
+ * `hashOf` é assíncrono de propósito: um `.esm`/`.bsa` de referência passa
+ * fácil de 200-300 MB, e um `hashOf` síncrono (ex: `fs.readFileSync` inteiro
+ * antes de hashear) força o Node a alocar o arquivo inteiro na heap de uma
+ * vez por mod — em manifestos com dezenas de mods, isso estourava a memória
+ * do processo do launcher antes mesmo do jogo abrir. `hashOf` assíncrono
+ * (ex: hash via stream) deixa o chamador controlar isso; o `for` sequencial
+ * abaixo garante que só um arquivo esteja "em voo" por vez.
+ *
  * @param {Object}   params
  * @param {{filename: string, hash: string}[]} params.serverMods
  * @param {string[]} params.localFiles  nomes dos arquivos em `Data/`
- * @param {(filename: string) => string} params.hashOf  hash do arquivo local
+ * @param {(filename: string) => (string | Promise<string>)} params.hashOf  hash do arquivo local
  */
-export function compareMods({ serverMods, localFiles, hashOf }) {
+export async function compareMods({ serverMods, localFiles, hashOf }) {
   if (!Array.isArray(serverMods)) {
     return { success: false, error: 'Manifesto invalido do servidor.' };
   }
@@ -115,7 +123,8 @@ export function compareMods({ serverMods, localFiles, hashOf }) {
     if (!local) {
       return { success: false, error: `Mod faltando: ${mod.filename}` };
     }
-    if (hashOf(local) !== mod.hash) {
+    const hash = await hashOf(local);
+    if (hash !== mod.hash) {
       return { success: false, error: `O mod ${mod.filename} esta modificado ou corrompido!` };
     }
   }
