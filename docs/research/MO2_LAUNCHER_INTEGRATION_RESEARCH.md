@@ -45,7 +45,7 @@ pra "escrever config que o MO2 lê".
   inteiramente dentro da própria pasta do MO2, sem tocar `%LOCALAPPDATA%` ou
   registro do Windows — é o modo que ferramentas de automação usam.
   **VERIFICADO** — documentação do MO2 (via busca), confirmado
-  independentemente pelo próprio requisito do Wabbajack (§4 abaixo).
+  independentemente pelo próprio requisito do Wabbajack (§5 abaixo).
 - **Perfis**: cada perfil é uma pasta com o próprio `modlist.txt` (quais mods
   estão ativos, em que ordem) e `plugins.txt` (quais `.esp`/`.esm` estão
   habilitados, em que ordem) — o mesmo par de conceitos que
@@ -62,7 +62,60 @@ pra "escrever config que o MO2 lê".
   na bancada antes de codificar**, o texto acima é a melhor evidência
   disponível, não uma cópia literal da doc oficial.
 
-## 3. Compatibilidade com SkyMP (SkyrimPlatform)
+## 3. Busca dedicada por precedente SkyMP (23/08/2026, segunda rodada)
+
+Checado especificamente a pedido: wiki oficial do `skyrim-multiplayer/skymp`,
+a lista de forks dele (`/forks`, ~176 entradas), busca de comunidade
+(Discord/fóruns), e os documentos de pesquisa de ecossistema que este
+projeto já tinha produzido (`SKYMP_ECOSYSTEM_MATRIX.md`,
+`SKYMP_ECOSYSTEM_DEEP_DIVE.md`, `SKYMP_FORK_DIFF_MATRIX.md`).
+
+**Resultado: nenhuma evidência de que MO2 seja usado por algum fork ou
+servidor SkyMP.** A wiki oficial não expôs conteúdo pesquisável sobre
+launcher/mod manager nesta consulta; a lista de forks não tem descrição
+visível sem abrir cada um individualmente (~176, não foi viável abrir todos);
+a busca de comunidade não retornou nenhum resultado ligando SkyMP a MO2.
+**Isto não prova que ninguém faz isso** — só que não há registro público
+achável, e a pesquisa anterior (§4 abaixo) já tinha essa mesma lacuna.
+
+**O que a busca *encontrou* de relevante, e que já estava catalogado neste
+projeto sem eu ter conectado os pontos:** a **Crows RP**
+(`LucasMagnoSP/Crows-RP`, sem licença — ver aviso abaixo) tem um sistema
+próprio de distribuição de mods chamado **ModSync** — não é MO2, é um
+launcher em C#/WPF com verificação por hash, **canais de update** (launcher
+e modpack separados, modpack herda o canal do launcher por padrão),
+quarentena em vez de apagar arquivo com problema, e uma suíte de testes
+(`ModSyncTests`, `UpdateChannelTests`, `VersionCompareTests`) que já foi
+lida e é considerada "o mais próximo de `MOD-001..004` que o ecossistema
+tem" (`SKYMP_ECOSYSTEM_DEEP_DIVE.md` §6). A matriz do ecossistema já
+classificava isso como **`ADAPT ⭐`** — a estrela mais alta de prioridade
+que a matriz usa — antes mesmo deste documento existir
+(`SKYMP_ECOSYSTEM_MATRIX.md` linha 80).
+
+> ⚠️ **Crows RP não tem licença** (todos os direitos reservados). Nada do
+> código pode ser copiado — só o *conceito* (canais separados, quarentena,
+> verificação por hash) pode informar uma reimplementação original, com a
+> origem registrada, exatamente como o resto deste projeto já trata as
+> referências sem licença (ver `SKYMP_ECOSYSTEM_DEEP_DIVE.md` §7).
+
+### O que isso muda na recomendação
+
+O pedido original — "launcher determina os mods, jogador não mexe, checa
+mods e atualizações" — **já é, em essência, o que o sistema atual deste
+projeto faz** (`compareMods`/`analyzePlugins` com verificação de hash,
+`checkClientUpdate`/`checkModsUpdate` com stamps locais — ver
+`LAUNCHER_DISTRIBUTION.md` §2-3). A pergunta real não é "MO2 sim ou não" —
+é **"o mecanismo atual (copiar/verificar arquivo direto em `Data/`) é bom o
+suficiente, ou vale adotar ideias do ModSync do Crows (canais separados,
+quarentena) por cima do que já existe?"** Isso é uma evolução do sistema
+atual, com prior art já lido e catalogado neste projeto — bem menos
+arriscado que trocar o mecanismo de execução inteiro por uma dependência
+GPL-3.0 de terceiro (MO2) cuja compatibilidade com o SkyrimPlatform nunca
+foi confirmada (logo abaixo). As duas linhas não são mutuamente exclusivas,
+mas **se for pra escolher uma primeiro, ModSync-style é o caminho com menos
+risco técnico desconhecido.**
+
+## 4. Compatibilidade com SkyMP (SkyrimPlatform)
 
 **NÃO TESTADO neste projeto.** O que existe como evidência externa:
 - Discussão da comunidade relata que MO2 consegue gerenciar os arquivos do
@@ -94,7 +147,7 @@ SkyrimPlatform conecta, a UI CEF abre, e a sessão de voz/proximidade
 funciona igual ao caminho direto. Sem isso, todo o resto deste documento é
 especulação bem fundamentada, não decisão.
 
-## 4. Precedente: o Wabbajack já faz algo parecido
+## 5. Precedente: o Wabbajack já faz algo parecido
 
 [Wabbajack](https://github.com/wabbajack-tools/wabbajack) é um instalador de
 modlists automatizado que reconstrói uma pasta MO2 inteira noutra máquina, a
@@ -115,7 +168,7 @@ Isso confirma duas coisas úteis pro nosso caso:
    precisamos da API do Nexus, só de popular a pasta `mods/` da instância
    com o que já baixamos hoje.
 
-## 5. Licenciamento
+## 6. Licenciamento
 
 MO2 é **GPL-3.0**. **VERIFICADO**. A forma mais segura de usar isso sem
 criar obrigação de distribuição pra nós: o launcher baixa o MO2 oficial
@@ -130,9 +183,9 @@ terceiros — precisa créditos/aviso de licença (`ASSET_LICENSE_REGISTRY.md`
 não é o lugar certo, é specific de assets de mod; criar entrada equivalente
 pra ferramentas de terceiro se isto avançar).
 
-## 6. Arquitetura proposta (rascunho, pré-decisão)
+## 7. Arquitetura proposta (rascunho, pré-decisão)
 
-### 6.1 Servidor (`apps/game-api`)
+### 7.1 Servidor (`apps/game-api`)
 - `/mods.json` (manifesto único hoje) vira **N manifestos** — um por perfil
   (`quality`, `performance`, ou os nomes que o produto decidir). Precisa
   decidir: os dois perfis têm os MESMOS mods obrigatórios (FormID/load
@@ -147,7 +200,7 @@ pra ferramentas de terceiro se isto avançar).
 - `scripts/generate-mods-manifest.js` precisa gerar os N manifestos a partir
   de N pastas de referência (ou de uma pasta base + overlays por perfil).
 
-### 6.2 Launcher (`apps/launcher/electron`)
+### 7.2 Launcher (`apps/launcher/electron`)
 - Módulo novo (`mo2-manager.ts` ou similar): baixar/extrair uma instância
   MO2 portátil na primeira execução (mesmo padrão de `downloadToFile`/
   `extractZip`/verificação de SHA-256 que `checkClientUpdate`/
@@ -164,17 +217,17 @@ pra ferramentas de terceiro se isto avançar).
 - Toggle qualidade/performance na UI = trocar qual perfil é passado no
   `-p`, sem o jogador nunca ver a janela do MO2. A UI do toggle é simples;
   a complexidade real está em garantir que os dois perfis nunca divirjam em
-  plugin habilitado (ver 6.1).
+  plugin habilitado (ver 7.1).
 - MO2 "aberto em segundo plano" enquanto baixa: viável rodar o MO2 em modo
   standalone/minimizado enquanto o launcher mostra o progresso do PRÓPRIO
   download (o launcher já faz o download, não precisamos que o MO2 baixe
   nada sozinho — ele só lê o que já está na pasta `mods/`). Rodar a GUI do
   MO2 visível ou escondida é decisão de produto, não limitação técnica.
 
-## 7. Riscos e perguntas em aberto
+## 8. Riscos e perguntas em aberto
 
 1. **[BLOQUEADOR]** SkyrimPlatform + USVFS funciona de verdade com a versão
-   do SkyMP que este projeto fixa? Só bancada resolve — ver §3.
+   do SkyMP que este projeto fixa? Só bancada resolve — ver §4.
 2. Os dois perfis (qualidade/performance) conseguem mesmo ficar restritos a
    loose files/texturas sem tocar plugin nenhum? Se não, a feature vira só
    "dois modpacks completos diferentes" — mais simples de raciocinar, mas
@@ -194,14 +247,18 @@ pra ferramentas de terceiro se isto avançar).
    qualquer decisão de design aqui é original deste projeto, não cópia
    validada de terceiro.
 
-## 8. Plano faseado (proposto, não iniciado)
+## 9. Plano faseado (proposto, não iniciado)
 
+0. **Decisão prévia**: comparar este caminho (MO2) contra evoluir o sistema
+   atual com ideias do ModSync do Crows (§3) — ver qual das duas o dono do
+   produto quer priorizar primeiro, já que não é óbvio que MO2 seja a opção
+   de menor risco.
 1. **Bancada manual** (sem código): instância MO2 portátil feita à mão,
    populada manualmente com o modpack atual, `plugins.txt` copiado do
    manifesto atual, `SKSE` configurado como executável, e um boot completo
-   até conectar num servidor Fase 0. Resolve o bloqueador do §3.
+   até conectar num servidor Fase 0. Resolve o bloqueador do §4.
 2. **Se a Fase 1 confirmar compatibilidade**: decisão de produto sobre a
-   regra do §6.1 (perfis só variam em loose files) — sem essa regra
+   regra do §7.1 (perfis só variam em loose files) — sem essa regra
    travada, não faz sentido desenhar o manifesto multi-perfil.
 3. **Servidor**: `generate-mods-manifest.js` gera N manifestos;
    `apps/game-api` serve por perfil.
@@ -210,7 +267,7 @@ pra ferramentas de terceiro se isto avançar).
    UI, ajuste de `verify-mods`/crash collection pros caminhos corretos sob
    USVFS.
 5. **QA**: os mesmos dois clientes lado a lado (um em cada perfil) — se
-   itens do banco aparecerem diferentes entre os dois, a regra do §6.1 foi
+   itens do banco aparecerem diferentes entre os dois, a regra do §7.1 foi
    violada em algum mod.
 
 Nenhuma fase acima foi iniciada. Este documento é o ponto de partida pra
