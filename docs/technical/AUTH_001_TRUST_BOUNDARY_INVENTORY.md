@@ -2,6 +2,13 @@
 
 Data: 2026-08-12. Fonte: código local, não apenas documentação.
 
+> **Adendo 22/08/2026:** entrou um novo identificador — `launcher session`
+> (`launcher_sessions`, migration v25). Multiuso, 30 dias, autoridade
+> restrita a uma única operação: emitir um `launch ticket` novo sem repassar
+> pelo Discord. Não participa da cadeia de identidade abaixo (não vira
+> `accountId` de sessão de jogo sozinho) — só reabastece o topo dela. Ver
+> `LAUNCHER_DISTRIBUTION.md` §4 e a linha nova na tabela de identificadores.
+
 ## Cadeia real atual
 
 ```text
@@ -29,6 +36,7 @@ Discord OAuth code
 | `discordId` | Discord API | web DB; launcher auth file | web após OAuth | UI/crash metadata | web/Discord | MEDIUM: launcher também possui cópia não autoritativa |
 | `accountId` | MariaDB | server-side e Master API response | FK/query server-side | game session/profile | MariaDB | GOOD |
 | launch ticket | web CSPRNG | claro só no launcher; hash DB | game-api, TTL + consumed_at | fila | web/game-api | GOOD, se consumo é atômico |
+| launcher session (22/08) | web CSPRNG | claro só no launcher (`auth.json`); hash DB | web, TTL 30d + revoked_at | `session/refresh-ticket` (reemite launch ticket) | web | GOOD; multiuso por design, escopo restrito a reemitir launch ticket, revogável no logout |
 | poll ticket | game-api | memória do main process | game-api, rotacionado | join/status | game-api | MEDIUM: perde estado no restart; nomes ambíguos |
 | game session | game-api CSPRNG | claro no launcher/config; hash em MariaDB | Master API, expiry/revoked | SkyMP login/reconnect | web/MariaDB | GOOD/PARTIAL: reutilizável por design, sem bind de personagem/audience explícito |
 | `masterKey` | operação | server settings + request path | comparação no web | Master API | operação | HIGH se vazado em logs/URL/proxy |

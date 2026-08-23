@@ -72,6 +72,14 @@ O painel valida o `redirect_uri` contra uma allowlist (`LAUNCHER_REDIRECT_URIS`)
 
 Junto com o perfil, o painel devolve um **`launchTicket`** (`launch_tickets`, migration v6) — de uso único, TTL de 5 min, guardado como hash SHA-256 pra que um vazamento do banco não vire credencial utilizável. É esse ticket que a fila exige.
 
+### Sessão de launcher: ticket novo sem refazer o OAuth (22/08/2026)
+
+O painel também devolve um **`sessionToken`** (`launcher_sessions`, migration v25) — multiuso, TTL de 30 dias, mesmo tratamento de hash SHA-256 do `launchTicket`. Resolve um buraco real: quando a fila admite direto (`status: 'success'`), o `apps/game-api` não emite `pollTicket` de reposição (só emite quando `status: 'queued'`) — então uma segunda tentativa de jogar na mesma sessão do launcher reenviava o `launchTicket` original, já consumido, e caía em `401 invalid_ticket`. A única saída antes disso era refazer o popup do Discord inteiro.
+
+`POST /api/launcher/session/refresh-ticket` troca o `sessionToken` por um `launchTicket` novo, sem tocar no Discord. O launcher chama isso (`nextQueueTicket()` em `electron/main.ts`) antes de cada `join-queue`/`poll-queue` sempre que não há `pollTicket` fresco em memória. `POST /api/launcher/session/revoke` é chamado no logout, pra um `auth.json` roubado do disco parar de valer depois que o dono deslogou. Nenhum dos dois tokens (`launchTicket`, `sessionToken`) chega ao renderer — ficam só no `auth.json` do main process, mesmo tratamento que o `launchTicket` já tinha.
+
+Achado ajudando um fork externo, que reportava "token error" e "preciso reiniciar o launcher toda vez que tento jogar de novo" — o restart não corrigia a causa raiz, só forçava um relogin que coincidentemente emitia um `launchTicket` novo.
+
 ### O que acontece com o ticket depois
 
 O `launch-game` grava o ticket de sessão em `skymp_config.json` como `session`. Isso não é invenção nossa: é o campo que o servidor SkyMP lê quando `offlineMode: false`. Ele então resolve a sessão contra o master API — que passou a ser o nosso próprio painel (`ARCHITECTURE.md` 1.2.1) — e o `id` que voltar vira o `profileId` do gamemode.
