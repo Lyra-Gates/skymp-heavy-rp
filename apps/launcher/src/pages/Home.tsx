@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthData } from '../types/electron';
 import { Play, Settings as SettingsIcon, LogOut } from 'lucide-react';
+import heroBg from '../assets/launcher-bg.png';
 
 interface HomeProps {
   auth: AuthData;
@@ -162,69 +163,72 @@ export function Home({ auth, setAuth }: HomeProps) {
     }
   };
 
+  const statusDotClass = serverOnline === null ? 'checking' : serverOnline ? 'online' : 'offline';
+  const statusLabel = serverOnline === null ? 'Verificando' : serverOnline ? 'Online' : 'Offline';
+
   return (
-    <div className="page-container" style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {auth.avatar ? (
-            <img src={auth.avatar} alt="Avatar" style={{ width: '48px', height: '48px', borderRadius: '50%', border: '2px solid var(--border-color)' }} />
-          ) : (
-            <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'var(--border-color)' }} />
-          )}
-          <div>
-            <div style={{ fontWeight: 600, fontSize: '18px' }}>{auth.globalName}</div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Logado via Discord</div>
-          </div>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <nav className="nav-bar">
+        <div className="nav-brand">
+          <img src="/logo.png" alt="" />
+          <span>Skyrim Heavy RP</span>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn-secondary" onClick={() => navigate('/settings')} title="Configuracoes">
-            <SettingsIcon size={20} />
-          </button>
-          <button className="btn-secondary" onClick={handleLogout} title="Sair">
-            <LogOut size={20} />
+        <div className="nav-tabs">
+          <button className="nav-tab active">Início</button>
+          <button className="nav-tab" onClick={() => navigate('/settings')}>
+            <SettingsIcon size={14} /> Configurações
           </button>
         </div>
-      </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
-        <h1 style={{ fontSize: '48px', color: 'var(--accent-gold)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Skyrim Heavy RP</h1>
-
-        <div style={{
-          background: 'var(--bg-panel)',
-          padding: '24px',
-          borderRadius: '8px',
-          border: '1px solid var(--border-color)',
-          width: '100%',
-          maxWidth: '400px',
-          textAlign: 'center'
-        }}>
-          <h2 style={{ fontSize: '16px', color: 'var(--text-muted)', marginBottom: '16px', textTransform: 'uppercase' }}>Status do Servidor</h2>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-            <div style={{
-              width: '12px',
-              height: '12px',
-              borderRadius: '50%',
-              backgroundColor: serverOnline === null ? 'var(--text-muted)' : serverOnline ? 'var(--success)' : 'var(--error)'
-            }} />
-            <span style={{ fontSize: '20px', fontWeight: 600 }}>
-              {serverOnline === null ? 'Verificando...' : serverOnline ? 'Online' : 'Offline'}
-            </span>
+        <div className="nav-right">
+          <div className="status-pill">
+            <span className={`status-dot ${statusDotClass}`} />
+            {statusLabel}
           </div>
-          <p style={{ color: 'var(--text-muted)' }}>Mods validados automaticamente</p>
+          <div className="identity-chip">
+            {auth.avatar ? (
+              <img src={auth.avatar} alt="Avatar" />
+            ) : (
+              <div className="identity-fallback" />
+            )}
+            <span>{auth.globalName}</span>
+          </div>
+          <button className="icon-btn" onClick={handleLogout} title="Sair">
+            <LogOut size={16} />
+          </button>
         </div>
+      </nav>
 
-        <button
-          className="btn-primary"
-          style={{ width: '100%', maxWidth: '400px', padding: '20px', fontSize: '24px' }}
-          onClick={handlePlay}
-          disabled={isPlaying || serverOnline === false}
-        >
-          <Play size={28} />
-          {isPlaying ? 'AGUARDE' : 'JOGAR'}
-        </button>
+      <div className="hero-shell has-image" style={{ ['--hero-image' as any]: `url(${heroBg})` }}>
+        <div className="hero-content">
+          <h1 className="brand-title" style={{ fontSize: '40px' }}>Skyrim Heavy RP</h1>
 
-        {status && <p style={{ color: 'var(--accent-gold)', textAlign: 'center', maxWidth: '620px' }}>{status}</p>}
+          <div className="brand-flourish">
+            <span className="brand-flourish-mark" />
+          </div>
+
+          <div className="status-card">
+            <div className="status-card-label">Status do Servidor</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+              <span className={`status-dot ${statusDotClass}`} style={{ width: '10px', height: '10px' }} />
+              <span style={{ fontSize: '20px', fontWeight: 600 }}>{statusLabel}</span>
+            </div>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Mods validados automaticamente</p>
+          </div>
+
+          <button
+            className="btn-primary"
+            style={{ width: '100%', maxWidth: '400px', padding: '18px', fontSize: '20px' }}
+            onClick={handlePlay}
+            disabled={isPlaying || serverOnline === false}
+          >
+            <Play size={24} />
+            {isPlaying ? 'AGUARDE' : 'JOGAR'}
+          </button>
+
+          {status && <p style={{ color: 'var(--accent-gold)', textAlign: 'center', maxWidth: '620px' }}>{status}</p>}
+        </div>
       </div>
     </div>
   );

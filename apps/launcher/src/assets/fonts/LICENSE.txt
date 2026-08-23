@@ -1,0 +1,9 @@
+Cinzel (cinzel-400.woff2, cinzel-700.woff2, cinzel-900.woff2)
+
+Designed by Natanael Gama. Licensed under the SIL Open Font License, version 1.1
+(https://openfontlicense.org). Free for commercial use, no attribution required
+in the running application.
+
+Source: Google Fonts (https://fonts.google.com/specimen/Cinzel), self-hosted
+here (Latin subset, weights 400/700/900) so the packaged launcher doesn't
+depend on network access to fonts.gstatic.com to render its own UI.

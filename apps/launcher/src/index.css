@@ -1,13 +1,43 @@
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/cinzel-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/cinzel-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('./assets/fonts/cinzel-900.woff2') format('woff2');
+}
+
 :root {
   --bg-dark: #0a0a0a;
   --bg-panel: #141414;
+  --bg-panel-raised: #1a1a1a;
   --text-main: #f5f5f5;
   --text-muted: #a3a3a3;
   --accent-gold: #c9a227;
   --accent-gold-hover: #e0b734;
+  /* Acento frio (aurora) — usado com moderacao: status secundario, hover
+     de card, brilho de icone de voz. O ouro continua sendo o acento
+     primario; isto e' so a segunda voz da paleta. */
+  --accent-frost: #4fb8c9;
   --border-color: #262626;
+  --border-color-hover: #3a3a3a;
   --error: #ef4444;
   --success: #22c55e;
+  --font-display: 'Cinzel', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -17,7 +47,7 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   background-color: var(--bg-dark);
   color: var(--text-main);
   overflow: hidden;
@@ -134,4 +164,271 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+/* ─── Marca ───────────────────────────────────────────────────────────── */
+
+.brand-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-main);
+  background: linear-gradient(180deg, #f3d98a 0%, var(--accent-gold) 55%, #8a6a17 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* O flourish embaixo do titulo: nao e' decoracao generica, e' o mesmo
+   vocabulario do brasao do dragao (public/logo.png) resumido a uma linha —
+   um centro que se afina pras pontas, como o corpo do dragao se enrola em
+   torno do proprio brasao. */
+.brand-flourish {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.brand-flourish::before,
+.brand-flourish::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-gold));
+}
+
+.brand-flourish::after {
+  background: linear-gradient(90deg, var(--accent-gold), transparent);
+}
+
+.brand-flourish-mark {
+  width: 6px;
+  height: 6px;
+  transform: rotate(45deg);
+  background: var(--accent-gold);
+  flex-shrink: 0;
+}
+
+/* ─── Hero (fundo cheio, usado no Login e no topo da Home) ──────────────── */
+
+.hero-shell {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-dark);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+}
+
+/* Sem imagem gerada ainda: gradiente de substituicao no mesmo tom da arte
+   planejada (montanha escura + leve glow frio no horizonte), pra' a tela
+   nao ficar um retangulo preto liso enquanto a arte final nao chega. Troca
+   por --hero-image inline quando a arte existir. */
+.hero-shell {
+  background-image:
+    radial-gradient(ellipse 90% 60% at 50% 15%, rgba(79, 184, 201, 0.10), transparent 60%),
+    linear-gradient(180deg, #0d1210 0%, #0a0a0a 55%, #050505 100%);
+}
+
+.hero-shell.has-image {
+  background-image: var(--hero-image);
+}
+
+/* Vinheta: garante que texto e controles em cima da imagem continuem
+   legiveis nas bordas, onde a arte pode ser clara (neve, aurora). */
+.hero-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10, 10, 10, 0.55) 0%, rgba(10, 10, 10, 0.25) 35%, rgba(10, 10, 10, 0.65) 100%),
+    radial-gradient(ellipse 70% 70% at 50% 50%, transparent 40%, rgba(10, 10, 10, 0.5) 100%);
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px;
+}
+
+/* ─── Barra de navegacao (Home) ──────────────────────────────────────────── */
+
+.nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 56px;
+  background-color: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-brand img {
+  height: 28px;
+  width: 28px;
+  object-fit: contain;
+}
+
+.nav-brand span {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  color: var(--accent-gold);
+  text-transform: uppercase;
+}
+
+.nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nav-tab:hover {
+  color: var(--text-main);
+}
+
+.nav-tab.active {
+  color: var(--accent-gold);
+  border-bottom-color: var(--accent-gold);
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.identity-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel-raised);
+}
+
+.identity-chip img,
+.identity-chip .identity-fallback {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.identity-chip .identity-fallback {
+  background: var(--border-color);
+}
+
+.identity-chip span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel-raised);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.checking { background: var(--text-muted); }
+.status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.status-dot.offline { background: var(--error); }
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.icon-btn:hover {
+  color: var(--text-main);
+  border-color: var(--border-color-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Card de status do servidor ─────────────────────────────────────────── */
+
+.status-card {
+  background: rgba(20, 20, 20, 0.82);
+  backdrop-filter: blur(6px);
+  padding: 24px 28px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  border-top: 2px solid var(--accent-gold);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.status-card-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
 }

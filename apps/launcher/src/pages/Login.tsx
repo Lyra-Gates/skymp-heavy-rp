@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AuthData } from '../types/electron';
 import { LogIn } from 'lucide-react';
+import heroBg from '../assets/launcher-bg.png';
 
 interface LoginProps {
   setAuth: (auth: AuthData) => void;
@@ -28,23 +29,31 @@ export function Login({ setAuth }: LoginProps) {
   };
 
   return (
-    <div className="page-container" style={{ alignItems: 'center', justifyContent: 'center', gap: '32px' }}>
-      <div style={{ textAlign: 'center' }}>
-        <h1 style={{ fontSize: '32px', color: 'var(--accent-gold)', marginBottom: '8px', letterSpacing: '0.1em' }}>SKYRIM HEAVY RP</h1>
-        <p style={{ color: 'var(--text-muted)' }}>Autenticação necessária para jogar</p>
-      </div>
-      
-      <button 
-        className="btn-primary" 
-        style={{ padding: '16px 32px', fontSize: '16px' }}
-        onClick={handleLogin}
-        disabled={isLoggingIn}
-      >
-        <LogIn size={20} />
-        {isLoggingIn ? "Autenticando..." : "ENTRAR COM DISCORD"}
-      </button>
+    <div className="hero-shell has-image" style={{ ['--hero-image' as any]: `url(${heroBg})` }}>
+      <div className="hero-content">
+        <img src="/logo.png" alt="" style={{ width: '96px', height: '96px', objectFit: 'contain' }} />
 
-      {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
+        <div style={{ textAlign: 'center' }}>
+          <h1 className="brand-title" style={{ fontSize: '34px', marginBottom: '10px' }}>Skyrim Heavy RP</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Autenticação necessária para jogar</p>
+        </div>
+
+        <div className="brand-flourish">
+          <span className="brand-flourish-mark" />
+        </div>
+
+        <button
+          className="btn-primary"
+          style={{ padding: '16px 36px', fontSize: '15px', marginTop: '8px' }}
+          onClick={handleLogin}
+          disabled={isLoggingIn}
+        >
+          <LogIn size={20} />
+          {isLoggingIn ? "Autenticando..." : "Entrar com Discord"}
+        </button>
+
+        {error && <p style={{ color: 'var(--error)' }}>{error}</p>}
+      </div>
     </div>
   );
 }
