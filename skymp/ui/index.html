@@ -619,13 +619,26 @@
   // abaixo, e o mock só do caminho que ESTA correcao resolveu: cliente→servidor
   // (`sendUiEvent`), documentado oficialmente em
   // docs/skyrim_platform/browser.md (upstream) como `window.skyrimPlatform.sendMessage(...)`.
-  if (typeof mp === 'undefined') {
+  //
+  // Corrigido em 23/08/2026: o mock não pode rodar dentro do jogo de verdade.
+  // O CEF carrega esta página via `file://`; o bridge nativo do SkyrimPlatform
+  // injeta `window.skyrimPlatform`/`mp` de forma assíncrona, DEPOIS deste
+  // script já ter executado (visto em skyrim-platform.log real: "Executing
+  // script" vem antes de "registering browser api"). Sem esta guarda, o mock
+  // sempre disparava em jogo (não só fora dele), criando um
+  // `window.skyrimPlatform` incompleto (só `sendMessage`) que ficava no
+  // caminho do bridge de verdade quando ele tentava se popular — e o próprio
+  // client oficial (skymp5-client) usa `window.skyrimPlatform.widgets.set(...)`
+  // pra mostrar a tela de erro de login, que crashava com "Cannot read
+  // properties of undefined (reading 'set')" por falta de `.widgets`.
+  const RODANDO_FORA_DO_JOGO = location.protocol !== 'file:';
+  if (RODANDO_FORA_DO_JOGO && typeof mp === 'undefined') {
     window.mp = {
       trigger: (ev, data) => console.log('[mock] trigger:', ev, data),
       events: { add: (ev, cb) => console.log('[mock] event registered:', ev) }
     };
   }
-  if (typeof window.skyrimPlatform === 'undefined') {
+  if (RODANDO_FORA_DO_JOGO && typeof window.skyrimPlatform === 'undefined') {
     window.skyrimPlatform = {
       sendMessage: (...args) => console.log('[mock] skyrimPlatform.sendMessage:', args)
     };
@@ -1162,7 +1175,9 @@
       state.localStream.getAudioTracks().forEach(t => t.enabled = !state.muted);
     }
     sendSignal({ type: 'mute', muted: state.muted });
-    mp.trigger('cef::voip:mute_changed', { muted: state.muted });
+    if (typeof mp !== 'undefined' && mp && typeof mp.trigger === 'function') {
+      mp.trigger('cef::voip:mute_changed', { muted: state.muted });
+    }
     updateVoiceModeIndicator();
   }
 
@@ -1591,7 +1606,7 @@
   };
 
   // ── Eventos vindos do backend Node.js ────────────────────────────────────
-  if (mp && mp.events) {
+  if (typeof mp !== 'undefined' && mp && mp.events) {
     mp.events.add('showTradeUI', () => {
       document.getElementById('trade-overlay').classList.add('open');
     });
