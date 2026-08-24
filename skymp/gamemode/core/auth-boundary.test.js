@@ -73,13 +73,18 @@ test('auth boundary — launcher online injeta sessão opaca e remove profileId 
   assert.match(launcher, /delete config\.profileId/);
 });
 
-test('auth boundary — documenta o profileId legado ainda escrito no client settings', () => {
-  // Caracterização deliberada do blocker AUTH-01. Este teste deve ser invertido
-  // em AUTH-003 quando o fluxo online deixar de escrever a identidade legada.
+test('auth boundary — AUTH-01 corrigido: client settings gravam gameData.session, não profileId legado', () => {
+  // Invertido em 24/08/2026 (era a caracterização deliberada do blocker
+  // AUTH-01): confirmado em runtime real que o SkyMP nativo lê
+  // `gameData.session`, não `gameData.launcherTicket` — o campo que existia
+  // antes nunca era lido pelo engine, e `gameData.session` era apagado bem
+  // antes de a sessão ser resolvida via Master API.
   const launcher = read('apps/launcher/electron/main.ts');
 
-  assert.match(launcher, /clientSettings\.gameData\.profileId\s*=/);
-  assert.match(launcher, /clientSettings\.gameData\.launcherTicket\s*=/);
+  assert.match(launcher, /clientSettings\.gameData\.session\s*=\s*String\(ticket \|\| ''\)/);
+  assert.match(launcher, /delete clientSettings\.gameData\.profileId/);
+  assert.match(launcher, /delete clientSettings\.gameData\.launcherTicket/);
+  assert.doesNotMatch(launcher, /clientSettings\.gameData\.profileId\s*=\s*parseInt/);
 });
 
 test('auth boundary — consumo do launch ticket é um UPDATE condicional atômico', () => {

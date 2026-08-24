@@ -55,8 +55,7 @@ Discord OAuth code
 Confiável apenas para apresentação e armazenamento temporário. O usuário controla binário, renderer, arquivos e argumentos IPC.
 
 - Pode apresentar OAuth code e tickets, mas não provar identidade sozinho.
-- `launch-game` recebe `ticket` pelo IPC; o main process escreve `config.session`.
-- Também escreve `gameData.profileId` derivado do Discord: dado não confiável e redundante.
+- `launch-game` recebe `ticket` pelo IPC; o main process escreve `config.session` (em `skymp_config.json`) e `gameData.session` (em `skymp5-client-settings.txt`, o arquivo que o `skymp5-client` de fato lê — corrigido em 24/08/2026, ver AUTH-01).
 - `discordId`, username e crash metadata enviados pelo launcher não podem autorizar nada.
 
 ### Web/Master API
@@ -85,9 +84,11 @@ Transforma launch ticket em admissão e game session. É autoridade temporária 
 
 ## Security blockers
 
-### SECURITY-BLOCKER AUTH-01 — profileId redundante controlado pelo cliente
+### SECURITY-BLOCKER AUTH-01 — profileId redundante controlado pelo cliente (**RESOLVIDO em 2026-08-24**)
 
-`apps/launcher/electron/main.ts` grava `gameData.profileId` derivado dos últimos oito dígitos do Discord. Com `offlineMode=false`, espera-se que a engine ignore esse valor. Se produção/staging regredir para offline mode, o jogador escolhe sua identidade alterando um JSON local.
+`apps/launcher/electron/main.ts` gravava `gameData.profileId` derivado dos últimos oito dígitos do Discord, e apagava `gameData.session` — o campo que `skymp5-server/ts/systems/login.ts` de fato lê para resolver a sessão contra o Master API. Não era só teórico: confirmado em runtime real com um fork externo, a conexão nunca resolvia identidade (log do servidor: `No credentials found in gameData`), porque o campo que o engine precisa nunca chegava a existir no arquivo. `gameData.launcherTicket`, que o código escrevia no lugar, não é um campo que o upstream reconhece.
+
+Corrigido: `clientSettings.gameData.session = String(ticket || '')`, sem gravar `profileId`/`launcherTicket`. `auth-boundary.test.js` foi invertido (era caracterização deliberada do bug, agora afirma o comportamento correto).
 
 **Gate:** CI/config doctor deve reprovar `offlineMode=true` fora de ambiente local; o launcher não deve gravar profileId no fluxo online.
 

@@ -1416,11 +1416,20 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
       }
       if (!clientSettings.gameData) clientSettings.gameData = {};
       
+      // AUTH-01, agora corrigido: o SkyMP nativo (skymp5-server/ts/systems/login.ts)
+      // resolve `offlineMode: false` lendo `gameData.session` daqui e chamando o
+      // Master API com ele -- nao existe `gameData.launcherTicket` no contrato
+      // upstream, e um `gameData.profileId` declarado pelo cliente e exatamente o
+      // que offlineMode:false existe pra nao precisar confiar. A versao anterior
+      // apagava o unico campo que o engine realmente le e escrevia dois que ele
+      // ignora, entao a resolucao de identidade nunca completava -- confirmado em
+      // runtime real em 24/08/2026 (log do servidor: "No credentials found in
+      // gameData"), apos o jogador ja ter passado pela fila com um ticket valido.
       delete clientSettings.gameData.token;
-      delete clientSettings.gameData.session;
-      
-      clientSettings.gameData.profileId = parseInt(auth.discordId.slice(-8), 10) || 0;
-      clientSettings.gameData.launcherTicket = String(ticket || '');
+      delete clientSettings.gameData.profileId;
+      delete clientSettings.gameData.launcherTicket;
+
+      clientSettings.gameData.session = String(ticket || '');
       clientSettings['server-ip'] = SERVER_IP;
       clientSettings['server-port'] = SERVER_PORT;
       clientSettings['master'] = '';
