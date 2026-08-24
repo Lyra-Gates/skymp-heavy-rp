@@ -18,10 +18,9 @@ describe('profession-registry — catálogo inicial', () => {
     assert.strictEqual(codes.length, 13);
   });
 
-  it('nenhuma profissão builtin tem gameplay implementado', () => {
-    for (const p of registry.list()) {
-      assert.strictEqual(p.gameplayImplemented, false, `${p.code} não deveria ter gameplay ainda`);
-    }
+  it('somente Minerador declara gameplay implementado nesta fase', () => {
+    const implemented = registry.list().filter((p) => p.gameplayImplemented).map((p) => p.code);
+    assert.deepStrictEqual(implemented, ['miner']);
   });
 
   it('todas as builtins nascem enabled', () => {

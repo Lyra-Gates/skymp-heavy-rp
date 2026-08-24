@@ -11,7 +11,8 @@
  * estar REGISTRADA (existe no catálogo), ESTAR ENABLED (pode ser concedida) e
  * ter GAMEPLAY IMPLEMENTADO (existe automação por trás) — este arquivo lida só
  * com a primeira e a segunda. As treze profissões desta fase não têm a
- * terceira, e nenhuma linha abaixo assume que têm.
+ * terceira. Minerador já possui um consumidor separado (`mining-service.js`),
+ * sem colocar gameplay dentro deste núcleo.
  *
  * ─── Onde fica a decisão "pode fazer isso agora?" ───────────────────────────
  *

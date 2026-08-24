@@ -131,11 +131,14 @@ describe('connection-monitor', () => {
     state.setConnected(false);
     state.monitor.tick();
 
-    assert.deepEqual(state.monitor.snapshot(), {
+    const snapshot = state.monitor.snapshot();
+    assert.deepEqual({ ...snapshot, totals: { ...snapshot.totals, maxTickMs: 0 } }, {
       active: 0,
       states: { pending: 0, approved: 0, rejected: 0 },
       totals: { connections: 1, disconnections: 1, approved: 1, rejected: 0, ticks: 3, maxTickMs: 0 },
       pollingIntervalMs: 10
     });
+    assert.ok(Number.isFinite(snapshot.totals.maxTickMs));
+    assert.ok(snapshot.totals.maxTickMs >= 0);
   });
 });

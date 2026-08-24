@@ -10,7 +10,7 @@ La infraestructura se divide en los siguientes módulos:
 
 ### 1.1 Base de datos (MariaDB/MySQL)
 **MariaDB** es la fuente absoluta de verdad. Todos los servicios se conectan a ella.
-- **Tablas principales:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. El esquema completo está en `skymp/packages/database/schema.sql` más todas las migraciones disponibles (actualmente `v2`–`v26`), aplicadas **en orden numérico**. `npm run check:schema:list` produce el inventario autoritativo.
+- **Tablas principales:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. El esquema completo está en `skymp/packages/database/schema.sql` más todas las migraciones disponibles (actualmente `v2`–`v27`), aplicadas **en orden numérico**. `npm run check:schema:list` produce el inventario autoritativo.
 - Algunas tablas existen en el esquema pero ningún código activo las lee (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — pertenecen a módulos PARKED (ver 1.4).
 - **Regla estricta:** ningún cambio de estado del juego (dinero, posiciones, objetos) ocurre sin ser escrito o leído en MariaDB. Node.js no confía en datos sueltos en memoria durante períodos largos sin persistencia.
 

@@ -79,7 +79,7 @@ Ordem por dependência, não por tamanho.
 
 ## Item 1 — Ban com registro
 
-**Migration v27.** A próxima livre — a última é a `v26-web-sessions`.
+**Migration v28.** A próxima livre — a última é a `v27-resource-nodes`.
 
 > Conferi isto duas vezes de propósito: um `ls | tail` ordena alfabeticamente e mostra a v9 como última, porque `v9` vem depois de `v25` nessa ordem. Escolher o número errado criaria duas migrations com o mesmo nome em branches diferentes, e o conflito só apareceria no banco de quem aplicasse as duas. Use `ls | sort -V`, ou `npm run check:schema:list`, que ordena por número.
 

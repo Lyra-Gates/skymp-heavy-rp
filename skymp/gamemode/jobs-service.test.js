@@ -125,15 +125,16 @@ function mockRandomSequence(t, values) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// commandDefs — CURRENT CONTRACT: só estes 3 comandos, lidos de commandDefs(),
+// commandDefs — ALPHA CONTRACT: só a lenha pública fica exposta. Mineração
+// passa pelo Resource Node Framework; pesca aguarda FormID confirmado.
 // não da documentação (docs/gameplay não é fonte de verdade para isto).
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('jobs-service — commandDefs [CURRENT CONTRACT]', () => {
-  it('registra exatamente /cortarlenha, /garimpar, /pescar — sem duplicata, sem comando a mais', () => {
+  it('registra somente /cortarlenha e não expõe os bypasses de mineração/pesca', () => {
     const defs = jobs.commandDefs();
     const nomes = defs.map((d) => d.name);
-    assert.deepEqual(nomes.sort(), ['/cortarlenha', '/garimpar', '/pescar']);
+    assert.deepEqual(nomes, ['/cortarlenha']);
     assert.equal(new Set(nomes).size, nomes.length, 'nenhum comando duplicado');
   });
 
@@ -156,26 +157,10 @@ describe('jobs-service — commandDefs [CURRENT CONTRACT]', () => {
     assert.equal(giveItemCalls[0].baseId, ITEM_FIREWOOD);
   });
 
-  it('/garimpar aciona mineOre — handler entrega minério ao terminar', async (t) => {
-    resetState();
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    mockRandomSequence(t, [0, 0]); // chance=0 (ferro), amount=floor(0*2)+1=1
-    const handler = jobs.commandDefs().find((d) => d.name === '/garimpar').handler;
-    handler(ATOR);
-    await tickAndFlush(t, 15000);
-    assert.equal(giveItemCalls.length, 1);
-    assert.equal(giveItemCalls[0].baseId, ITEM_IRON_ORE);
-  });
-
-  it('/pescar aciona catchFish — handler entrega peixe ao terminar', async (t) => {
-    resetState();
-    t.mock.timers.enable({ apis: ['setTimeout'] });
-    mockRandomSequence(t, [0.9]); // > 0.8 => River Betty
-    const handler = jobs.commandDefs().find((d) => d.name === '/pescar').handler;
-    handler(ATOR);
-    await tickAndFlush(t, 20000);
-    assert.equal(giveItemCalls.length, 1);
-    assert.equal(giveItemCalls[0].baseId, FISH_RIVER_BETTY);
+  it('não publica /garimpar nem /pescar na alfa', () => {
+    const nomes = jobs.commandDefs().map((d) => d.name);
+    assert.ok(!nomes.includes('/garimpar'));
+    assert.ok(!nomes.includes('/pescar'));
   });
 });
 

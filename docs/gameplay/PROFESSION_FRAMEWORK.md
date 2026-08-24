@@ -1,11 +1,10 @@
 # Profession Framework
 
 **Estado: LAB.** O **Profession Core** está implementado, testado e atrás de
-`ENABLE_PROFESSION_SERVICE` (nasce desligado). Nenhuma profissão tem gameplay
-por trás — nenhum minério, nenhuma árvore, nenhuma receita. Isto é a
-plataforma sobre a qual essas fases futuras vão ser construídas, não a
-mineração em si. Ver a auditoria de Fase 0 que precedeu esta implementação
-para o inventário completo do que já existia no projeto antes desta rodada.
+`ENABLE_PROFESSION_SERVICE` (nasce desligado). Minerador é o primeiro builtin
+com gameplay automatizado, atrás de `ENABLE_MINING_SERVICE`; Fundidor e
+Curtidor já podem ser exigidos por receitas. Os demais continuam sendo
+catálogo e progressão, sem loop próprio.
 
 Arquivos: [`core/profession-registry.js`](../../skymp/gamemode/core/profession-registry.js),
 [`profession-service.js`](../../skymp/gamemode/profession-service.js),
@@ -17,16 +16,16 @@ as sete ações em [`admin-actions.js`](../../skymp/gamemode/admin-actions.js).
 
 | Existe | Não existe (fases futuras) |
 |---|---|
-| Catálogo de 13 profissões (`core/profession-registry.js`) | Resource Node Framework |
-| Concessão / revogação / suspensão / reativação | Mineração, corte de árvore, caça |
+| Catálogo de 13 profissões (`core/profession-registry.js`) | Nó físico de mineração homologado no jogo |
+| Concessão / revogação / suspensão / reativação | Corte de árvore e caça profissionais |
 | Rank numérico (0..`profession.maxRank`) | Curva de XP → level-up |
-| XP acumulado, ajuste administrativo | Ganho de XP por gameplay (coleta, crafting) |
+| XP acumulado, ajuste administrativo e XP de mineração | Curva automática de XP → rank |
 | 7 ações de staff, auditadas, atrás de 5 capabilities | Receita de crafting ligada a profissão/rank |
 | `character_professions` (migration v18) | Contrato de profissão (Mensageiro) |
 | `/profissoes` (jogador vê a própria ficha) | Qualquer UI CEF |
 
-Se você chegou aqui procurando onde ligar a mineração: não é aqui ainda. É na
-próxima fase, sobre o Resource Node Framework, consumindo a API da seção 6.
+Mineração exige `ENABLE_PROFESSION_SERVICE`, `ENABLE_INTERACTION_FRAMEWORK` e
+`ENABLE_MINING_SERVICE`; permanece desligada até a homologação física.
 
 ---
 
@@ -83,7 +82,7 @@ isso explicitamente:
 - **`registered`** — está no catálogo (`core/profession-registry.js`).
 - **`enabled`** — pode ser concedida HOJE. `grantProfession` checa isto.
 - **`gameplayImplemented`** — existe automação por trás (nó de recurso,
-  receita). **Nenhuma das treze tem, hoje.**
+  receita). **Minerador é o primeiro builtin marcado `true`.**
 
 `grantProfession` nunca checa `gameplayImplemented`. Um staff já pode designar
 um jogador como Minerador por RP, antes de qualquer picareta funcionar de
@@ -249,13 +248,13 @@ integração contra um banco real prova isso.
 
 ## 11. NOT IMPLEMENTED YET
 
-- Resource Node Framework: **motor implementado**, sem consumidor — ver
+- Resource Node Framework: **motor implementado, com Minerador consumidor** — ver
   [RESOURCE_NODE_FRAMEWORK.md](RESOURCE_NODE_FRAMEWORK.md). Nenhum nó está
   ligado a um objeto real do mundo ainda.
 - Minerador — **tem gameplay** desde antes desta rodada, via `mining-service.js`
   (interação `mining.mine` sobre o Resource Node Framework). Lenhador, Caçador,
-  Fazendeiro continuam sem coleta própria — só `jobs-service.js` (trabalho
-  livre, sem profissão) cobre lenha/minério/peixe hoje.
+  Fazendeiro continuam sem coleta própria. `jobs-service.js` expõe apenas o
+  trabalho público de lenha; os bypasses `/garimpar` e `/pescar` estão fora da alfa.
 - Fundidor, Curtidor — **têm gameplay** desde 20/08/2026: `crafting-service.js`
   foi reativado (ver [CRAFTING_SYSTEM.md](CRAFTING_SYSTEM.md)) com gate de
   profissão/rank real (`required_profession`/`required_rank`,

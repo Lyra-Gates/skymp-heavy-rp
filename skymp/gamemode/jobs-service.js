@@ -1,7 +1,8 @@
 /**
  * jobs-service.js
- * Coleta de recursos: lenha, minério e peixe. Trabalho livre — sem profissão
- * fixa, qualquer personagem carregado pode fazer.
+ * Trabalho público de lenha. A mineração autoritativa pertence ao módulo
+ * `mining` (profissão + nó físico + cooldown + idempotência). A pesca fica
+ * fora da alfa enquanto o FormID da vara não for confirmado.
  *
  * Registrado em `phase0-basic.js` como módulo `jobs` (fase `lab`,
  * `ENABLE_JOBS_SERVICE`, nasce desligado). A migração para o
@@ -30,7 +31,7 @@
  *
  * ─── O que continua pendente ─────────────────────────────────────────────────
  *
- * `Math.random()` decide quantidade e raridade. Não cai sob a §14.3 da
+ * `Math.random()` ainda decide a quantidade de lenha. Não cai sob a §14.3 da
  * Afinidade da Alma (que rege rolagem *oculta de alma*, e esta não é), mas
  * produção de recurso irreproduzível é um problema de economia por si só —
  * registrado na §7.3 do PARKED_SERVICES_DECISION, não resolvido aqui.
@@ -245,10 +246,10 @@ function catchFish(actorId) {
 }
 
 /**
- * Comandos de chat — a interface inteira, sem UI CEF, no mesmo padrão de
- * `trade-service.commandDefs()`. Não há checagem de profissão nem de rank:
- * este é o "bico" livre, deliberadamente mais fraco que a mineração via
- * `mining-service` (que exige a profissão `miner`).
+ * Comandos de chat da alfa. `/garimpar` foi removido porque contornava o
+ * Resource Node Framework; `/pescar` permanece fora da alfa porque a vara usa
+ * um FormID provisório. As funções legadas continuam exportadas apenas para
+ * caracterização até uma remoção dedicada.
  */
 function commandDefs() {
   return [
@@ -257,18 +258,6 @@ function commandDefs() {
       description: '[Trabalho livre] Corta lenha (precisa de Machado de Lenhador)',
       usage: '/cortarlenha',
       handler: (actorId) => chopWood(actorId)
-    },
-    {
-      name: '/garimpar',
-      description: '[Trabalho livre] Garimpa minério a mão (precisa de Picareta)',
-      usage: '/garimpar',
-      handler: (actorId) => mineOre(actorId)
-    },
-    {
-      name: '/pescar',
-      description: '[Trabalho livre] Pesca no rio ou lago',
-      usage: '/pescar',
-      handler: (actorId) => catchFish(actorId)
     }
   ];
 }

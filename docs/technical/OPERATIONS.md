@@ -34,7 +34,7 @@ cd skymp/gamemode
 npm run check:schema
 ```
 
-Todas as migrations disponíveis (`v2`–`v26` atualmente) precisam ser aplicadas em ordem numérica. Bancos existentes ainda exigem tratamento explícito; instalações vazias ganharam o aplicador automatizado abaixo. A v26 cria `web_sessions`, exigida pelo painel para persistir login entre restarts.
+Todas as migrations disponíveis (`v2`–`v27` atualmente) precisam ser aplicadas em ordem numérica. Bancos existentes ainda exigem tratamento explícito; instalações vazias ganharam o aplicador automatizado abaixo. A v26 cria `web_sessions`; a v27 cria os nós de recurso e seus cooldowns persistentes.
 
 Para uma instalação **vazia**, o caminho automatizado é:
 

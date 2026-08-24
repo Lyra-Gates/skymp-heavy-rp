@@ -25,8 +25,8 @@
  *                               desativada aqui nega `grantProfession` mesmo que
  *                               esteja no catálogo.
  *   - `gameplayImplemented`   — existe sistema automatizado por trás (nó de
- *                               recurso, receita, contrato). **Nenhuma das treze
- *                               profissões desta fase tem isso.** Registrar
+ *                               recurso, receita, contrato). Minerador possui
+ *                               o primeiro loop, ainda atrás de feature flag.
  *                               `miner` não significa que existe mineração —
  *                               significa que um staff já pode designar alguém
  *                               como minerador para fins de RP e progressão,
@@ -175,9 +175,8 @@ function _reset() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * As treze profissões planejadas. Nenhuma tem `gameplayImplemented: true` — essa
- * é a Fase 6 em diante, uma de cada vez, sobre o Resource Node Framework que
- * ainda não existe.
+ * As treze profissões planejadas. O Minerador é o primeiro gameplay concreto,
+ * sobre o Resource Node Framework; os demais permanecem apenas no catálogo.
  *
  * `guard` merece a nota que a §11 do briefing pediu: isto é uma ETIQUETA de
  * ocupação/RP, não a autoridade da guarda. Quem decide o que um guarda IC pode
@@ -187,10 +186,10 @@ function _reset() {
  * vice-versa; as duas coisas não se falam nesta fase, de propósito. Ver
  * `docs/gameplay/PROFESSION_FRAMEWORK.md` §"Guard × governance".
  *
- * @type {ReadonlyArray<{code:string,label:string,category:string,description?:string}>}
+ * @type {ReadonlyArray<{code:string,label:string,category:string,description?:string,gameplayImplemented?:boolean}>}
  */
 const BUILTIN_PROFESSIONS = Object.freeze([
-  { code: 'miner', label: 'Minerador', category: 'gathering' },
+  { code: 'miner', label: 'Minerador', category: 'gathering', gameplayImplemented: true },
   { code: 'lumberjack', label: 'Lenhador', category: 'gathering' },
   { code: 'hunter', label: 'Caçador', category: 'gathering' },
   { code: 'farmer', label: 'Fazendeiro', category: 'gathering' },
@@ -214,7 +213,7 @@ const BUILTIN_PROFESSIONS = Object.freeze([
 function registerBuiltins() {
   for (const p of BUILTIN_PROFESSIONS) {
     if (!_professions.has(p.code)) {
-      register({ ...p, enabled: true, gameplayImplemented: false });
+      register({ ...p, enabled: true, gameplayImplemented: !!p.gameplayImplemented });
     }
   }
 }

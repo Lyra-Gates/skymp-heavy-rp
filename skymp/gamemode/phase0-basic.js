@@ -63,6 +63,7 @@ const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
 const playerPanel   = require(path.join(gamemodeDir, 'player-panel-service'));
 const deathService  = require(path.join(gamemodeDir, 'death-service'));
 const professionService = require(path.join(gamemodeDir, 'profession-service'));
+const miningService = require(path.join(gamemodeDir, 'mining-service'));
 const environmentService = require(path.join(gamemodeDir, 'environment-service'));
 const economyPhysicalSync = require(path.join(gamemodeDir, 'core', 'economy-physical-sync'));
 const voipService   = require(path.join(gamemodeDir, 'voip-service'));
@@ -260,6 +261,20 @@ moduleRegistry.register({
   dependencies: [],
   commands: professionService.commandDefs(),
   initialize: async () => {}
+});
+
+// LAB: primeiro consumidor do Profession Core + Resource Node Framework.
+// Permanece desligado por padrao ate o alvo fisico ser homologado no jogo.
+moduleRegistry.register({
+  id: 'mining',
+  enabledBy: 'ENABLE_MINING_SERVICE',
+  phase: 'lab',
+  version: '0.3.0',
+  dependencies: ['profession', 'interaction'],
+  optionalDependencies: ['interaction-prompt'],
+  commands: [],
+  initialize: async () => miningService.initMiningService(),
+  shutdown: async () => miningService.shutdownMiningService()
 });
 
 // LAB: Time Sync — relógio autoritativo do servidor (GameTime/TimeScale),

@@ -109,7 +109,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] Registro de patches: **46 testes**, 0 falhas.
 - [x] Checks de sistema: **14/14**.
 - [x] Registro do gamemode: **73 testes listados**, nenhum órfão.
-- [x] Schema declarado legível: **73 tabelas**.
+- [x] Schema declarado legível: **75 tabelas**.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
 - [x] `check-write-guards --all` sem ocorrências — os 2 FormDesc e a cobertura de 13 migrations foram corrigidos em 24/08/2026.
@@ -195,7 +195,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] **Status:** `CONCLUÍDO`
 - **Divergências conhecidas:** MD5 vs SHA-256; instruções que param em v9/v10; contagem antiga de opções ligadas; `version-check.js` descrito como ativo sem chamador.
 - **Aceite:** README, setup, modpack, operações e compatibilidade não contradizem o código atual.
-- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v26, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; inventário atual de 73 tabelas aprovado em 24/08/2026.
+- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v27, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; inventário atual de 75 tabelas aprovado em 24/08/2026.
 
 ### F1-007 — Decidir e implementar a checagem de versão do cliente (`P1`)
 
@@ -225,11 +225,11 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - **Aceite:** um procedimento versionado sobe a stack; health checks confirmam cada serviço; `offlineMode=false`.
 - **Evidência:** `deploy/staging/compose.yaml`, `Start-Staging.ps1`, `Stop-Staging.ps1` e README; Compose validado por `docker compose config`; painel, Game API, bot e MariaDB têm health checks. SkyMP/launcher ficam no host Windows. Docker CLI 29.6.2 presente, Engine indisponível em 24/08/2026, então o boot real segue pendente.
 
-### F2-002 — Migrar banco limpo até v26
+### F2-002 — Migrar banco limpo até v27
 
 - [ ] **Status:** `PARCIAL` (aplicador seguro e dry-run concluídos; execução real depende de MariaDB)
 - **Aceite:** instalação vazia aplica schema + migrations em ordem; `npm run check:schema` não encontra faltas.
-- **Evidência:** `npm run migrate:dry-run` encontra 24 arquivos/149 instruções em ordem até v26; 6 testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
+- **Evidência:** `npm run migrate:dry-run` encontra 25 arquivos/153 instruções em ordem até v27; 6 testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
 
 ### F2-003 — Backup e restore exercitados
 
@@ -391,15 +391,15 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F6-001 — Resource Node Framework mínimo
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — motor implementado e testado; nó físico ainda exige homologação no jogo`
 - **Aceite:** node físico confirmado, cooldown autoritativo, recompensa via Inventory Framework e defesa contra repetição.
-- **Evidência:** _preencher_.
+- **Evidência:** `resource-node-service.js`, `mining-service.js`, migration v27 e 71 testes focados cobrem capacidade/regeneração, `SELECT ... FOR UPDATE`, recompensa atômica, profissão/rank, cooldown persistente e replay por `requestId`. Falta confirmar um objeto físico, alcance e Papyrus no Skyrim/SkyMP real.
 
 ### F6-002 — Integrar Jobs ao Profession Core
 
-- [ ] **Status:** `TODO`
+- [x] **Status:** `CONCLUÍDO NO CÓDIGO — runtime coberto pelo gate F6`
 - **Aceite:** profissão/rank influenciam o loop por regra documentada; FormID provisório da pesca removido ou a pesca fica fora da alfa.
-- **Evidência:** _preencher_.
+- **Evidência:** Minerador é o único builtin com `gameplayImplemented=true`; nó aplica `required_profession`/`required_rank`; `/garimpar` foi retirado por contornar o framework e `/pescar` ficou fora da alfa enquanto a vara mantiver FormID provisório. `jobs-service` expõe somente `/cortarlenha`.
 
 ### F6-003 — Integrar Profissão ao Depot
 

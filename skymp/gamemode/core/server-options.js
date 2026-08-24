@@ -56,6 +56,10 @@ const SPEC = {
   'profession.maxPerCharacter': { ...num(1, 20), default: 3, usedBy: 'profession-service.js (grantProfession/reactivateProfession)' },
   'profession.maxRank': { ...num(0, 20), default: 3, usedBy: 'profession-service.js (setProfessionRank)' },
 
+  'mining.xpPerGather': { ...num(0, 1000), default: 2, usedBy: 'mining-service.js (registerMiningInteractions)' },
+  'mining.maxDistance': { ...num(50, 1000), default: 200, usedBy: 'mining-service.js (registerMiningInteractions)' },
+  'mining.cooldownMs': { ...num(1000, 3600000), default: 30000, usedBy: 'mining-service.js (registerMiningInteractions)' },
+
   'economy.largeTransactionThreshold': { ...num(1, 2147483647), default: 5000, usedBy: 'core/economy-service.js (_auditLargeTransfer)' },
 
   'depot.defaultCapacity': { ...num(1, 10000), default: 500, usedBy: 'core/depot-service.js (getOrCreateDepot)' },
