@@ -35,7 +35,7 @@ Regras que o código já aplica (`apps/launcher/electron/main.ts`):
 
 ### Fontes de versão
 
-Há três artefatos independentes: launcher, cliente SkyMP e modpack. A versão do launcher vem somente de `apps/launcher/package.json`; as versões exigidas do cliente e dos mods vêm dos respectivos manifestos de distribuição e são registradas nos carimbos locais. Antes de consumir um ticket da fila, o fluxo **JOGAR** compara o carimbo do cliente com `clientVersion` e falha fechado se o manifesto estiver indisponível ou houver atualização pendente.
+Há três artefatos independentes: launcher, cliente SkyMP e modpack. A versão do launcher vem somente de `apps/launcher/package.json`; as versões exigidas do cliente e dos mods vêm dos respectivos manifestos de distribuição e são registradas nos carimbos locais. Antes de consumir um ticket da fila, o fluxo **JOGAR** compara o carimbo do cliente com `clientVersion` e falha fechado se o manifesto estiver indisponível ou houver atualização pendente. Exceção deliberada: sem `VITE_GITHUB_DIST_REPO` configurado, o gate é pulado em vez de bloquear — quem nunca configurou distribuição via GitHub Releases (dev local, fork em teste) não é punido pelo mesmo erro de quem configurou e a distribuição está fora do ar.
 
 ### UI CEF embutida e reparável
 

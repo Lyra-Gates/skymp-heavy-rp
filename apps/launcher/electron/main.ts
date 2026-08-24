@@ -1187,7 +1187,13 @@ ipcMain.handle('kill-game', async () => {
 });
 
 ipcMain.handle('check-client-update', async (_event, gamePath) => {
-  if (!DIST_REPO) return { updateAvailable: false, error: 'VITE_GITHUB_DIST_REPO nao configurado.' };
+  // Sem DIST_REPO, o operador optou por não distribuir via GitHub Releases
+  // (dev local, fork em teste) — isso não é o mesmo caso que "configurei a
+  // distribuição e ela está fora do ar". Bloquear JOGAR aqui puniria quem
+  // nunca pediu esse gate, então este caso passa sem erro. Manifesto ausente
+  // ou inválido COM DIST_REPO configurado continua falhando fechado abaixo:
+  // aí sim alguém decidiu depender do gate e ele está quebrado.
+  if (!DIST_REPO) return { updateAvailable: false };
   const manifest = await httpGetJson(clientManifestUrl());
   if (!manifest || !manifest.clientVersion) return { updateAvailable: false, error: 'Manifesto de cliente indisponivel.' };
   const installedVersion = gamePath ? readStamp(gamePath, CLIENT_VERSION_FILENAME) : null;
