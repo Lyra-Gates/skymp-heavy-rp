@@ -56,8 +56,6 @@ async function applyMigrationPlan(connection, plan, { databaseName = 'skymp_rp',
           `Falha em ${file.filename}, instrucao ${index + 1}/${file.statements.length}: ${cause.message}`,
           { cause }
         );
-        error.filename = file.filename;
-        error.statementIndex = index;
         throw error;
       }
     }

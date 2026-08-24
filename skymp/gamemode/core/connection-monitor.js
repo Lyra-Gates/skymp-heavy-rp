@@ -28,6 +28,7 @@ function positiveIntegerOr(value, fallback) {
  *   maxUserId?: number,
  *   maxProfileId?: number,
  *   intervalMs?: number
+ *   now?: () => number
  * }} dependencies
  */
 function createConnectionMonitor({
@@ -38,7 +39,8 @@ function createConnectionMonitor({
   logger = console,
   maxUserId = DEFAULT_MAX_USER_ID,
   maxProfileId = DEFAULT_MAX_PROFILE_ID,
-  intervalMs = DEFAULT_INTERVAL_MS
+  intervalMs = DEFAULT_INTERVAL_MS,
+  now = Date.now
 }) {
   if (!mp || typeof mp.isConnected !== 'function' || typeof mp.getUserActor !== 'function' ||
     typeof mp.getActorsByProfileId !== 'function' || typeof mp.kick !== 'function') {
@@ -61,6 +63,7 @@ function createConnectionMonitor({
   const sessions = new Map();
   let nextSessionId = 1;
   let timer = null;
+  const metrics = { connections: 0, disconnections: 0, approved: 0, rejected: 0, ticks: 0, maxTickMs: 0 };
 
   function findProfileId(actorId) {
     for (let profileId = 1; profileId <= profileLimit; profileId++) {
@@ -90,6 +93,7 @@ function createConnectionMonitor({
   function reject(userId, session, reason, kick) {
     if (!isCurrent(userId, session) || session.rejected) return;
     session.rejected = true;
+    metrics.rejected++;
     if (kick) {
       try {
         mp.kick(userId);
@@ -108,6 +112,7 @@ function createConnectionMonitor({
         session.verificationPending = false;
         if (allowed) {
           session.approved = true;
+          metrics.approved++;
           logger.log(`[phase0] User ${userId} successfully approved by database check.`);
           return;
         }
@@ -154,34 +159,57 @@ function createConnectionMonitor({
   }
 
   function tick() {
-    for (let userId = 1; userId <= userLimit; userId++) {
-      const connected = mp.isConnected(userId);
-      const session = sessions.get(userId);
+    const startedAt = now();
+    try {
+      for (let userId = 1; userId <= userLimit; userId++) {
+        const connected = mp.isConnected(userId);
+        const session = sessions.get(userId);
 
-      if (connected) {
-        if (session) {
-          processConnectedUser(userId, session);
+        if (connected) {
+          if (session) {
+            processConnectedUser(userId, session);
+            continue;
+          }
+
+          const newSession = {
+            id: nextSessionId++, actorId: null, verificationPending: false,
+            approved: false, rejected: false, cleaned: false, missingProfileReported: false
+          };
+          sessions.set(userId, newSession);
+          metrics.connections++;
+          logger.log(`[phase0] Connection detected! User ID: ${userId}, session: ${newSession.id}`);
+          processConnectedUser(userId, newSession);
           continue;
         }
 
-        const newSession = {
-          id: nextSessionId++, actorId: null, verificationPending: false,
-          approved: false, rejected: false, cleaned: false, missingProfileReported: false
-        };
-        sessions.set(userId, newSession);
-        logger.log(`[phase0] Connection detected! User ID: ${userId}, session: ${newSession.id}`);
-        processConnectedUser(userId, newSession);
-        continue;
+        if (session) {
+          // Remover antes da limpeza invalida qualquer promise de whitelist ainda
+          // em voo. Se o userId for reutilizado, ela nao alcanca a nova sessao.
+          sessions.delete(userId);
+          metrics.disconnections++;
+          logger.log(`[phase0] Disconnection detected! User ID: ${userId}`);
+          cleanup(userId, session, 'disconnected');
+        }
       }
-
-      if (session) {
-        // Remover antes da limpeza invalida qualquer promise de whitelist ainda
-        // em voo. Se o userId for reutilizado, ela nao alcanca a nova sessao.
-        sessions.delete(userId);
-        logger.log(`[phase0] Disconnection detected! User ID: ${userId}`);
-        cleanup(userId, session, 'disconnected');
-      }
+    } finally {
+      metrics.ticks++;
+      metrics.maxTickMs = Math.max(metrics.maxTickMs, Math.max(0, now() - startedAt));
     }
+  }
+
+  function snapshot() {
+    const states = { pending: 0, approved: 0, rejected: 0 };
+    for (const session of sessions.values()) {
+      if (session.rejected) states.rejected++;
+      else if (session.approved) states.approved++;
+      else states.pending++;
+    }
+    return {
+      active: sessions.size,
+      states,
+      totals: { ...metrics },
+      pollingIntervalMs: pollingInterval
+    };
   }
 
   function start() {
@@ -196,7 +224,7 @@ function createConnectionMonitor({
     timer = null;
   }
 
-  return { tick, start, stop, sessions };
+  return { tick, start, stop, snapshot, sessions };
 }
 
 module.exports = {

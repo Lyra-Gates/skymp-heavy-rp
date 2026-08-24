@@ -120,4 +120,22 @@ describe('connection-monitor', () => {
     assert.deepEqual(state.cleanupCalls, [['character', 0xff000001], ['panel', 0xff000001]]);
     assert.deepEqual(state.kicks, []);
   });
+
+  it('expõe métricas agregadas de conexão e polling sem IDs', async () => {
+    const state = setup({ checkWhitelist: () => true });
+    state.setConnected(true);
+    state.setActorId(0xff000001);
+    state.monitor.tick();
+    await flush();
+    state.monitor.tick();
+    state.setConnected(false);
+    state.monitor.tick();
+
+    assert.deepEqual(state.monitor.snapshot(), {
+      active: 0,
+      states: { pending: 0, approved: 0, rejected: 0 },
+      totals: { connections: 1, disconnections: 1, approved: 1, rejected: 0, ticks: 3, maxTickMs: 0 },
+      pollingIntervalMs: 10
+    });
+  });
 });

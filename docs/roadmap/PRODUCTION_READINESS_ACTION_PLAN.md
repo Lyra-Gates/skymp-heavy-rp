@@ -108,7 +108,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] Launcher: **70 testes**, 0 falhas.
 - [x] Registro de patches: **46 testes**, 0 falhas.
 - [x] Checks de sistema: **14/14**.
-- [x] Registro do gamemode: **71 testes listados**, nenhum órfão.
+- [x] Registro do gamemode: **73 testes listados**, nenhum órfão.
 - [x] Schema declarado legível: **73 tabelas**.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
@@ -465,10 +465,10 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F8-002 — Observabilidade
 
-- [ ] **Status:** `PARCIAL` (HTTP/DB/processo instrumentados nos serviços Node; gamemode, collector e incidente pendentes)
+- [ ] **Status:** `PARCIAL` (serviços Node + núcleo do gamemode instrumentados; collector/incidente e pollers restantes pendentes)
 - **Métricas mínimas:** conexões, falhas de login, latência DB, eventos CEF, rejeições, transferências, reconciliações, polling, CPU e memória.
 - **Aceite:** incidente de teste pode ser explicado por logs/métricas sem reproduzir localmente.
-- **Evidência:** [`OBSERVABILITY_BASELINE_2026-08-24.md`](../operations/OBSERVABILITY_BASELINE_2026-08-24.md); `apps/shared/runtimeMetrics.js`; endpoints protegidos no painel, Game API e bot; testes de cardinalidade, privacidade, DB, HTTP e autenticação.
+- **Evidência:** [`OBSERVABILITY_BASELINE_2026-08-24.md`](../operations/OBSERVABILITY_BASELINE_2026-08-24.md); `apps/shared/runtimeMetrics.js`; `core/runtime-telemetry.js`; endpoints protegidos; conexão/polling, módulos, CEF, CPU/memória, cardinalidade e privacidade cobertos por testes.
 
 ### F8-003 — Rollback exercitado
 

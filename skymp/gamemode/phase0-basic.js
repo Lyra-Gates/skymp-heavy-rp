@@ -56,6 +56,7 @@ const admin          = require(path.join(gamemodeDir, 'admin-service'));
 const { installUiEventGateway } = require(path.join(gamemodeDir, 'core', 'ui-event-gateway'));
 const { createUiEventRateLimiter } = require(path.join(gamemodeDir, 'core', 'ui-event-rate-limiter'));
 const { createConnectionMonitor } = require(path.join(gamemodeDir, 'core', 'connection-monitor'));
+const { createRuntimeTelemetry } = require(path.join(gamemodeDir, 'core', 'runtime-telemetry'));
 const serverOptions  = require(path.join(gamemodeDir, 'core', 'server-options'));
 const governance    = require(path.join(gamemodeDir, 'governance-service'));
 const marketStalls  = require(path.join(gamemodeDir, 'market-stalls-service'));
@@ -810,15 +811,6 @@ if (typeof mp !== "undefined") {
     handleChatInput: commands.handleChatInput,
     rateLimiter: uiEventRateLimiter
   });
-  // Telemetria sem payload: fornece a base real para escolher um limite sem
-  // registrar texto do jogador nem bloquear a UI antes da medicao.
-  const uiEventMetricsTimer = setInterval(() => {
-    const metrics = uiEventRateLimiter.snapshot();
-    if (metrics.observed > 0 || metrics.rejected > 0) {
-      console.log('[phase0] UI event metrics:', JSON.stringify(metrics));
-    }
-  }, 60_000);
-  if (typeof uiEventMetricsTimer.unref === 'function') uiEventMetricsTimer.unref();
 } else {
   console.log("[phase0] mp API not available");
 }
@@ -827,5 +819,11 @@ if (typeof mp !== "undefined") {
 // protege contra respostas de whitelist de sessões antigas e espera o ator e o
 // profile aparecerem em vez de abandonar uma conexão publicada cedo pela engine.
 if (typeof mp !== 'undefined') {
-  createConnectionMonitor({ mp, whitelist, commands, playerPanel }).start();
+  const connectionMonitor = createConnectionMonitor({ mp, whitelist, commands, playerPanel });
+  connectionMonitor.start();
+  createRuntimeTelemetry({
+    connectionMonitor,
+    uiEventRateLimiter,
+    moduleRegistry
+  }).start();
 }

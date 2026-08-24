@@ -8,14 +8,14 @@ não declara o gate concluído.
 
 | Sinal mínimo | Existe hoje | Onde aparece | Lacuna operacional |
 |---|---|---|---|
-| Conexões | **Parcial** | `connection-monitor.js` registra conexão, associação ao `profileId`, rejeição e desconexão. | Só texto; não há contadores, duração de sessão nem endpoint. |
+| Conexões | **Sim, local** | `connection-monitor.js` agrega ativos, estados, conexões, desconexões, aprovações e rejeições. | Snapshot fica no log do processo; falta collector/histórico. |
 | Falhas de login | **Parcial** | Master API registra chave inválida e erros; launcher mostra as falhas ao jogador. | Não há total por causa nem correlação launcher→Master API→game-api. |
 | Latência DB | **Sim, por serviço** | O wrapper compartilhado mede sucesso/erro em buckets fixos no painel e na Game API. | Ainda falta collector/retenção e instrumentar o gamemode. |
 | Eventos CEF | **Sim, local** | `ui-event-rate-limiter.snapshot()` conta observados/rejeitados por tipo e o bootstrap publica JSON a cada 60 s, sem payload. | Métrica fica só no stdout e reinicia com o processo. |
 | Rejeições | **Parcial** | Guards de autenticação/segredo e rate limits incrementam motivos enumerados. | Ainda falta cobrir as recusas de domínio no gamemode e na fila. |
 | Transferências | **Parcial** | `transaction-service` e `inventory` registram sucesso, replay e falha; o ledger durável fica no banco. | Sem taxa/latência agregada nem alerta de falha. |
 | Reconciliações | **Parcial** | Existem rotinas de economia/estado físico e `healthCheck()`. | Execuções e divergências não são agregadas. |
-| Polling | **Não medido** | Intervalos existem em conexão, morte, painel, interação e atalhos. | Não há duração de tick, atraso ou sobreposição. |
+| Polling | **Parcial** | Monitor de conexão mede intervalo, ticks e duração máxima. | Pollers de morte, painel, interação e atalhos ainda não medem duração/overlap. |
 | CPU e memória | **Sim nos serviços Node** | Snapshots internos incluem CPU acumulada, RSS, heap e memória externa; SkyMP declara `mp.getPrometheusMetrics()`. | Ainda falta gamemode, collector e histórico. |
 | Fila | **Sim, efêmero** | `GET /health` da Game API expõe capacidade, ocupados, conectados e espera. | Sem histórico, alertas ou persistência após restart. |
 | Saúde de módulos | **Local** | `module-registry.healthCheckAll()` isola falhas de módulos ativos. | Resultado não é publicado nem acompanhado. |
@@ -60,11 +60,13 @@ usam o template Express (`/recurso/:id`), nunca a URL concreta.
 - [ ] propagar `requestId` desde o launcher para OAuth, fila e Master API;
 - contar falha por causa enumerada (`invalid_ticket`, `not_whitelisted`, etc.).
 
-### O3 — Gamemode e processo
+### O3 — Gamemode e processo (`PARCIAL`)
 
-- publicar `healthCheckAll()`, eventos CEF, conexões e reconciliações;
+- [x] publicar em log estruturado `healthCheckAll()`, eventos CEF e conexões, sem IDs/erros livres;
+- [x] incluir CPU/RSS/heap do processo e duração máxima do polling de conexão;
+- [ ] medir reconciliações e os demais pollers;
 - integrar, quando disponível no artefato pinado, `getPrometheusMetrics()`;
-- medir duração/overlap dos pollers e CPU/RSS do processo.
+- [ ] exportar para collector/retenção.
 
 ### O4 — Operação
 

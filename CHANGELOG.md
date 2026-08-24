@@ -23,6 +23,8 @@
 
 ### Adicionado
 
+- **Telemetria agregada do gamemode sem identificadores.** O monitor de conexão agora conta ativos, estados, conexões/desconexões, aprovações/rejeições, ticks e duração máxima do polling. `runtime-telemetry.js` combina isso com eventos CEF, saúde booleana dos módulos e CPU/RSS/heap em JSON periódico; texto de erro, actorId, accountId e payload não entram. Testes travam a privacidade e o registro do gamemode confirma 73 arquivos sem órfãos.
+
 - **Backup, restore e rollback de staging com guardas destrutivas.** O backup MariaDB é consistente, comprimido e acompanhado de SHA-256. O restore só aceita arquivo no diretório esperado, confere hash, exige confirmação textual, para escritores e roda schema drift estrito antes de religar serviços. [`ROLLBACK_RUNBOOK.md`](docs/operations/ROLLBACK_RUNBOOK.md) cobre também código/gamemode e launcher/modpack forward-only. Ferramentas e sintaxe estão validadas; o exercício real continua bloqueado pelo Docker Engine/MariaDB indisponível.
 
 - **Stack de staging versionada sem exigir MariaDB instalado no host.** `deploy/staging` define MariaDB 11.4.8 pinado, painel, Game API e bot com volumes, rede interna, health checks e scripts PowerShell de start/stop; SkyMP e launcher permanecem no Windows. O bootstrap do banco é explícito e só aceita volume vazio. `docker compose config` e a sintaxe dos scripts passam localmente; o Engine não estava ativo, portanto F2-001 continua parcial sem alegar boot que não ocorreu.
