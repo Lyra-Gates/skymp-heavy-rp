@@ -3,6 +3,13 @@
 > Última unificação: 2026-08-22. Consolida PR #34 (Profissões), PR #44
 > (Economia/Vault), PR #46 (Depot — recuperado de snapshot) e PR #45 (UX)
 > em `main`, antes do início do módulo de Justiça.
+>
+> **Snapshot operacional vigente (24/08/2026):** [PRODUCTION_READINESS_ACTION_PLAN.md](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md)
+> é a referência mais recente: **1.457 testes de produto**, incluindo **1.233
+> testes do gamemode**, migrations lineares até **v28**, **76 tabelas**,
+> `check-write-guards --all` sem ocorrências, typechecks do launcher e do
+> gamemode limpos e **14/14 checks de sistema**. O parecer de promoção permanece
+> **NO-GO**; ver [PRODUCTION_BLOCKERS_2026-08-24.md](docs/operations/PRODUCTION_BLOCKERS_2026-08-24.md).
 
 ## O que o framework faz hoje
 
@@ -61,24 +68,21 @@ referenciam hoje. Fica registrado aqui como trabalho futuro — não foi
 implementado nesta unificação para não expandir escopo sem revisão
 explícita.
 
-## Débito técnico pré-existente (não introduzido por esta unificação)
+## Débito técnico pré-existente — resolvido em 24/08/2026
 
-`node scripts/check-write-guards.js --all` reporta 14 ocorrências, das
-quais 2 bloqueariam escrita nova:
-- `governance-service.js:857` e `whitelist.js:180` usam FormDesc com
-  prefixo `0x` (forma incorreta — ver convenção no cabeçalho de
-  `death-service.js`).
-- 12 migrations antigas (v3 a v15) sem teste que leia o SQL. Nenhuma das
-  migrations desta unificação (v18, v19, v20) está nessa lista — todas têm
-  cobertura de teste.
+Na unificação de 22/08, `node scripts/check-write-guards.js --all` reportava
+14 ocorrências: 2 FormDesc com prefixo `0x` e 12 migrations antigas sem teste
+que lesse o SQL. Esse registro é histórico. No snapshot vigente de 24/08, os
+2 FormDesc e a cobertura das 13 migrations prioritárias foram corrigidos, e o
+verificador passou a reportar **zero ocorrências**.
 
-## Validação desta unificação
+## Validação histórica desta unificação
 
-- `npm test` (skymp/gamemode): **974 testes, 231 suítes, 0 falhas**.
-- `check-test-registry.js`: 62 arquivos de teste, todos registrados, nenhum
-  órfão.
-- `check-schema-drift.js --list`: 68 tabelas, timeline de migrations linear
-  (v2 → v20, sem colisão).
+No marco de 22/08, a validação era de **974 testes do gamemode**, 62 arquivos
+de teste registrados e 68 tabelas com migrations lineares até v20. Esses
+números preservam a evolução daquele merge; a baseline operacional vigente é
+a do cabeçalho deste documento: **1.457 testes de produto**, **1.233 do
+gamemode**, **76 tabelas** e migrations até **v28**.
 - Nenhum arquivo untracked/órfão fora do já esperado (`spikes/` já
   versionado; configs locais de `.claude/` fora deste merge).
 
@@ -101,10 +105,11 @@ própria, desligado por padrão):
   [MAKERS_MARK.md](docs/design/MAKERS_MARK.md) e
   [CRAFTING_SYSTEM.md](docs/gameplay/CRAFTING_SYSTEM.md).
 
-Estado da suíte depois dos dois: **1069 testes, 255 suítes, 0 falhas**;
-`check-schema-drift.js --list` segue linear até v24, sem colisão.
-`check-write-guards.js --all` continua nas mesmas 14 ocorrências
-pré-existentes (2 bloqueariam escrita nova) — nenhuma nova introduzida.
+Estado da suíte naquele marco intermediário: **1069 testes, 255 suítes, 0
+falhas**; `check-schema-drift.js --list` seguia linear até v24, sem colisão.
+Naquele momento, `check-write-guards.js --all` ainda encontrava as mesmas 14
+ocorrências pré-existentes; elas foram resolvidas em 24/08, conforme o snapshot
+vigente no cabeçalho.
 
 - **Atalhos de teclado e menus de ação** (22/08/2026, mesmo padrão `lab`):
   substitui parte do fluxo "digite o comando" por tecla e botão, sem
@@ -142,8 +147,10 @@ pré-existentes (2 bloqueariam escrita nova) — nenhuma nova introduzida.
   em [PLAYER_ACTION_SHORTCUTS_PLAN.md](docs/technical/PLAYER_ACTION_SHORTCUTS_PLAN.md)
   e [PLAYER_SHORTCUTS_AUDIT.md](docs/technical/PLAYER_SHORTCUTS_AUDIT.md).
 
-  Estado da suíte depois: **1107 testes, 264 suítes, 0 falhas**; typecheck
-  sem erro novo (mesmos 4 pré-existentes de antes desta rodada).
+  Estado da suíte naquele marco intermediário: **1107 testes, 264 suítes, 0
+  falhas**; o typecheck ainda preservava 4 erros pré-existentes. No snapshot
+  vigente de 24/08, o gamemode possui **1.233 testes**, os typechecks do launcher
+  e do gamemode estão limpos e a baseline total é de **1.457 testes de produto**.
 
 ## Housekeeping de documentação (23/08/2026)
 

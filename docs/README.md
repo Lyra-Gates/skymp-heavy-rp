@@ -2,7 +2,7 @@
 
 Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
-> **Última conferência contra o código: 22/08/2026.** README, `docs/README.md` e `PROJECT_STATE.md` foram reconciliados com a unificação de main (Profissões #34 + Economia/Vault #44 + Depot #46 + UX #45). Os demais documentos técnicos foram reconciliados em 11/08/2026 com o commit `c23179d` e podem estar defasados sobre os módulos novos — ver [PROJECT_STATE.md](../PROJECT_STATE.md) para o estado consolidado atual. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
+> **Última conferência contra o código: 24/08/2026.** A fonte de verdade para estado operacional e backlog é o [PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md); o parecer de promoção é [PRODUCTION_BLOCKERS_2026-08-24.md](operations/PRODUCTION_BLOCKERS_2026-08-24.md), atualmente **NO-GO**. O snapshot vigente registra **1.457 testes de produto**, incluindo **1.233 do gamemode**, migrations até **v28**, **76 tabelas**, zero ocorrências em `check-write-guards --all`, typechecks do launcher e do gamemode limpos e **14/14 checks de sistema**. [PROJECT_STATE.md](../PROJECT_STATE.md) resume capacidades e preserva a evolução histórica, mas não substitui o quadro operacional. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
 
 ---
 
@@ -11,9 +11,10 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | # | Documento | Por quê |
 |---|---|---|
 | 0 | [CONSTITUICAO.md](CONSTITUICAO.md) | **A constituição de design.** O que o projeto é, o que nunca criar, e por que toda mecânica precisa responder "como isso gera histórias?". O Anexo A traz as tensões conhecidas dela. |
-| 1 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | **O estado real de cada componente**, incluindo o que não está pronto e o plano priorizado. É o documento mais honesto do projeto. |
-| 1.1 | [../PROJECT_STATE.md](../PROJECT_STATE.md) | **O que o framework faz hoje**, pós-unificação de 22/08/2026 (Profissões + Economia/Vault + Depot + UX). Registra a ponte Depot↔Profissão como próximo passo, não implementada. |
-| 1.2 | [roadmap/PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) | **Quadro operacional da alfa fechada.** Tarefas com IDs, status, dependências, gates G0–G5, critérios de aceite e campo de evidência. É o documento a atualizar conforme o projeto avança. |
+| 1 | [roadmap/PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) | **Fonte de verdade operacional e do backlog.** Tarefas com IDs, status, dependências, gates G0–G5, critérios de aceite e evidências. |
+| 1.1 | [operations/PRODUCTION_BLOCKERS_2026-08-24.md](operations/PRODUCTION_BLOCKERS_2026-08-24.md) | **Parecer vigente de promoção: NO-GO.** Lista a evidência externa ainda necessária. |
+| 1.2 | [../PROJECT_STATE.md](../PROJECT_STATE.md) | **Capacidades atuais e evolução histórica** do framework; não substitui o quadro operacional. |
+| 1.3 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | Auditoria detalhada por componente, usada como contexto técnico datado. |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | Como banco, painel web, bot, API do jogo, launcher e gamemode conversam. |
 | 2.1 | [research/ADMIN_PLATFORM_AUDIT.md](research/ADMIN_PLATFORM_AUDIT.md) | **O estado real do painel de staff.** Doze rotas administrativas, zero verificações de permissão — e o que mais a auditoria de 13/08 encontrou. Leia antes de `skyadmin/`. |
 | 2.2 | [skyadmin/README.md](skyadmin/README.md) | Centro de orientação do painel de staff: escopo, arquitetura, plano, segurança, operação e referências. **É projeto, não estado** — ver a §7 da auditoria acima. |
