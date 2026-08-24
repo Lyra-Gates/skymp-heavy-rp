@@ -61,20 +61,14 @@ const db = async (sql, params = []) => {
 };
 
 const fsp = fs.promises;
+const { createMemoryRateLimiter } = require('./rateLimiter');
 
 async function ensureCrashReportDir() {
   await fsp.mkdir(CRASH_REPORT_DIR, { recursive: true });
 }
 
-// ── Rate limiting simples (janela deslizante em memória) ────────────────────
-const rateLimitBuckets = new Map();
-function isRateLimited(key, maxRequests, windowMs) {
-  const now = Date.now();
-  const timestamps = (rateLimitBuckets.get(key) || []).filter((t) => now - t < windowMs);
-  timestamps.push(now);
-  rateLimitBuckets.set(key, timestamps);
-  return timestamps.length > maxRequests;
-}
+// ── Rate limiting em memória, com teto global e por bucket ──────────────────
+const { isRateLimited } = createMemoryRateLimiter();
 
 function sanitizeCrashText(value, maxLength) {
   return String(value || '').replace(/\0/g, '').slice(0, maxLength);
@@ -98,7 +92,10 @@ function normalizeCrashReport(body) {
 }
 
 // ── Middleware ─────────────────────────────────────────────────────────────
-if (process.env.TRUST_PROXY === 'true' || process.env.NODE_ENV === 'production') {
+// Confiar em X-Forwarded-For muda a identidade usada pelo rate limiter. Isso
+// precisa ser uma decisão explícita da implantação, não efeito colateral de
+// NODE_ENV=production em um serviço eventualmente exposto sem proxy.
+if (process.env.TRUST_PROXY === 'true') {
   app.set('trust proxy', 1);
 }
 // A origem era `http://localhost:${PORT}` fixo, o que quebra assim que o painel
@@ -111,12 +108,14 @@ const CORS_ORIGINS = (process.env.PANEL_PUBLIC_URL || `http://localhost:${PORT}`
 
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
 app.use(express.json({ limit: '512kb' }));
+app.disable('x-powered-by');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
   secret: requireEnv('SESSION_SECRET'),
   resave: false,
   saveUninitialized: false,
   cookie: {
+    httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 8 * 60 * 60 * 1000 // 8h

@@ -459,9 +459,9 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F8-001 — Segurança dos serviços públicos
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (revisão sem banco concluída; sessões persistentes, replay e staging pendentes)
 - **Aceite:** rate limits, replay, CORS/proxy, sessões, segredo interno, uploads e updates revisados e testados.
-- **Evidência:** _preencher relatório_.
+- **Evidência:** [`PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md`](../security/PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md); rate limiter com memória limitada nos três serviços; 149 testes de serviço sem MariaDB.
 
 ### F8-002 — Observabilidade
 

@@ -108,6 +108,13 @@ describe('autenticação obrigatória', () => {
   });
 });
 
+describe('hardening HTTP', () => {
+  test('não divulga Express no header X-Powered-By', async () => {
+    const res = await get('/api/me');
+    assert.equal(res.headers.get('x-powered-by'), null);
+  });
+});
+
 describe('validação da aplicação de personagem', () => {
   const valid = {
     first_name: 'Ralof',

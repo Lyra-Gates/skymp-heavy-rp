@@ -2,6 +2,8 @@
 
 ### Corrigido
 
+- **Os rate limiters dos três serviços cresciam sem limite e podiam virar memory DoS.** Cada IP/chave ficava no `Map` para sempre e toda tentativa bloqueada continuava anexando timestamps. Painel, Game API e bot agora usam buckets com contador limitado, expiração, varredura e teto global de 10.000 entradas. O painel deixou de confiar em `X-Forwarded-For` automaticamente só por estar em produção; proxy agora exige `TRUST_PROXY=true`. Também foram endurecidos o limite JSON e a validação de snowflake na API do bot, os três serviços ocultam `X-Powered-By`, e a revisão/pendências estão registradas em [`PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md`](docs/security/PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md).
+
 - **A Game API aceitava manifesto de mods vazio, MD5 ou com hash de tamanho arbitrário.** O loader agora falha fechado: exige `hashAlgorithm: "sha256"`, pelo menos um mod, load order não vazia e hashes hexadecimais de 64 caracteres. O `mods.json` da Fase 0 foi regenerado em SHA-256 a partir dos cinco masters carregados pelo servidor.
 
 - **O empacotamento do launcher incluía recursivamente a própria pasta `dist-electron`.** O build crescia até centenas de megabytes e o NSIS falhava ao gravar o instalador. A configuração agora inclui somente `main.mjs` e `preload.mjs`; o build completo produziu um instalador com aproximadamente 105 MB.

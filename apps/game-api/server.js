@@ -26,6 +26,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const crypto = require('crypto');
+const { createMemoryRateLimiter } = require('./rateLimiter');
 const express = require('express');
 const mysql = require('mysql2/promise');
 
@@ -113,15 +114,8 @@ async function persistAdmission(result, identity) {
   }
 }
 
-// ── Rate limiting (janela deslizante em memória) ────────────────────────────
-const rateLimitBuckets = new Map();
-function isRateLimited(key, maxRequests, windowMs) {
-  const now = Date.now();
-  const timestamps = (rateLimitBuckets.get(key) || []).filter((t) => now - t < windowMs);
-  timestamps.push(now);
-  rateLimitBuckets.set(key, timestamps);
-  return timestamps.length > maxRequests;
-}
+// ── Rate limiting em memória, com teto global e por bucket ──────────────────
+const { isRateLimited } = createMemoryRateLimiter();
 
 function isValidInternalSecret(provided) {
   if (typeof provided !== 'string' || !provided) return false;

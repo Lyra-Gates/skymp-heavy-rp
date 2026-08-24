@@ -6,8 +6,11 @@ const app = express();
 const voiceChannels = require('./voiceChannels');
 const moderationLog = require('./moderationLog');
 const { deployCommands } = require('./deploy-commands');
+const { createMemoryRateLimiter } = require('./rateLimiter');
+const { isDiscordSnowflake } = require('./inputValidation');
 
-app.use(express.json());
+app.disable('x-powered-by');
+app.use(express.json({ limit: '64kb' }));
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates]
@@ -71,15 +74,8 @@ client.on('voiceStateUpdate', (oldState, newState) => {
     voiceChannels.handleVoiceStateUpdate(oldState, newState);
 });
 
-// ── Rate limiting simples (janela deslizante em memória) ────────────────────
-const rateLimitBuckets = new Map();
-function isRateLimited(key, maxRequests, windowMs) {
-    const now = Date.now();
-    const timestamps = (rateLimitBuckets.get(key) || []).filter((t) => now - t < windowMs);
-    timestamps.push(now);
-    rateLimitBuckets.set(key, timestamps);
-    return timestamps.length > maxRequests;
-}
+// ── Rate limiting em memória, com teto global e por bucket ──────────────────
+const { isRateLimited } = createMemoryRateLimiter();
 
 // Comparação em tempo constante para evitar timing attacks no secret interno
 function isValidInternalSecret(provided) {
@@ -104,7 +100,9 @@ app.post('/api/sync-role', async (req, res) => {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!discord_id) return res.status(400).json({ error: 'Missing discord_id' });
+    if (!isDiscordSnowflake(discord_id)) {
+        return res.status(400).json({ error: 'Invalid discord_id' });
+    }
     if (!['approved', 'rejected', 'pending'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
     if (!GUILD_ID || !WHITELIST_ROLE_ID) return res.status(500).json({ error: 'GUILD_ID or WHITELIST_ROLE_ID not configured' });
     
