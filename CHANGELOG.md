@@ -9,6 +9,15 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido
+
+- **A verificação de load order ignorava o hoisting da engine.** O Skyrim carrega todos os masters primeiro e só depois os ; comparávamos índices na ordem declarada e acusávamos “master carrega depois do plugin” em setup **correto**. Falso positivo aqui ensina o jogador a ignorar o aviso. A sutileza: um  com flag ESL (*espfe*) **não** é hoistado — a flag muda o espaço de FormID, não a posição de carga; o critério ingênuo  esconderia um problema real de ordem.
+- **Manifesto de mods passou de MD5 para SHA-256**, launcher e gerador na mesma mudança. MD5 tem colisão prática, e o modelo de ameaça aqui não é corrupção acidental — é jogador alterando um mod de propósito. O manifesto agora **declara** o algoritmo, e um  antigo falha dizendo “regere o manifesto” em vez de acusar duzentos mods de corrompidos. ⚠️ **O  versionado precisa ser regerado** — passo 0.4b do roteiro da Fase 0.
+
+### Adicionado
+
+- **Checagem de espaço em disco antes de baixar** (, 12 testes). Verifica **os dois destinos** — o  vai para  e o conteúdo é extraído na pasta do jogo, que podem estar em discos diferentes. Não bloqueia quando não consegue medir: impedir alguém de jogar porque  falhou seria pior que o problema. E  no meio do download deixou de aparecer cru.
+
 ### Adicionado
 
 - **Pesquisa: rodar o jogo via Mod Organizer 2 em vez de `skse64_loader.exe` direto (23/08/2026) — só planejamento, nenhum código.** [`MO2_LAUNCHER_INTEGRATION_RESEARCH.md`](docs/research/MO2_LAUNCHER_INTEGRATION_RESEARCH.md). Pedido inicial soava incompatível com o contrato de FormID (MO2 é feito pra jogador gerenciar mods livremente) — esclarecido que a intenção é o oposto: launcher continua no controle total, MO2 vira só o mecanismo de instalação/execução (USVFS), nunca uma ferramenta que o jogador opera. Pesquisa confirmou (com fontes): sintaxe de CLI do MO2 (`-i`/`-p`/`run -e`), o mecanismo técnico (USVFS mescla `Data/` virtual sem copiar arquivo físico), o precedente do Wabbajack (que já exige instância portátil do MO2 pra automação), e um relato comunitário de bug histórico MO2↔SkyrimPlatform (corrigido). **Bloqueador real, não testado**: se SkyrimPlatform (a UI CEF do SkyMP) funciona de verdade sob USVFS — nenhum servidor SkyMP público documenta este padrão pra copiar. Arquitetura proposta cobre servidor (manifesto vira N perfis, com a regra de que perfis só podem variar em texturas/loose files, nunca em plugins — senão quebra o FormID) e launcher (módulo de gerência do MO2, `launch-game` trocando de alvo, toggle qualidade/performance = troca de perfil). Plano faseado começa por bancada manual antes de qualquer linha de código.

@@ -7,6 +7,7 @@ import https from 'https';
 import crypto from 'crypto';
 import { URL, fileURLToPath } from 'url';
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
+import { avaliarEspaco, ehDiscoCheio } from './disk.mjs';
 
 // package.json tem "type": "module", entao o Vite empacota este arquivo como
 // ESM — __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
@@ -489,6 +490,29 @@ function httpGetJson(url: string): Promise<any> {
       resolve(null);
     });
   });
+}
+
+// Espaco livre do volume que contem `caminho`. Devolve null quando nao da pra
+// medir -- `statfs` pode faltar, e nesse caso `avaliarEspaco` segue em frente
+// de proposito (ver disk.mjs).
+function espacoLivreBytes(caminho: string): number | null {
+  try {
+    const st = (fs as any).statfsSync(caminho);
+    return st.bsize * st.bavail;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * O .zip vai pro temp e o conteudo e extraido na pasta do jogo -- que podem
+ * estar em discos diferentes. Checar so um deixa passar metade dos casos.
+ */
+function checarEspacoParaBaixar(tmpPath: string, destinoPath: string, sizeBytes: number) {
+  return avaliarEspaco([
+    { rotulo: `disco temporario (${path.parse(tmpPath).root})`, livreBytes: espacoLivreBytes(path.dirname(tmpPath)), necessarioBytes: sizeBytes },
+    { rotulo: `pasta do jogo (${path.parse(destinoPath).root})`, livreBytes: espacoLivreBytes(destinoPath), necessarioBytes: sizeBytes }
+  ]);
 }
 
 function downloadToFile(url: string, destPath: string, onProgress?: (percent: number) => void, redirectsLeft = 5): Promise<void> {
@@ -1171,6 +1195,10 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
   try {
     const manifest = await httpGetJson(clientManifestUrl());
     if (!manifest || !manifest.downloadUrl) return { success: false, error: 'Manifesto de cliente invalido.' };
+
+    const espaco = checarEspacoParaBaixar(tmpZip, gamePath, manifest.sizeBytes);
+    if (!espaco.ok) return { success: false, error: espaco.error };
+
     send('download', 0);
     await downloadToFile(manifest.downloadUrl, tmpZip, percent => send('download', percent));
     if (!manifest.sha256) {
@@ -1194,6 +1222,13 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
     return { success: true, version: manifest.clientVersion };
   } catch (e: any) {
     try { fs.unlinkSync(tmpZip); } catch {}
+    // ENOSPC cru ("no space left on device, write") no meio de uma barra de
+    // progresso nao diz ao jogador se o problema e dele, do servidor ou da
+    // internet. A checagem previa nao pega tudo: o disco pode encher DURANTE
+    // o download, ou a extracao pode precisar de mais que o .zip.
+    if (ehDiscoCheio(e)) {
+      return { success: false, error: 'O disco encheu durante a operacao. Libere espaco e tente de novo.' };
+    }
     return { success: false, error: e.message };
   }
 });
@@ -1239,6 +1274,14 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
     await killGameProcesses();
     await new Promise(resolve => setTimeout(resolve, 900));
 
+    // Soma o que ainda falta baixar: partes ja instaladas nao ocupam disco de novo.
+    const bytesPendentes = parts.reduce((total: number, p: any) => {
+      const jaTem = !force && installedParts[p.name || p.url] && installedParts[p.name || p.url] === (p.contentSig || null);
+      return jaTem ? total : total + (Number(p.sizeBytes) || 0);
+    }, 0);
+    const espacoMods = checarEspacoParaBaixar(tmpZip, gamePath, bytesPendentes);
+    if (!espacoMods.ok) return { success: false, error: espacoMods.error };
+
     let downloaded = 0;
     let skipped = 0;
     for (let index = 0; index < parts.length; index++) {
@@ -1276,6 +1319,13 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
     return { success: true, version: manifest.modsVersion, downloaded, skipped };
   } catch (e: any) {
     try { fs.unlinkSync(tmpZip); } catch {}
+    // ENOSPC cru ("no space left on device, write") no meio de uma barra de
+    // progresso nao diz ao jogador se o problema e dele, do servidor ou da
+    // internet. A checagem previa nao pega tudo: o disco pode encher DURANTE
+    // o download, ou a extracao pode precisar de mais que o .zip.
+    if (ehDiscoCheio(e)) {
+      return { success: false, error: 'O disco encheu durante a operacao. Libere espaco e tente de novo.' };
+    }
     return { success: false, error: e.message };
   }
 });
