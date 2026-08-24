@@ -77,6 +77,8 @@ const interactionPromptService = require(path.join(gamemodeDir, 'core', 'interac
 const characterDashboardBridge = require(path.join(gamemodeDir, 'core', 'character-dashboard-bridge'));
 const craftingService = require(path.join(gamemodeDir, 'crafting-service'));
 const playerShortcutsService = require(path.join(gamemodeDir, 'core', 'player-shortcuts-service'));
+const jobsService = require(path.join(gamemodeDir, 'jobs-service'));
+const contractsService = require(path.join(gamemodeDir, 'contracts-service'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
 
@@ -600,9 +602,46 @@ moduleRegistry.register({
   initialize: async () => {}
 });
 
+// LAB: Trabalhos livres (bicos) — coleta de lenha/minério/peixe sem profissão
+// fixa. Migrado para o transaction-service (ledger completo, ver
+// jobs-service.js), mas nasce desligado como todo lab: nunca rodou num
+// servidor com gente dentro. Reativado em 20/08/2026 — ver
+// docs/technical/PARKED_SERVICES_DECISION.md §7.3 para o defeito original que
+// motivou deixar parado, e o cabeçalho de jobs-service.js para a correção.
+moduleRegistry.register({
+  id: 'jobs',
+  enabledBy: 'ENABLE_JOBS_SERVICE',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: [],
+  commands: jobsService.commandDefs(),
+  initialize: async () => {}
+});
+
+// LAB: Contratos entre jogadores (trabalho livre sob demanda, com escrow).
+// Sem UI CEF — os comandos de chat (`/contratocriar`, `/contratoaceitar` etc.)
+// são a interface inteira. `initialize` liga a varredura periódica que expira
+// contrato vencido e acerta entrega sem disputa (ver
+// contracts-service.js#_sweepTick); sem ela `sweepExpired`/`sweepReviewed`
+// seriam funções que ninguém chama. Nunca rodou num servidor com gente
+// dentro — nasce desligado. Reativado em 20/08/2026.
+moduleRegistry.register({
+  id: 'contracts',
+  enabledBy: 'ENABLE_CONTRACTS_SERVICE',
+  phase: 'lab',
+  version: '1.0.0',
+  dependencies: [],
+  commands: contractsService.commandDefs(),
+  initialize: async () => {
+    contractsService.initContractsService();
+  },
+  shutdown: async () => {
+    contractsService.shutdownContractsService();
+  }
+});
+
 // PARKED — Existem no disco e NÃO são registrados até passarem por reengenharia:
 // - economy-regional  (ENABLE_REGIONAL_ECONOMY)
-// - jobs-service      (ENABLE_WOODCUTTING / ENABLE_MINING / ENABLE_FISHING)
 // - housing-service   (ENABLE_HOUSING)
 // - horse-service     (ENABLE_HORSES)
 //

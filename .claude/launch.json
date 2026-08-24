@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "depot-ui-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8791", "--directory", "skymp/ui"],
+      "port": 8791
+    },
+    {
+      "name": "launcher-renderer",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/launcher"],
+      "port": 5173
+    }
+  ]
+}

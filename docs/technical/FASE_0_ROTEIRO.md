@@ -83,7 +83,8 @@ Todas vão no `skymp/gamemode/.env`. A coluna diz **para qual etapa** cada uma e
 | 0.1 | `cd skymp/gamemode && npm test` | 444 passando | Não comece. Conserte antes. |
 | 0.2 | `npm run test:systems` | 13/13 | Comando, permissão ou flag fora do lugar |
 | 0.3 | `npm run check:schema` | `[OK] banco e migrations estao alinhados` | **Aplique as migrations pendentes** (`v2`→`v10`, em ordem; são idempotentes). Banco meio-migrado não quebra o boot — quebra a query que toca a coluna faltante, no meio de uma cena. Foi assim que a v9 nasceu: `characters.gold` estava só no `schema.sql`, então banco antigo migrado em ordem nunca a recebia, e **toda** operação de ouro falharia na etapa 5.6 |
-| 0.4 | Confira `apps/game-api/mods.json` | Existe e tem `mods` e `loadOrder` | `/mods.json` responde 503 e **ninguém entra**. Gere com `node scripts/generate-mods-manifest.js` |
+| 0.4 | Confira `apps/game-api/mods.json` | Existe e tem `mods`, `loadOrder` **e `hashAlgorithm: "sha256"`** | `/mods.json` responde 503 e **ninguém entra**. Gere com `node scripts/generate-mods-manifest.js` |
+| 0.4b | Se o `hashAlgorithm` estiver **ausente**, regere o manifesto | Campo presente | Manifesto anterior a 23/08/2026 usa MD5. O launcher recusa e **diz isso** — não acusa os mods de corrompidos. Mas ninguém entra até regerar |
 | 0.5 | `.\scripts\phase0\Start-AllServices.ps1` | Nenhum aviso vermelho | O script diz o que não vai subir. Ele não mente por otimismo |
 
 **Flags no `.env` do gamemode:**

@@ -20,6 +20,7 @@ O script confere, **antes** de despachar qualquer processo:
 | `.env` presente onde é exigido | O serviço morreria no `require('dotenv')` numa janela separada, e a orquestração reportaria sucesso |
 | `node_modules` presente | Idem — foi assim que o painel web ficou fora do ar sem ninguém notar |
 | `apps/game-api/mods.json` existe | `/mods.json` responde 503 e **nenhum jogador passa da verificação de paridade** |
+| O manifesto declara `hashAlgorithm: "sha256"` | Manifesto gerado antes de 23/08/2026 usa MD5. O launcher recusa com mensagem que aponta a causa, mas **ninguém entra até regerar** |
 | Banco alinhado com as migrations | Ver §2 — a falha mais cara de diagnosticar do projeto |
 
 Se ele reclamar, resolva o que ele apontou. Ele não mente por otimismo: prefere avisar que um serviço não vai subir a dizer "concluída" com um processo morto.

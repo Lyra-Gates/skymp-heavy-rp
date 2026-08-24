@@ -15,11 +15,31 @@
  *   5. **`disputed` não move dinheiro.**
  *
  * Executa com: node --test contracts-service.test.js
+ *
+ * `contracts-service.js` faz `require('./commands')` para os comandos de chat
+ * (`commandDefs()`), mesmo módulo pesado que jobs-service.test.js/
+ * trade-service.test.js/crafting-service.test.js já interceptam via
+ * `Module._load` — sem isso este arquivo carregaria a cadeia real
+ * (identity-service, rp-chat-service, command-registry, inventory-service)
+ * só para testar as funções puras abaixo, que nunca chamam `commandDefs()`.
  */
 
 const assert = require('assert');
 const { describe, it } = require('node:test');
+
+const Module = require('module');
+const commandsMock = {
+  getActiveCharacterData: () => null,
+  sendNotification: () => {}
+};
+const originalLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === './commands' || request.endsWith('/commands')) return commandsMock;
+  return originalLoad.apply(this, arguments);
+};
+
 const contracts = require('./contracts-service');
+Module._load = originalLoad;
 
 const CRIADOR = 11;
 const TRABALHADOR = 22;

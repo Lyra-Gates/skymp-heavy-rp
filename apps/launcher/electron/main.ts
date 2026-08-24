@@ -544,14 +544,16 @@ function sha256File(filePath: string): Promise<string> {
   });
 }
 
-// Mesmo raciocinio do sha256File acima, mas MD5 (algoritmo que o manifesto de
-// mods usa). A verificacao de paridade fazia fs.readFileSync do arquivo
-// inteiro antes de hashear -- para um Skyrim.esm de referencia (~280 MB) isso
-// aloca o arquivo inteiro na heap de uma vez, por mod, e estourava a memoria
-// do processo do launcher antes do jogo abrir. Stream evita isso.
-function hashFileMd5(filePath: string): Promise<string> {
+// Hash do manifesto de mods. Era MD5 ate 23/08/2026; MD5 tem colisao pratica,
+// e o modelo de ameaca aqui nao e corrupcao acidental -- e jogador alterando um
+// mod DE PROPOSITO, que e exatamente o caso em que colisao importa.
+//
+// A leitura e por stream porque fs.readFileSync do arquivo inteiro, para um
+// Skyrim.esm de referencia (~280 MB), aloca tudo na heap de uma vez por mod e
+// estourava a memoria do launcher antes do jogo abrir.
+function hashFileForManifest(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('md5');
+    const hash = crypto.createHash('sha256');
     const stream = fs.createReadStream(filePath);
     stream.on('data', chunk => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
@@ -1040,9 +1042,14 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
     }
 
     const allFiles = fs.readdirSync(dataPath);
-    const hashOf = (filename: string) => hashFileMd5(path.join(dataPath, filename));
+    const hashOf = (filename: string) => hashFileForManifest(path.join(dataPath, filename));
 
-    const resultado = await compareMods({ serverMods: modsJson.mods, localFiles: allFiles, hashOf });
+    const resultado = await compareMods({
+      serverMods: modsJson.mods,
+      localFiles: allFiles,
+      hashOf,
+      hashAlgorithm: modsJson.hashAlgorithm
+    });
     if (!resultado.success) return resultado;
 
     return { success: true, loadOrder: modsJson.loadOrder };

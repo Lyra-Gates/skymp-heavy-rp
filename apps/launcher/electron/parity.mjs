@@ -118,9 +118,24 @@ export function parsePluginHeader(buffer) {
  * @param {(filename: string) => (string | Promise<string>)} params.hashOf  hash do arquivo local
  * @param {number}   [params.concurrency]  arquivos hasheados em paralelo (padrão 4)
  */
-export async function compareMods({ serverMods, localFiles, hashOf, concurrency = 4 }) {
+export const HASH_ALGORITHM = 'sha256';
+
+export async function compareMods({ serverMods, localFiles, hashOf, hashAlgorithm, concurrency = 4 }) {
   if (!Array.isArray(serverMods)) {
     return { success: false, error: 'Manifesto invalido do servidor.' };
+  }
+
+  // O manifesto declara com que algoritmo foi gerado. Sem esta checagem, um
+  // mods.json antigo (MD5) contra um launcher novo (SHA-256) faria TODO arquivo
+  // divergir, e o jogador leria "seu mod esta corrompido" duzentas vezes -- uma
+  // mentira sobre a causa. O modo de falha tem que apontar pro que realmente
+  // aconteceu: o manifesto precisa ser regerado.
+  if (hashAlgorithm !== HASH_ALGORITHM) {
+    return {
+      success: false,
+      error: `Manifesto gerado com '${hashAlgorithm || 'algoritmo nao declarado'}', mas este `
+        + `launcher exige ${HASH_ALGORITHM}. Peca ao servidor para regerar o mods.json.`
+    };
   }
 
   // Windows não distingue caixa; o manifesto é gerado noutra máquina.
@@ -197,10 +212,10 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
 
   const locaisPorMinusculo = new Map(localPlugins.map(f => [f.toLowerCase(), f]));
 
-  // Sem ordem do servidor não existe paridade a verificar. Antes o código caía
+  // Sem ordem do servidor nao existe paridade a verificar. Antes o codigo caia
   // para a ordem local, o que fazia a checagem comparar o jogador consigo mesmo
-  // e responder "ok" sempre — a pior resposta possível, porque parece
-  // aprovação.
+  // e responder "ok" sempre -- a pior resposta possivel, porque parece
+  // aprovacao.
   if (!Array.isArray(serverLoadOrder) || serverLoadOrder.length === 0) {
     return {
       ok: false,
@@ -209,39 +224,63 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
     };
   }
 
-  const indiceNaOrdem = new Map(serverLoadOrder.map((f, i) => [String(f).toLowerCase(), i]));
+  const declarados = serverLoadOrder.map(String);
+  const indiceDeclarado = new Map(declarados.map((f, i) => [f.toLowerCase(), i]));
 
-  for (const plugin of serverLoadOrder) {
-    const nomeLocal = locaisPorMinusculo.get(String(plugin).toLowerCase());
+  // Primeira passada: presenca e cabecalho. Precisa vir antes da ordem efetiva
+  // porque a flag ESM, que decide o hoisting, vive dentro do cabecalho.
+  const cabecalhos = new Map();
+  for (const plugin of declarados) {
+    const nomeLocal = locaisPorMinusculo.get(plugin.toLowerCase());
     if (!nomeLocal) {
       problems.push(`Plugin ausente: ${plugin}`);
       continue;
     }
-
     const header = readHeader(nomeLocal);
     plugins.push({ name: nomeLocal, ...header });
     if (header.error) problems.push(`${nomeLocal}: ${header.error}`);
+    cabecalhos.set(plugin.toLowerCase(), { nomeLocal, header });
+  }
+
+  const presentes = declarados.filter(p => cabecalhos.has(p.toLowerCase()));
+  const ordemEfetiva = [...presentes.filter(ehHoistado), ...presentes.filter(p => !ehHoistado(p))];
+  const posEfetiva = new Map(ordemEfetiva.map((p, i) => [p.toLowerCase(), i]));
+
+  function ehHoistado(plugin) {
+    const entrada = cabecalhos.get(plugin.toLowerCase());
+    if (!entrada) return false;
+    const ext = plugin.toLowerCase().slice(plugin.lastIndexOf('.'));
+    // `isLight` NAO entra aqui, e essa ausencia e o ponto inteiro desta funcao.
+    return ext === '.esm' || ext === '.esl' || !!entrada.header.isMaster;
+  }
+
+  // Segunda passada: ordem dos masters, comparada na ordem EFETIVA.
+  for (const plugin of ordemEfetiva) {
+    const { nomeLocal, header } = cabecalhos.get(plugin.toLowerCase());
 
     for (const master of header.masters || []) {
       if (!locaisPorMinusculo.has(master.toLowerCase())) {
         problems.push(`${nomeLocal}: master ausente ${master}`);
         continue;
       }
-      const iMaster = indiceNaOrdem.get(master.toLowerCase());
-      const iPlugin = indiceNaOrdem.get(String(plugin).toLowerCase());
+      // Master presente no disco mas fora da ordem do servidor e um ESM base:
+      // a engine o carrega antes de tudo, entao nao ha o que checar aqui. O
+      // laco de plugin extra abaixo e quem decide se ele deveria existir.
+      const iMaster = posEfetiva.get(master.toLowerCase());
+      const iPlugin = posEfetiva.get(plugin.toLowerCase());
       if (iMaster !== undefined && iPlugin !== undefined && iMaster > iPlugin) {
         problems.push(`${nomeLocal}: master ${master} carrega depois do plugin`);
       }
     }
   }
 
-  // A direção que faltava.
+  // A direcao que faltava.
   const candidatos = Array.isArray(enabledPlugins) && enabledPlugins.length > 0
     ? enabledPlugins
     : localPlugins;
 
   for (const local of candidatos) {
-    if (!indiceNaOrdem.has(String(local).toLowerCase())) {
+    if (!indiceDeclarado.has(String(local).toLowerCase())) {
       problems.push(
         `Plugin extra na load order: ${local}. Ele desloca os FormIDs de todos ` +
         `os plugins seguintes, entao os itens do servidor apareceriam trocados.`

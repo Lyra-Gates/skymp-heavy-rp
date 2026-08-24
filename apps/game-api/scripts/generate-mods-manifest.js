@@ -46,9 +46,16 @@ function parseArgs(argv) {
   return args;
 }
 
-function md5File(filePath) {
+// SHA-256 desde 23/08/2026. Era MD5, e MD5 tem colisao pratica: o modelo de
+// ameaca aqui nao e corrupcao acidental, e jogador alterando um mod de
+// proposito -- o unico caso em que colisao importa. O algoritmo vai DECLARADO
+// no manifesto para que um mods.json velho falhe dizendo a verdade em vez de
+// acusar todo mod de corrompido.
+const HASH_ALGORITHM = 'sha256';
+
+function hashFile(filePath) {
   return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('md5');
+    const hash = crypto.createHash(HASH_ALGORITHM);
     const stream = fs.createReadStream(filePath);
     stream.on('data', (chunk) => hash.update(chunk));
     stream.on('end', () => resolve(hash.digest('hex')));
@@ -141,7 +148,7 @@ async function main() {
   console.log(`[manifest] Hasheando ${entries.length} arquivos em ${dataDir}...`);
   const mods = [];
   for (const filename of entries) {
-    const hash = await md5File(path.join(dataDir, filename));
+    const hash = await hashFile(path.join(dataDir, filename));
     mods.push({ filename, hash });
     process.stdout.write(`  ${filename} ${hash}\n`);
   }
@@ -176,6 +183,10 @@ async function main() {
 
   const manifest = {
     generatedAt: new Date().toISOString(),
+    // Declarado de proposito: o launcher recusa manifesto de outro algoritmo
+    // com uma mensagem que aponta pra causa, em vez de acusar todo mod de
+    // corrompido.
+    hashAlgorithm: HASH_ALGORITHM,
     sourceDataDir: dataDir,
     loadOrderSource: args.pluginsTxt ? 'plugins.txt' : 'directory-order (NAO CONFIAVEL)',
     mods,

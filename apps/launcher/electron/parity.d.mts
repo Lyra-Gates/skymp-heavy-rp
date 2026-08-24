@@ -33,6 +33,10 @@ export function compareMods(params: {
   // uma vez (ex: fs.readFileSync) estourava a memoria do processo antes do
   // jogo abrir. hashOf assincrono deixa o chamador usar hash via stream.
   hashOf: (filename: string) => string | Promise<string>;
+  // Algoritmo declarado pelo manifesto. Diferente de HASH_ALGORITHM reprova
+  // com mensagem que aponta pra causa (manifesto velho), nao pra "mod
+  // corrompido".
+  hashAlgorithm: string | undefined;
   // Arquivos hasheados em paralelo (padrao 4) -- sequencial deixava
   // manifestos grandes levarem minutos com o disco ocioso entre leituras.
   concurrency?: number;
@@ -44,6 +48,8 @@ export function analyzePlugins(params: {
   enabledPlugins?: string[];
   readHeader: (name: string) => PluginHeader;
 }): { ok: boolean; problems: string[]; plugins: Array<{ name: string } & PluginHeader> };
+
+export const HASH_ALGORITHM: 'sha256';
 
 export function parseCccTxt(content: string | null | undefined): string[];
 

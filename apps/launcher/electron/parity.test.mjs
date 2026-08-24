@@ -23,7 +23,8 @@ import {
   compareMods,
   analyzePlugins,
   parseCccTxt,
-  analyzeCreationClub
+  analyzeCreationClub,
+  HASH_ALGORITHM
 } from './parity.mjs';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ describe('comparação com o manifesto do servidor', () => {
 
   it('aprova quando tudo bate', async () => {
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [{ filename: 'A.esm', hash: 'h1' }, { filename: 'B.esp', hash: 'h2' }],
       localFiles: ['A.esm', 'B.esp'],
       hashOf
@@ -145,6 +147,7 @@ describe('comparação com o manifesto do servidor', () => {
 
   it('ignora diferença de caixa — o manifesto vem de outra máquina', async () => {
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [{ filename: 'a.ESM', hash: 'h1' }],
       localFiles: ['A.esm'],
       hashOf
@@ -154,6 +157,7 @@ describe('comparação com o manifesto do servidor', () => {
 
   it('reprova mod ausente, dizendo qual', async () => {
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [{ filename: 'Faltando.esp', hash: 'h9' }],
       localFiles: ['A.esm'],
       hashOf
@@ -164,6 +168,7 @@ describe('comparação com o manifesto do servidor', () => {
 
   it('reprova mod com hash diferente', async () => {
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [{ filename: 'C.esp', hash: 'h3' }],
       localFiles: ['C.esp'],
       hashOf
@@ -175,6 +180,7 @@ describe('comparação com o manifesto do servidor', () => {
   it('hashOf assíncrono (ex: hash via stream) funciona igual ao síncrono', async () => {
     const hashOfAsync = async (nome) => hashOf(nome);
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [{ filename: 'A.esm', hash: 'h1' }],
       localFiles: ['A.esm'],
       hashOf: hashOfAsync
@@ -197,6 +203,7 @@ describe('comparação com o manifesto do servidor', () => {
     };
 
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [
         { filename: 'A.esm', hash: 'h1' },
         { filename: 'B.esp', hash: 'h2' },
@@ -223,6 +230,7 @@ describe('comparação com o manifesto do servidor', () => {
     };
 
     const r = await compareMods({
+      hashAlgorithm: HASH_ALGORITHM,
       serverMods: [
         { filename: 'A.esp', hash: 'h1' },
         { filename: 'B.esp', hash: 'h2' }
@@ -239,8 +247,60 @@ describe('comparação com o manifesto do servidor', () => {
   it('manifesto inválido reprova em vez de aprovar por omissão', async () => {
     // Lista vazia passaria em qualquer laco. Se o servidor mandar lixo, a
     // resposta segura e "nao", nunca "sim".
-    assert.equal((await compareMods({ serverMods: null, localFiles: [], hashOf })).success, false);
-    assert.equal((await compareMods({ serverMods: undefined, localFiles: [], hashOf })).success, false);
+    assert.equal((await compareMods({ hashAlgorithm: HASH_ALGORITHM, serverMods: null, localFiles: [], hashOf })).success, false);
+    assert.equal((await compareMods({ hashAlgorithm: HASH_ALGORITHM, serverMods: undefined, localFiles: [], hashOf })).success, false);
+  });
+});
+
+describe('algoritmo de hash declarado pelo manifesto', () => {
+  const hashOf = () => 'qualquer';
+
+  it('manifesto sem algoritmo declarado reprova, e diz o porque', () => {
+    // Um mods.json gerado antes de 23/08/2026 nao tem o campo. Sem este
+    // portao, TODO arquivo divergiria e o jogador leria "seu mod esta
+    // corrompido" duzentas vezes -- uma mentira sobre a causa.
+    return compareMods({
+      serverMods: [{ filename: 'A.esm', hash: 'x' }],
+      localFiles: ['A.esm'],
+      hashOf,
+      hashAlgorithm: undefined
+    }).then(r => {
+      assert.equal(r.success, false);
+      assert.match(r.error, /regerar o mods\.json/, 'a mensagem tem que dizer o que fazer');
+      assert.ok(!/corrompido/.test(r.error), 'nao pode culpar o mod do jogador');
+    });
+  });
+
+  it('manifesto em MD5 reprova nomeando o algoritmo errado', async () => {
+    const r = await compareMods({
+      serverMods: [{ filename: 'A.esm', hash: 'x' }],
+      localFiles: ['A.esm'],
+      hashOf,
+      hashAlgorithm: 'md5'
+    });
+    assert.equal(r.success, false);
+    assert.match(r.error, /md5/);
+    assert.match(r.error, /sha256/);
+  });
+
+  it('o portao vem ANTES da checagem de arquivo faltando', async () => {
+    // Manifesto velho E mod faltando ao mesmo tempo: a causa raiz e o
+    // manifesto. Reportar "mod faltando" mandaria o jogador cacar um arquivo
+    // que talvez esteja no lugar certo.
+    const r = await compareMods({
+      serverMods: [{ filename: 'NaoExiste.esp', hash: 'x' }],
+      localFiles: [],
+      hashOf,
+      hashAlgorithm: 'md5'
+    });
+    assert.match(r.error, /regerar o mods\.json/);
+  });
+
+  it('HASH_ALGORITHM e sha256, nao md5', () => {
+    // MD5 tem colisao pratica. O modelo de ameaca aqui nao e corrupcao
+    // acidental -- e jogador alterando um mod de proposito, que e o unico
+    // caso em que colisao importa.
+    assert.equal(HASH_ALGORITHM, 'sha256');
   });
 });
 
@@ -377,6 +437,99 @@ describe('load order', () => {
 // esvaziando o `Skyrim.ccc` — solução que o Steam desfaz ao verificar os
 // arquivos. Ver docs/research/SKYMP_ECOSYSTEM_DEEP_DIVE.md §2.
 // ─────────────────────────────────────────────────────────────────────────────
+
+describe('ordem efetiva de carga (hoisting de master)', () => {
+  // A engine nao carrega na ordem declarada. Ela hoista todos os masters
+  // primeiro e so depois os .esp. Comparar indices na ordem declarada produz
+  // falso positivo em setup correto -- e falso positivo e o pior resultado
+  // possivel aqui, porque ensina o jogador a ignorar o aviso.
+
+  /** readHeader por tabela: nome -> header. */
+  const headersDe = (tabela) => (nome) => tabela[nome] || semMasters();
+
+  it('master declarado DEPOIS do dependente nao e problema: a engine hoista', () => {
+    // plugins.txt pode listar o .esm depois do .esp; a engine carrega o .esm
+    // antes de qualquer jeito. Antes desta correcao acusavamos aqui.
+    const r = analyzePlugins({
+      localPlugins: ['Patch.esp', 'Base.esm'],
+      serverLoadOrder: ['Patch.esp', 'Base.esm'],
+      enabledPlugins: ['Patch.esp', 'Base.esm'],
+      readHeader: headersDe({
+        'Patch.esp': { masters: ['Base.esm'], isMaster: false, isLight: false },
+        'Base.esm': { masters: [], isMaster: true, isLight: false }
+      })
+    });
+    assert.deepEqual(r.problems, [], 'a engine hoista Base.esm; nao ha o que acusar');
+    assert.equal(r.ok, true);
+  });
+
+  it('.esp com flag ESM tambem e hoistado', () => {
+    // Extensao .esp, mas flag ESM ligada: a engine trata como master.
+    const r = analyzePlugins({
+      localPlugins: ['Dependente.esp', 'MasterDisfarcado.esp'],
+      serverLoadOrder: ['Dependente.esp', 'MasterDisfarcado.esp'],
+      enabledPlugins: ['Dependente.esp', 'MasterDisfarcado.esp'],
+      readHeader: headersDe({
+        'Dependente.esp': { masters: ['MasterDisfarcado.esp'], isMaster: false, isLight: false },
+        'MasterDisfarcado.esp': { masters: [], isMaster: true, isLight: false }
+      })
+    });
+    assert.deepEqual(r.problems, []);
+  });
+
+  it('ESPFE: .esp com flag ESL NAO e hoistado', () => {
+    // O caso que faz a diferenca, e o erro natural de escrever
+    // (`isMaster || isLight`). A flag ESL num .esp muda o ESPACO DE FORMID
+    // (FE), nao a posicao de carga. Tratar espfe como master faria a simulacao
+    // po-lo antes do dependente e ESCONDER um problema real de ordem.
+    const r = analyzePlugins({
+      localPlugins: ['Base.esm', 'Consumidor.esp', 'PatchLeve.esp'],
+      // PatchLeve e master de Consumidor, mas esta declarado DEPOIS dele.
+      // Como espfe nao e hoistado, a ordem permanece errada de verdade.
+      serverLoadOrder: ['Base.esm', 'Consumidor.esp', 'PatchLeve.esp'],
+      enabledPlugins: ['Base.esm', 'Consumidor.esp', 'PatchLeve.esp'],
+      readHeader: headersDe({
+        'Base.esm': { masters: [], isMaster: true, isLight: false },
+        'Consumidor.esp': { masters: ['PatchLeve.esp'], isMaster: false, isLight: false },
+        'PatchLeve.esp': { masters: [], isMaster: false, isLight: true }
+      })
+    });
+    assert.equal(r.ok, false, 'espfe nao e hoistado, entao a ordem errada continua errada');
+    assert.ok(
+      r.problems.some(p => /PatchLeve\.esp carrega depois do plugin/.test(p)),
+      `deveria acusar ordem. Problemas: ${JSON.stringify(r.problems)}`
+    );
+  });
+
+  it('ordem realmente errada entre dois .esp ainda e acusada', () => {
+    // O hoisting nao pode virar desculpa pra parar de checar: entre plugins
+    // que a engine NAO hoista, a ordem declarada vale.
+    const r = analyzePlugins({
+      localPlugins: ['A.esp', 'B.esp'],
+      serverLoadOrder: ['A.esp', 'B.esp'],
+      enabledPlugins: ['A.esp', 'B.esp'],
+      readHeader: headersDe({
+        'A.esp': { masters: ['B.esp'], isMaster: false, isLight: false },
+        'B.esp': { masters: [], isMaster: false, isLight: false }
+      })
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.problems.some(p => /B\.esp carrega depois do plugin/.test(p)));
+  });
+
+  it('master ausente continua sendo acusado, hoisting ou nao', () => {
+    const r = analyzePlugins({
+      localPlugins: ['Patch.esp'],
+      serverLoadOrder: ['Patch.esp'],
+      enabledPlugins: ['Patch.esp'],
+      readHeader: headersDe({
+        'Patch.esp': { masters: ['SumiuBase.esm'], isMaster: false, isLight: false }
+      })
+    });
+    assert.equal(r.ok, false);
+    assert.ok(r.problems.some(p => /master ausente SumiuBase\.esm/.test(p)));
+  });
+});
 
 describe('parseCccTxt', () => {
   it('lê um nome por linha, sem asterisco', () => {
