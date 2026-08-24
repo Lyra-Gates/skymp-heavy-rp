@@ -690,7 +690,17 @@ app.get('/api/servers/:masterKey/sessions/:session', async (req, res) => {
   }
 
   try {
-    const session = req.params.session;
+    // `apps/launcher/electron/main.ts` grava `config.session` como
+    // `ticket:<token>` (ver docs/technical/AUTH_001_TRUST_BOUNDARY_INVENTORY.md
+    // linha 22) — o prefixo é só um marcador de formato do lado do cliente, o
+    // token gravado em `game_sessions` (apps/game-api) é o valor cru, sem ele.
+    // Sem este strip, todo hash aqui é calculado sobre a string errada e a
+    // sessão nunca resolve — falha silenciosa e recorrente confirmada em
+    // 24/08/2026 com um fork externo (failCount chegando a 9000).
+    const rawSession = req.params.session;
+    const session = typeof rawSession === 'string' && rawSession.startsWith('ticket:')
+      ? rawSession.slice('ticket:'.length)
+      : rawSession;
     if (typeof session !== 'string' || session.length < 32) {
       return res.status(404).json({ error: 'Session not found' });
     }

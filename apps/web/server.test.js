@@ -424,6 +424,23 @@ describe('master API de sessão (contrato do SkyMP)', () => {
     assert.equal(q.params[0], hashTicket(SESSION));
   });
 
+  test('aceita session com prefixo `ticket:` do launcher (AUTH_001) e hasheia sem o prefixo', async () => {
+    // apps/launcher/electron/main.ts grava config.session como `ticket:<token>`
+    // (docs/technical/AUTH_001_TRUST_BOUNDARY_INVENTORY.md linha 22). Sem este
+    // strip, o hash aqui nunca bate com o gravado em game_sessions (que é o
+    // token cru) e toda sessão resolve como inexistente — bug real, confirmado
+    // em 24/08/2026 com um fork externo (failCount chegando a 9000).
+    queryHandler = () => [{ id: 7, account_id: 42, discord_id: '123456789' }];
+    const res = await get(`/api/servers/${MASTER_KEY}/sessions/ticket:${SESSION}`);
+    assert.equal(res.status, 200);
+
+    const body = await res.json();
+    assert.equal(body.user.id, 42);
+
+    const q = queryLog.find(q => /FROM game_sessions/i.test(q.sql));
+    assert.equal(q.params[0], hashTicket(SESSION), 'hash precisa ser do token sem o prefixo ticket:');
+  });
+
   test('contabiliza a resolução', async () => {
     queryHandler = (sql) => /SELECT id, account_id/i.test(sql)
       ? [{ id: 7, account_id: 42, discord_id: 'x' }] : [];
