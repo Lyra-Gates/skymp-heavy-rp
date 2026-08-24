@@ -54,3 +54,16 @@ publicada e rode `npm run check:schema` em `skymp/gamemode`.
 
 O volume do banco é preservado. `-RemoveVolumes` exige confirmação textual e
 é destrutivo; use somente para recriar uma staging descartável.
+
+## Backup e restore
+
+```powershell
+.\deploy\staging\Backup-Staging.ps1
+.\deploy\staging\Restore-Staging.ps1 -BackupFile .\deploy\staging\backups\skymp-staging-AAAAmmdd-HHMMSS.sql.gz
+```
+
+O backup usa transação consistente, inclui banco/rotinas/eventos/triggers, é
+comprimido dentro do container e recebe SHA-256 no host. O restore aceita
+somente arquivos do diretório `backups`, confere o hash, exige confirmação,
+para consumidores, restaura e roda o schema drift em modo estrito antes de
+religar os serviços.

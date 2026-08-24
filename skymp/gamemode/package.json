@@ -8,6 +8,7 @@
     "test:systems": "node scripts/verify-governance-market-stalls.js",
     "//check:schema": "Confere se o banco real bate com as migrations versionadas. Precisa de banco; sem ele use --list.",
     "check:schema": "node scripts/check-schema-drift.js",
+    "check:schema:env": "node scripts/check-schema-drift.js --from-env",
     "check:schema:list": "node scripts/check-schema-drift.js --list",
     "migrate:clean": "node scripts/apply-migrations.js",
     "migrate:dry-run": "node scripts/apply-migrations.js --dry-run",

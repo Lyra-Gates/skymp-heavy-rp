@@ -233,9 +233,9 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 
 ### F2-003 — Backup e restore exercitados
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (scripts/runbook implementados; exercício depende da staging ativa)
 - **Aceite:** backup restaurado em banco vazio permite login e leitura do personagem de teste.
-- **Evidência:** _preencher data, duração, comandos e resultado_.
+- **Evidência:** `Backup-Staging.ps1` cria dump consistente comprimido + SHA-256; `Restore-Staging.ps1` valida caminho/hash, exige confirmação, para escritores, restaura e exige schema estrito antes de reiniciar. [`ROLLBACK_RUNBOOK.md`](../operations/ROLLBACK_RUNBOOK.md). Falta exercício real e leitura do personagem.
 
 ### F2-004 — Persistir sessões web
 
@@ -472,9 +472,9 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F8-003 — Rollback exercitado
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (procedimento e ferramentas escritos; exercício externo pendente)
 - **Aceite:** rollback de gamemode, launcher/modpack e banco documentado e executado em staging.
-- **Evidência:** _preencher_.
+- **Evidência:** [`ROLLBACK_RUNBOOK.md`](../operations/ROLLBACK_RUNBOOK.md) cobre gatilhos, preservação de evidência, código/gamemode, banco forward-only e release/manifesto; scripts de backup/restore validam hash e schema. Falta executar em staging.
 
 ### F8-004 — Assinar e testar o launcher
 

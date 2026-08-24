@@ -13,6 +13,7 @@ services:
       - "127.0.0.1:${STAGING_DB_PORT:-3306}:3306"
     volumes:
       - mariadb-data:/var/lib/mysql
+      - ./backups:/backups
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

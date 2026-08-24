@@ -326,8 +326,8 @@ function imprimirResultado(resultado, strict, ultimaVersao) {
 
   console.error(
     `\nAplique as migrations pendentes de skymp/packages/database, em ordem (v2 -> v${ultimaVersao}).\n` +
-    'Se voce acha que ja aplicou todas, aplicou parcialmente: as migrations sao\n' +
-    'idempotentes (IF NOT EXISTS), entao rodar de novo e seguro.'
+    'Se voce acha que ja aplicou todas, aplicou parcialmente. Nao reaplique tudo\n' +
+    'cegamente: migrations antigas nem sempre sao idempotentes; trate a falta indicada.'
   );
   return false;
 }
@@ -338,6 +338,7 @@ async function main() {
   const args = process.argv.slice(2);
   const apenasListar = args.includes('--list');
   const strict = args.includes('--strict');
+  const fromEnv = args.includes('--from-env');
 
   const arquivos = listarArquivosSql(databaseDir);
   if (arquivos.length === 0) {
@@ -354,8 +355,26 @@ async function main() {
     return;
   }
 
-  const db = require(path.join(gamemodeDir, 'database'));
-  db.init();
+  let db;
+  if (fromEnv) {
+    if (!process.env.DB_USER) throw new Error('DB_USER must be set with --from-env');
+    const mysql = require('mysql2/promise');
+    const pool = mysql.createPool({
+      host: process.env.DB_HOST || '127.0.0.1',
+      port: Number(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASS || '',
+      database: process.env.DB_NAME || 'skymp_rp',
+      connectionLimit: 2
+    });
+    db = {
+      query: async (sql, params) => (await pool.execute(sql, params))[0],
+      getPool: () => pool
+    };
+  } else {
+    db = require(path.join(gamemodeDir, 'database'));
+    db.init();
+  }
   try {
     const real = await lerBancoReal(db);
     const resultado = compararSchemas(esperado, real);
