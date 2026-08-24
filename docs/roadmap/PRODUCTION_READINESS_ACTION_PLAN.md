@@ -220,16 +220,16 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 
 ### F2-001 — Criar stack de staging
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (stack versionada e validada estaticamente; daemon/credenciais ausentes)
 - **Serviços:** MariaDB, painel, bot, Game API, SkyMP e launcher.
 - **Aceite:** um procedimento versionado sobe a stack; health checks confirmam cada serviço; `offlineMode=false`.
-- **Evidência:** _preencher_.
+- **Evidência:** `deploy/staging/compose.yaml`, `Start-Staging.ps1`, `Stop-Staging.ps1` e README; Compose validado por `docker compose config`; painel, Game API, bot e MariaDB têm health checks. SkyMP/launcher ficam no host Windows. Docker CLI 29.6.2 presente, Engine indisponível em 24/08/2026, então o boot real segue pendente.
 
 ### F2-002 — Migrar banco limpo até v26
 
 - [ ] **Status:** `PARCIAL` (aplicador seguro e dry-run concluídos; execução real depende de MariaDB)
 - **Aceite:** instalação vazia aplica schema + migrations em ordem; `npm run check:schema` não encontra faltas.
-- **Evidência:** `npm run migrate:dry-run` encontra 24 arquivos/149 instruções em ordem até v26; 5 testes cobrem ordenação, banco não vazio, nome divergente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
+- **Evidência:** `npm run migrate:dry-run` encontra 24 arquivos/149 instruções em ordem até v26; 6 testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
 
 ### F2-003 — Backup e restore exercitados
 

@@ -21,7 +21,9 @@
 
 ### Adicionado
 
-- **Aplicador seguro de schema+migrations para banco vazio.** `npm run migrate:dry-run` inventaria 24 arquivos/149 instruções sem conectar; `npm run migrate:clean` aplica em ordem numérica, recusa banco já populado e recusa nome divergente do `USE skymp_rp` versionado. Erros informam arquivo/posição sem imprimir SQL. Cinco testes rodam sem MariaDB; F2-002 permanece parcial até a execução contra banco real seguida de `check:schema`.
+- **Stack de staging versionada sem exigir MariaDB instalado no host.** `deploy/staging` define MariaDB 11.4.8 pinado, painel, Game API e bot com volumes, rede interna, health checks e scripts PowerShell de start/stop; SkyMP e launcher permanecem no Windows. O bootstrap do banco é explícito e só aceita volume vazio. `docker compose config` e a sintaxe dos scripts passam localmente; o Engine não estava ativo, portanto F2-001 continua parcial sem alegar boot que não ocorreu.
+
+- **Aplicador seguro de schema+migrations para banco vazio.** `npm run migrate:dry-run` inventaria 24 arquivos/149 instruções sem conectar; `npm run migrate:clean` aplica em ordem numérica, recusa banco já populado e recusa nome divergente do `USE skymp_rp` versionado. Erros informam arquivo/posição sem imprimir SQL. Seis testes rodam sem MariaDB; F2-002 permanece parcial até a execução contra banco real seguida de `check:schema`.
 
 - **Sessões persistentes do painel, sem dependência nova.** `apps/web/mysqlSessionStore.js` substitui o `MemoryStore` do `express-session` por uma store MariaDB sobre o `mysql2` já instalado. A `migration-v26-web-sessions.sql` cria armazenamento com expiração indexada; poda periódica não bloqueia o processo. Cinco testes sem banco cobrem leitura, UPSERT, touch, logout, poda, expiração e JSON corrompido. O gate F2-004 permanece parcial até aplicar a migration e provar restart em staging.
 

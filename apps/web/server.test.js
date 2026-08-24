@@ -116,6 +116,28 @@ describe('hardening HTTP', () => {
   });
 });
 
+describe('health check', () => {
+  test('confirma dependência do banco sem exigir sessão', async () => {
+    const res = await get('/health');
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true, database: 'reachable' });
+    assert.ok(queryLog.some(entry => /SELECT 1 AS ok/i.test(entry.sql)));
+  });
+
+  test('responde 503 sem vazar erro quando o banco falha', async () => {
+    queryHandler = () => { throw new Error('password=super-secret'); };
+    const originalError = console.error;
+    console.error = () => {};
+    try {
+      const res = await get('/health');
+      assert.equal(res.status, 503);
+      assert.deepEqual(await res.json(), { ok: false, database: 'unreachable' });
+    } finally {
+      console.error = originalError;
+    }
+  });
+});
+
 describe('validação da aplicação de personagem', () => {
   const valid = {
     first_name: 'Ralof',

@@ -76,6 +76,17 @@ function readConfig(configPath) {
   };
 }
 
+function readEnvConfig(env = process.env) {
+  if (!env.DB_USER) throw new Error('DB_USER must be set with --from-env');
+  return {
+    host: env.DB_HOST || '127.0.0.1',
+    port: Number(env.DB_PORT) || 3306,
+    user: env.DB_USER,
+    password: env.DB_PASS || '',
+    database: env.DB_NAME || 'skymp_rp'
+  };
+}
+
 async function main(argv = process.argv.slice(2)) {
   const plan = buildMigrationPlan();
   const statementCount = plan.reduce((sum, file) => sum + file.statements.length, 0);
@@ -85,10 +96,11 @@ async function main(argv = process.argv.slice(2)) {
     return;
   }
 
+  const fromEnv = argv.includes('--from-env');
   const configArg = argv.find(arg => arg.startsWith('--config='));
   const configPath = configArg ? path.resolve(configArg.slice('--config='.length)) : defaultConfigPath;
-  if (!fs.existsSync(configPath)) throw new Error(`Config de banco nao encontrada: ${configPath}`);
-  const config = readConfig(configPath);
+  if (!fromEnv && !fs.existsSync(configPath)) throw new Error(`Config de banco nao encontrada: ${configPath}`);
+  const config = fromEnv ? readEnvConfig() : readConfig(configPath);
 
   // Sem `database` de propósito: schema.sql é quem cria e seleciona o banco.
   const connection = await mysql.createConnection({
@@ -113,4 +125,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildMigrationPlan, assertEmptyDatabase, applyMigrationPlan, readConfig, main, SCHEMA_DATABASE };
+module.exports = { buildMigrationPlan, assertEmptyDatabase, applyMigrationPlan, readConfig, readEnvConfig, main, SCHEMA_DATABASE };

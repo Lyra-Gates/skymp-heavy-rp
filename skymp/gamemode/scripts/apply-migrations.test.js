@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { describe, it } = require('node:test');
-const { buildMigrationPlan, applyMigrationPlan } = require('./apply-migrations');
+const { buildMigrationPlan, applyMigrationPlan, readEnvConfig } = require('./apply-migrations');
 
 const databaseDir = path.resolve(__dirname, '..', '..', 'packages', 'database');
 
@@ -65,5 +65,14 @@ describe('aplicador de migrations para banco vazio', () => {
         return true;
       }
     );
+  });
+
+  it('lê configuração de ambiente para containers sem arquivo de segredo', () => {
+    assert.deepEqual(readEnvConfig({
+      DB_HOST: 'mariadb', DB_PORT: '3307', DB_USER: 'skymp', DB_PASS: 'secret', DB_NAME: 'skymp_rp'
+    }), {
+      host: 'mariadb', port: 3307, user: 'skymp', password: 'secret', database: 'skymp_rp'
+    });
+    assert.throws(() => readEnvConfig({}), /DB_USER/);
   });
 });

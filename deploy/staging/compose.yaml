@@ -1,0 +1,135 @@
+name: skymp-heavy-rp-staging
+
+services:
+  mariadb:
+    image: mariadb:11.4.8
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: skymp_rp
+      MARIADB_USER: ${DB_USER:?configure DB_USER}
+      MARIADB_PASSWORD: ${DB_PASS:?configure DB_PASS}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS:?configure DB_ROOT_PASS}
+    ports:
+      - "127.0.0.1:${STAGING_DB_PORT:-3306}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks: [backend]
+
+  migrate:
+    image: node:20-bookworm-slim
+    profiles: [bootstrap]
+    working_dir: /repo/skymp/gamemode
+    command: ["sh", "-c", "npm ci --omit=dev && npm run migrate:clean -- --from-env"]
+    env_file: ["${STAGING_ENV_FILE:-.env}"]
+    environment:
+      NODE_ENV: staging
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASS: ${DB_ROOT_PASS:?configure DB_ROOT_PASS}
+      DB_NAME: skymp_rp
+    volumes:
+      - ../..:/repo:ro
+      - gamemode-node-modules:/repo/skymp/gamemode/node_modules
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    networks: [backend]
+
+  web:
+    image: node:20-bookworm-slim
+    restart: unless-stopped
+    working_dir: /repo/apps/web
+    command: ["sh", "-c", "npm ci --omit=dev && npm start"]
+    env_file: ["${STAGING_ENV_FILE:-.env}"]
+    environment:
+      NODE_ENV: production
+      PANEL_PORT: 3001
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: skymp_rp
+      BOT_INTERNAL_URL: http://bot-discord:3002
+      TRUST_PROXY: "true"
+    volumes:
+      - ../..:/repo:ro
+      - web-node-modules:/repo/apps/web/node_modules
+      - web-crash-reports:/repo/apps/web/crash-reports
+    ports:
+      - "127.0.0.1:${PANEL_PORT:-3001}:3001"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [backend]
+
+  game-api:
+    image: node:20-bookworm-slim
+    restart: unless-stopped
+    working_dir: /repo/apps/game-api
+    command: ["sh", "-c", "npm ci --omit=dev && npm start"]
+    env_file: ["${STAGING_ENV_FILE:-.env}"]
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: skymp_rp
+      GAME_API_PORT: 7758
+      GAME_API_BIND_HOST: 0.0.0.0
+      MODS_MANIFEST_PATH: /repo/apps/game-api/mods.json
+    volumes:
+      - ../..:/repo:ro
+      - game-api-node-modules:/repo/apps/game-api/node_modules
+    ports:
+      - "127.0.0.1:${GAME_API_PORT:-7758}:7758"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7758/health').then(r=>r.json()).then(x=>{if(!x.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [backend]
+
+  bot-discord:
+    image: node:20-bookworm-slim
+    restart: unless-stopped
+    working_dir: /repo/apps/bot-discord
+    command: ["sh", "-c", "npm ci --omit=dev && node index.js"]
+    env_file: ["${STAGING_ENV_FILE:-.env}"]
+    environment:
+      BOT_API_BIND_HOST: 0.0.0.0
+      PORT: 3002
+    volumes:
+      - ../..:/repo:ro
+      - bot-node-modules:/repo/apps/bot-discord/node_modules
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [backend]
+
+networks:
+  backend:
+    internal: false
+
+volumes:
+  mariadb-data:
+  gamemode-node-modules:
+  web-node-modules:
+  game-api-node-modules:
+  bot-node-modules:
+  web-crash-reports:

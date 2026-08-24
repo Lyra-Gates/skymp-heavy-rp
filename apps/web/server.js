@@ -193,6 +193,16 @@ async function requireStaff(req, res, next) {
 
 app.get('/api/metrics', requireStaff, (req, res) => res.json(runtimeMetrics.snapshot()));
 
+app.get('/health', async (req, res) => {
+  try {
+    await db('SELECT 1 AS ok');
+    return res.json({ ok: true, database: 'reachable' });
+  } catch (err) {
+    console.error('[health] Banco indisponivel:', err.message);
+    return res.status(503).json({ ok: false, database: 'unreachable' });
+  }
+});
+
 app.get('/api/auth/discord', passport.authenticate('discord'));
 app.get('/api/auth/discord/callback', passport.authenticate('discord', {
     failureRedirect: '/?error=auth_failed'

@@ -158,3 +158,16 @@ Honestidade sobre o limite, no mesmo espírito do relatório de QA:
 - **Restauração de backup.** Não há procedimento de backup verificado. Antes de qualquer restauração oficial, teste em ambiente separado.
 - **Carga.** Nenhuma medição com múltiplos jogadores. O polling de 2s do `death-service`/`player-panel`/`voip` é onde o problema tende a aparecer primeiro.
 - **Incidente com jogadores online.** Não há procedimento porque nunca houve jogadores online.
+
+---
+
+## 9. Stack de staging
+
+[`deploy/staging/README.md`](../../deploy/staging/README.md) sobe MariaDB, painel,
+Game API e bot com health checks e volumes persistentes. SkyMP e launcher rodam
+no host Windows. O primeiro boot usa `-BootstrapDatabase`; boots seguintes
+preservam o volume e não reaplicam migrations cegamente.
+
+Neste ambiente local o arquivo Compose e os scripts PowerShell foram validados,
+mas o Docker Engine não estava ativo; nenhum container foi iniciado e nenhum
+resultado de integração foi fabricado.

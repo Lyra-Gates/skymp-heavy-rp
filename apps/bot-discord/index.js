@@ -186,8 +186,15 @@ app.get('/api/metrics', (req, res) => {
     return res.json(runtimeMetrics.snapshot());
 });
 
+app.get('/health', (req, res) => {
+    const ready = client.isReady();
+    return res.status(ready ? 200 : 503).json({ ok: ready, discord: ready ? 'ready' : 'not_ready' });
+});
+
 const PORT = process.env.PORT || 3002;
-const HOST = '127.0.0.1'; // API interna: nunca expor em todas as interfaces
+// Default seguro no host. Em container, use 0.0.0.0 apenas dentro da rede
+// privada do compose e não publique a porta no host.
+const HOST = process.env.BOT_API_BIND_HOST || '127.0.0.1';
 app.listen(PORT, HOST, () => {
     console.log(`[discord-bot] API interna rodando em http://${HOST}:${PORT}`);
 });
