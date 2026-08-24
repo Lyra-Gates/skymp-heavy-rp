@@ -112,6 +112,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
+| [design/ANTICHEAT.md](design/ANTICHEAT.md) | **Anti-cheat — scanner de cliente rejeitado, alternativa aprovada.** Por que varrer a máquina do jogador detecta a coisa errada, e por que a detecção de ActorValue implausível no servidor é inforjável e não custa privacidade. |
 | [design/SOUL_AFFINITY.md](design/SOUL_AFFINITY.md) | **Afinidade da Alma — desenho fechado, domínio e serviço implementados.** Unifica magia, vampirismo, licantropia, corrupção, encantamento e linhagem. Parte I: análise de 15 pontos. Parte II: como isso vira jogo bom. Parte III: especificação. |
 
 ### Estudos de referência

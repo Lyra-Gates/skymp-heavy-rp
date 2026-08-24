@@ -179,6 +179,7 @@ Consequência direta: um sistema de vampirismo construído sobre o vampirismo va
 
 | Proposta | Veredito |
 |---|---|
+| [Anti-cheat](design/ANTICHEAT.md) | **Scanner de cliente rejeitado.** Detecta a ferramenta instalada, não a manipulação acontecendo; contornado renomeando um arquivo; dado pessoal de brasileiro em repositório público. Aprovada a detecção do **efeito no servidor**, sobre o polling que já existe. |
 | [Afinidade da Alma](design/SOUL_AFFINITY.md) | **Desenho fechado** (Partes I–III). Veto na mordida com 70% de morte; quatro condições adotadas. Emendou a §8 desta constituição. Aguarda a Fase 0. |
 
 ## Como usar este documento
