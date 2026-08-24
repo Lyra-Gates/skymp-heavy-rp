@@ -1,24 +1,13 @@
-# Changelog
-
-Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
-Versionamento [SemVer](https://semver.org/lang/pt-BR/).
-
-> **Sobre o `0.x`:** o projeto fica em versão zero enquanto **nada tiver sido validado numa sessão de jogo real**. Publicar `1.0.0` sem isso seria prometer estabilidade que não foi verificada. A `1.0.0` sai depois do teste in-game da Fase 1 — ver [QA_REPORT_2026-08.md](docs/technical/QA_REPORT_2026-08.md) §3.
-
----
-
 ## [Não lançado]
 
 ### Corrigido
 
-- **A verificação de load order ignorava o hoisting da engine.** O Skyrim carrega todos os masters primeiro e só depois os ; comparávamos índices na ordem declarada e acusávamos “master carrega depois do plugin” em setup **correto**. Falso positivo aqui ensina o jogador a ignorar o aviso. A sutileza: um  com flag ESL (*espfe*) **não** é hoistado — a flag muda o espaço de FormID, não a posição de carga; o critério ingênuo  esconderia um problema real de ordem.
-- **Manifesto de mods passou de MD5 para SHA-256**, launcher e gerador na mesma mudança. MD5 tem colisão prática, e o modelo de ameaça aqui não é corrupção acidental — é jogador alterando um mod de propósito. O manifesto agora **declara** o algoritmo, e um  antigo falha dizendo “regere o manifesto” em vez de acusar duzentos mods de corrompidos. ⚠️ **O  versionado precisa ser regerado** — passo 0.4b do roteiro da Fase 0.
+- **A verificação de load order ignorava o hoisting da engine.** O Skyrim carrega todos os masters primeiro e só depois os `.esp`; comparávamos índices na ordem declarada e acusávamos "master carrega depois do plugin" em setup **correto** — e falso positivo aqui ensina o jogador a ignorar o aviso. A sutileza que fecha o caso: um `.esp` com flag ESL (*espfe*) **não** é hoistado, porque essa flag muda o espaço de FormID e não a posição de carga — o critério ingênuo `isMaster || isLight` esconderia um problema real de ordem.
+- **Manifesto de mods passou de MD5 para SHA-256**, launcher e gerador na mesma mudança. MD5 tem colisão prática, e o modelo de ameaça aqui não é corrupção acidental — é jogador alterando um mod de propósito, o único caso em que colisão importa. O manifesto agora **declara** o algoritmo, e um `mods.json` antigo falha dizendo "regere o manifesto" em vez de acusar duzentos mods de corrompidos. ⚠️ **O `mods.json` versionado precisa ser regerado** — passo 0.4b do roteiro da Fase 0.
 
 ### Adicionado
 
-- **Checagem de espaço em disco antes de baixar** (, 12 testes). Verifica **os dois destinos** — o  vai para  e o conteúdo é extraído na pasta do jogo, que podem estar em discos diferentes. Não bloqueia quando não consegue medir: impedir alguém de jogar porque  falhou seria pior que o problema. E  no meio do download deixou de aparecer cru.
-
-### Adicionado
+- **Checagem de espaço em disco antes de baixar** (`apps/launcher/electron/disk.mjs`, 12 testes). Verifica **os dois destinos**: o `.zip` vai para `temp` e o conteúdo é extraído na pasta do jogo, que podem estar em discos diferentes. Não bloqueia quando não consegue medir — impedir alguém de jogar porque `statfs` falhou seria pior que o problema original. E `ENOSPC` no meio do download deixou de chegar cru ao jogador.
 
 - **Pesquisa: rodar o jogo via Mod Organizer 2 em vez de `skse64_loader.exe` direto (23/08/2026) — só planejamento, nenhum código.** [`MO2_LAUNCHER_INTEGRATION_RESEARCH.md`](docs/research/MO2_LAUNCHER_INTEGRATION_RESEARCH.md). Pedido inicial soava incompatível com o contrato de FormID (MO2 é feito pra jogador gerenciar mods livremente) — esclarecido que a intenção é o oposto: launcher continua no controle total, MO2 vira só o mecanismo de instalação/execução (USVFS), nunca uma ferramenta que o jogador opera. Pesquisa confirmou (com fontes): sintaxe de CLI do MO2 (`-i`/`-p`/`run -e`), o mecanismo técnico (USVFS mescla `Data/` virtual sem copiar arquivo físico), o precedente do Wabbajack (que já exige instância portátil do MO2 pra automação), e um relato comunitário de bug histórico MO2↔SkyrimPlatform (corrigido). **Bloqueador real, não testado**: se SkyrimPlatform (a UI CEF do SkyMP) funciona de verdade sob USVFS — nenhum servidor SkyMP público documenta este padrão pra copiar. Arquitetura proposta cobre servidor (manifesto vira N perfis, com a regra de que perfis só podem variar em texturas/loose files, nunca em plugins — senão quebra o FormID) e launcher (módulo de gerência do MO2, `launch-game` trocando de alvo, toggle qualidade/performance = troca de perfil). Plano faseado começa por bancada manual antes de qualquer linha de código.
 
@@ -28,7 +17,7 @@ Versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
   **Empacotamento ESM.** `electron-builder` não lê o `"type": "module"` do `package.json` real — lê `extraMetadata.main`, que sobrescreve o manifesto do app empacotado. Um `main.js` com sintaxe ESM mas nome `.js` confundia o ASAR: `npm run build` gerava um instalador que falhava ao abrir com "entry file not found". `vite.config.ts` agora emite `main.mjs`/`preload.mjs` (`entryFileNames`), com `package.json` e `electron-builder.json` atualizados pra apontar pro nome novo — ortogonal à correção anterior do `__dirname`, que resolvia só o `npm start`/dev. Efeito colateral corrigido junto: com preload em `.mjs`, o sandbox padrão do Electron deixava `contextBridge` nunca popular `window.electronAPI`; `sandbox: false` na janela principal resolve, com `contextIsolation` continuando ligado. `npm run build` rodado ponta a ponta pra confirmar — instalador saiu sem erro de ASAR.
 
-  **Estouro de memória na verificação de mods.** `hashOf` fazia `fs.readFileSync` do arquivo inteiro antes de hashear, síncrono, por mod — um `Skyrim.esm` de referência passa de 280 MB. `compareMods` (`parity.mjs`) virou `async` com `await hashOf(...)` sequencial; `main.ts` troca por `hashFileMd5` via stream, mesmo padrão do `sha256File` que já existia pro update de cliente. Provavelmente a causa real do "jogo falha ao carregar na memória" relatado antes desta sessão. 39 testes, todos passando (`parity.test.mjs` + `parity.d.mts` atualizados pro contrato assíncrono).
+  **Estouro de memória na verificação de mods.** `hashOf` fazia `fs.readFileSync` do arquivo inteiro antes de hashear, síncrono, por mod — um `Skyrim.esm` de referência passa de 280 MB. `compareMods` (`parity.mjs`) virou `async` com `await hashOf(...)` sequencial; `main.ts` troca por `hashFileMd5` via stream, mesmo padrão do `sha256File` que já existia pro update de cliente. *(o algoritmo virou SHA-256 em 23/08 e a função passou a se chamar `hashFileForManifest` — ver a entrada no topo.)* Provavelmente a causa real do "jogo falha ao carregar na memória" relatado antes desta sessão. 39 testes, todos passando (`parity.test.mjs` + `parity.d.mts` atualizados pro contrato assíncrono).
 
   **"Servidor Online" era texto fixo no JSX**, sem chamada nenhuma por trás — mesma classe de bug já registrada neste projeto (trade-overlay, atalhos de voz: UI que parece funcional e nunca foi ligada a nada). `GET /health` já existia em `apps/game-api` sem consumidor. Handler `check-server-status` novo, exposto via preload, consultado no carregamento da tela e a cada 15s; o card mostra Verificando/Online/Offline de verdade e o botão JOGAR desabilita quando offline.
 
