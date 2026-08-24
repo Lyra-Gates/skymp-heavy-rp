@@ -10,13 +10,13 @@ não declara o gate concluído.
 |---|---|---|---|
 | Conexões | **Parcial** | `connection-monitor.js` registra conexão, associação ao `profileId`, rejeição e desconexão. | Só texto; não há contadores, duração de sessão nem endpoint. |
 | Falhas de login | **Parcial** | Master API registra chave inválida e erros; launcher mostra as falhas ao jogador. | Não há total por causa nem correlação launcher→Master API→game-api. |
-| Latência DB | **Não** | — | Os wrappers `db()` executam SQL sem histograma ou duração. |
+| Latência DB | **Sim, por serviço** | O wrapper compartilhado mede sucesso/erro em buckets fixos no painel e na Game API. | Ainda falta collector/retenção e instrumentar o gamemode. |
 | Eventos CEF | **Sim, local** | `ui-event-rate-limiter.snapshot()` conta observados/rejeitados por tipo e o bootstrap publica JSON a cada 60 s, sem payload. | Métrica fica só no stdout e reinicia com o processo. |
-| Rejeições | **Parcial** | Guards e rate limits respondem status distintos e registram alguns casos. | Sem contador comum por rota/motivo. |
+| Rejeições | **Parcial** | Guards de autenticação/segredo e rate limits incrementam motivos enumerados. | Ainda falta cobrir as recusas de domínio no gamemode e na fila. |
 | Transferências | **Parcial** | `transaction-service` e `inventory` registram sucesso, replay e falha; o ledger durável fica no banco. | Sem taxa/latência agregada nem alerta de falha. |
 | Reconciliações | **Parcial** | Existem rotinas de economia/estado físico e `healthCheck()`. | Execuções e divergências não são agregadas. |
 | Polling | **Não medido** | Intervalos existem em conexão, morte, painel, interação e atalhos. | Não há duração de tick, atraso ou sobreposição. |
-| CPU e memória | **Disponível, não coletado** | Node fornece `process.cpuUsage()` e `process.memoryUsage()`; SkyMP declara `mp.getPrometheusMetrics()`. | Nenhum coletor/exportador do projeto usa essas fontes. |
+| CPU e memória | **Sim nos serviços Node** | Snapshots internos incluem CPU acumulada, RSS, heap e memória externa; SkyMP declara `mp.getPrometheusMetrics()`. | Ainda falta gamemode, collector e histórico. |
 | Fila | **Sim, efêmero** | `GET /health` da Game API expõe capacidade, ocupados, conectados e espera. | Sem histórico, alertas ou persistência após restart. |
 | Saúde de módulos | **Local** | `module-registry.healthCheckAll()` isola falhas de módulos ativos. | Resultado não é publicado nem acompanhado. |
 
@@ -34,18 +34,30 @@ não declara o gate concluído.
 
 ## Próximas entregas executáveis
 
-### O1 — Instrumentação HTTP
+### O1 — Instrumentação HTTP (`IMPLEMENTADO`, sem collector)
 
-- contadores por serviço, rota normalizada e classe de status;
-- duração em buckets fixos;
-- contadores de rate limit e autenticação recusada;
-- endpoint interno protegido por `X-Internal-Secret` na Game API e no bot;
-- endpoint staff-only no painel.
+- [x] contadores por serviço, rota normalizada e classe de status;
+- [x] duração em buckets fixos;
+- [x] contadores de rate limit e autenticação recusada;
+- [x] endpoint interno protegido por `X-Internal-Secret` na Game API e no bot;
+- [x] endpoint staff-only no painel;
+- [x] `X-Request-Id` validado/gerado e propagado do painel para o bot;
+- [ ] collector, retenção e alertas.
 
-### O2 — Banco e fluxo de login
+Endpoints:
 
-- medir duração e erro nos wrappers de consulta, sem registrar SQL/params;
-- propagar `requestId` do launcher para OAuth, fila e Master API;
+- painel: `GET /api/metrics` (sessão com papel de staff);
+- Game API: `GET /internal/metrics` (`X-Internal-Secret`);
+- bot: `GET /api/metrics` (`X-Internal-Secret`, API presa a `127.0.0.1`).
+
+O snapshot não contém SQL, parâmetros, IP, accountId, actorId, ticket, token,
+payload CEF ou texto livre. Séries têm cardinalidade limitada e rotas dinâmicas
+usam o template Express (`/recurso/:id`), nunca a URL concreta.
+
+### O2 — Banco e fluxo de login (`PARCIAL`)
+
+- [x] medir duração e erro nos wrappers de consulta do painel/Game API, sem registrar SQL/params;
+- [ ] propagar `requestId` desde o launcher para OAuth, fila e Master API;
 - contar falha por causa enumerada (`invalid_ticket`, `not_whitelisted`, etc.).
 
 ### O3 — Gamemode e processo

@@ -9,8 +9,10 @@ const mysql   = require('mysql2/promise');
 const cors    = require('cors');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
+const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
 
 const app  = express();
+const runtimeMetrics = createRuntimeMetrics({ service: 'web' });
 const PORT = process.env.PANEL_PORT || 3001;
 const INTERNAL_API_SECRET = requireEnv('INTERNAL_API_SECRET');
 // O bot escuta em 127.0.0.1 (ver apps/bot-discord/index.js). Configurável porque
@@ -55,8 +57,10 @@ const pool = mysql.createPool({
   connectionLimit: 5
 });
 
+const executeDb = (sql, params = []) => runtimeMetrics.timeDb(() => pool.execute(sql, params));
+
 const db = async (sql, params = []) => {
-  const [rows] = await pool.execute(sql, params);
+  const [rows] = await executeDb(sql, params);
   return rows;
 };
 
@@ -107,6 +111,7 @@ const CORS_ORIGINS = (process.env.PANEL_PUBLIC_URL || `http://localhost:${PORT}`
   .filter(Boolean);
 
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
+app.use(runtimeMetrics.middleware);
 app.use(express.json({ limit: '512kb' }));
 app.disable('x-powered-by');
 app.use(express.static(path.join(__dirname, 'public')));
@@ -141,12 +146,12 @@ passport.use(new DiscordStrategy({
         const rows = await db('SELECT account_id FROM discord_identities WHERE discord_id = ?', [profile.id]);
         let accountId;
         if (rows.length === 0) {
-            const [accRes] = await pool.execute('INSERT INTO accounts (status) VALUES (?)', ['active']);
+            const [accRes] = await executeDb('INSERT INTO accounts (status) VALUES (?)', ['active']);
             accountId = accRes.insertId;
-            await pool.execute('INSERT INTO discord_identities (discord_id, account_id, username, avatar) VALUES (?, ?, ?, ?)', [profile.id, accountId, profile.username, profile.avatar || '']);
+            await executeDb('INSERT INTO discord_identities (discord_id, account_id, username, avatar) VALUES (?, ?, ?, ?)', [profile.id, accountId, profile.username, profile.avatar || '']);
         } else {
             accountId = rows[0].account_id;
-            await pool.execute('UPDATE discord_identities SET username = ?, avatar = ? WHERE discord_id = ?', [profile.username, profile.avatar || '', profile.id]);
+            await executeDb('UPDATE discord_identities SET username = ?, avatar = ? WHERE discord_id = ?', [profile.username, profile.avatar || '', profile.id]);
         }
         
         return done(null, { id: profile.id, username: profile.username, avatar: profile.avatar, accountId });
@@ -157,6 +162,7 @@ passport.use(new DiscordStrategy({
 
 function requireAuth(req, res, next) {
   if (req.isAuthenticated && req.isAuthenticated()) return next();
+  runtimeMetrics.recordRejection('auth_required');
   res.status(401).json({ error: 'Não autenticado' });
 }
 
@@ -164,10 +170,16 @@ function requireAuth(req, res, next) {
 // O campo `vip_level` em `accounts` é SOMENTE para monetização (VIP/Apoiador).
 // NUNCA usar vip_level como critério de permissão administrativa.
 async function requireStaff(req, res, next) {
-  if (!req.isAuthenticated || !req.isAuthenticated()) return res.status(401).json({ error: 'Nao autenticado' });
+  if (!req.isAuthenticated || !req.isAuthenticated()) {
+    runtimeMetrics.recordRejection('staff_auth_required');
+    return res.status(401).json({ error: 'Nao autenticado' });
+  }
   try {
     const rows = await db('SELECT role FROM staff_roles WHERE account_id = ? LIMIT 1', [req.user.accountId]);
-    if (rows.length === 0) return res.status(403).json({ error: 'Acesso staff negado' });
+    if (rows.length === 0) {
+      runtimeMetrics.recordRejection('staff_role_required');
+      return res.status(403).json({ error: 'Acesso staff negado' });
+    }
     req.staff = { role: rows[0].role };
     return next();
   } catch (err) {
@@ -175,6 +187,8 @@ async function requireStaff(req, res, next) {
     return res.status(500).json({ error: 'Erro interno do servidor' });
   }
 }
+
+app.get('/api/metrics', requireStaff, (req, res) => res.json(runtimeMetrics.snapshot()));
 
 app.get('/api/auth/discord', passport.authenticate('discord'));
 app.get('/api/auth/discord/callback', passport.authenticate('discord', {
@@ -266,14 +280,14 @@ app.post('/api/apply', requireAuth, async (req, res) => {
 
         const needsExtraReview = detectsStrongConcept(biography, motivations, weaknesses, social_ties) ? 1 : 0;
 
-        await pool.execute(
+        await executeDb(
             `INSERT INTO characters
                (account_id, first_name, last_name, biography, motivations, weaknesses, social_ties, needs_extra_review, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [req.user.accountId, first_name, last_name, biography, motivations, weaknesses, social_ties, needsExtraReview, 'pending']
         );
 
-        await pool.execute(
+        await executeDb(
             'INSERT INTO whitelist_applications (account_id, status) VALUES (?, ?)',
             [req.user.accountId, 'pending']
         );
@@ -285,18 +299,18 @@ app.post('/api/apply', requireAuth, async (req, res) => {
 // ── API: Dashboard ─────────────────────────────────────────────────────────
 app.get('/api/dashboard', requireStaff, async (req, res) => {
   try {
-    const [accounts]    = await pool.execute('SELECT COUNT(*) as c FROM accounts');
-    const [chars]       = await pool.execute('SELECT COUNT(*) as c FROM characters');
-    const [pending]     = await pool.execute("SELECT COUNT(*) as c FROM whitelist_applications WHERE status='pending'");
+    const [accounts]    = await executeDb('SELECT COUNT(*) as c FROM accounts');
+    const [chars]       = await executeDb('SELECT COUNT(*) as c FROM characters');
+    const [pending]     = await executeDb("SELECT COUNT(*) as c FROM whitelist_applications WHERE status='pending'");
     // `DATE(created_at)=CURDATE()` envolve a coluna numa função, o que impede o
     // MySQL de usar índice — vira varredura da tabela inteira, justamente a que
     // mais cresce no projeto. A comparação por intervalo faz o mesmo recorte e
     // consegue usar `idx_audit_created` (migration v7).
-    const [auditToday]  = await pool.execute(
+    const [auditToday]  = await executeDb(
       "SELECT COUNT(*) as c FROM audit_logs WHERE created_at >= CURDATE() AND created_at < CURDATE() + INTERVAL 1 DAY"
     );
-    const [prisoners]   = await pool.execute("SELECT COUNT(*) as c FROM prison_records WHERE status='active'");
-    const [factions]    = await pool.execute('SELECT COUNT(*) as c FROM factions');
+    const [prisoners]   = await executeDb("SELECT COUNT(*) as c FROM prison_records WHERE status='active'");
+    const [factions]    = await executeDb('SELECT COUNT(*) as c FROM factions');
     res.json({
       accounts:    accounts[0].c,
       characters:  chars[0].c,
@@ -334,12 +348,13 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
  * registro de verdade e `audit_logs`; o canal e notificacao. Ver
  * `apps/bot-discord/moderationLog.js` e ARCHITECTURE.md 1.3.
  */
-function notifyModerationLog(evento) {
+function notifyModerationLog(evento, requestId) {
     fetch(`${BOT_INTERNAL_URL}/api/moderation-log`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Internal-Secret': INTERNAL_API_SECRET
+            'X-Internal-Secret': INTERNAL_API_SECRET,
+            'X-Request-Id': requestId
         },
         body: JSON.stringify({ ...evento, source: 'painel', at: new Date().toISOString() })
     }).catch(e => console.error('[web] Falha ao enviar log de moderacao:', e.message));
@@ -407,7 +422,8 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Internal-Secret': INTERNAL_API_SECRET
+                    'X-Internal-Secret': INTERNAL_API_SECRET,
+                    'X-Request-Id': req.requestId
                 },
                 body: JSON.stringify({ discord_id: idRows[0].discord_id, status })
             });
@@ -432,7 +448,7 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
         target: idRows.length > 0 ? `<@${idRows[0].discord_id}>` : `aplicacao #${req.params.id}`,
         moderator: req.user.username || `conta #${req.user.accountId}`,
         reason: reviewer_notes || null
-    });
+    }, req.requestId);
 
     res.json({ ok: true });
   } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
@@ -596,6 +612,7 @@ app.post('/api/crashes/client', async (req, res) => {
   try {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     if (isRateLimited(`crashes:${ip}`, 10, 60 * 1000)) {
+      runtimeMetrics.recordRejection('rate_limit_crashes');
       return res.status(429).json({ ok: false, error: 'Muitas requisições, tente novamente mais tarde.' });
     }
 
@@ -685,6 +702,7 @@ app.get('/api/servers/:masterKey/sessions/:session', async (req, res) => {
   }
 
   if (isRateLimited(`master-session:${ip}`, 120, 60 * 1000)) {
+    runtimeMetrics.recordRejection('rate_limit_master_session');
     return res.status(429).json({ error: 'Too many requests' });
   }
 
@@ -796,6 +814,7 @@ async function resolveLauncherSession(token) {
 app.post('/api/launcher/oauth/exchange', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`oauth-exchange:${ip}`, 10, 60 * 1000)) {
+    runtimeMetrics.recordRejection('rate_limit_oauth_exchange');
     return res.status(429).json({ error: 'Muitas tentativas, aguarde um minuto.' });
   }
 
@@ -867,6 +886,7 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
 app.post('/api/launcher/session/refresh-ticket', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`session-refresh:${ip}`, 30, 60 * 1000)) {
+    runtimeMetrics.recordRejection('rate_limit_session_refresh');
     return res.status(429).json({ error: 'Muitas tentativas, aguarde um minuto.' });
   }
 

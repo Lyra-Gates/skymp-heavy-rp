@@ -6,7 +6,7 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test queue.test.js modsManifest.test.js generateManifest.test.js server.http.test.js rateLimiter.test.js",
+    "test": "node --test queue.test.js modsManifest.test.js generateManifest.test.js server.http.test.js rateLimiter.test.js ../shared/runtimeMetrics.test.js",
     "generate-manifest": "node scripts/generate-mods-manifest.js"
   },
   "license": "AGPL-3.0-or-later",

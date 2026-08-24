@@ -39,7 +39,7 @@ entrada mais antiga é descartada em O(1).
 
 ## Verificação automatizada
 
-- `apps/web`: 51 testes.
-- `apps/game-api`: 53 testes.
+- `apps/web`: 52 testes.
+- `apps/game-api`: 59 testes.
 - `apps/bot-discord`: 45 testes.
 - Nenhum dos testes desta rodada exige MariaDB ou Discord reais.

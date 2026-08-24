@@ -39,7 +39,7 @@ after(async () => {
   if (server) await new Promise((resolve) => server.close(resolve));
 });
 
-function request(method, path, { body } = {}) {
+function request(method, path, { body, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? null : JSON.stringify(body);
     const req = http.request(
@@ -47,8 +47,8 @@ function request(method, path, { body } = {}) {
       {
         method,
         headers: payload
-          ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
-          : {}
+          ? { ...headers, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
+          : headers
       },
       (res) => {
         let data = '';
@@ -142,6 +142,24 @@ describe('endpoints internos exigem segredo', () => {
   test('session/release sem X-Internal-Secret responde 401', async () => {
     const res = await request('POST', '/internal/session/release', { body: { session: 'x' } });
     assert.equal(res.status, 401);
+  });
+
+  test('métricas sem X-Internal-Secret respondem 401', async () => {
+    const res = await request('GET', '/internal/metrics');
+    assert.equal(res.status, 401);
+  });
+
+  test('métricas autenticadas não expõem segredo e incluem processo/HTTP/DB', async () => {
+    const secret = process.env.INTERNAL_API_SECRET;
+    const res = await request('GET', '/internal/metrics', {
+      headers: { 'X-Internal-Secret': secret, 'X-Request-Id': 'metrics-test-request' }
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.service, 'game-api');
+    assert.ok(res.body.process);
+    assert.ok(res.body.requests);
+    assert.ok(res.body.db);
+    assert.doesNotMatch(res.raw, new RegExp(secret));
   });
 });
 

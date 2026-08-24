@@ -461,14 +461,14 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 - [ ] **Status:** `PARCIAL` (revisão sem banco concluída; sessões persistentes, replay e staging pendentes)
 - **Aceite:** rate limits, replay, CORS/proxy, sessões, segredo interno, uploads e updates revisados e testados.
-- **Evidência:** [`PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md`](../security/PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md); rate limiter com memória limitada nos três serviços; 149 testes de serviço sem MariaDB.
+- **Evidência:** [`PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md`](../security/PUBLIC_SERVICES_SECURITY_REVIEW_2026-08-24.md); rate limiter com memória limitada nos três serviços; 156 testes de serviço sem MariaDB.
 
 ### F8-002 — Observabilidade
 
-- [ ] **Status:** `PARCIAL` (baseline e lacunas inventariadas; instrumentação/collector pendentes)
+- [ ] **Status:** `PARCIAL` (HTTP/DB/processo instrumentados nos serviços Node; gamemode, collector e incidente pendentes)
 - **Métricas mínimas:** conexões, falhas de login, latência DB, eventos CEF, rejeições, transferências, reconciliações, polling, CPU e memória.
 - **Aceite:** incidente de teste pode ser explicado por logs/métricas sem reproduzir localmente.
-- **Evidência:** [`OBSERVABILITY_BASELINE_2026-08-24.md`](../operations/OBSERVABILITY_BASELINE_2026-08-24.md).
+- **Evidência:** [`OBSERVABILITY_BASELINE_2026-08-24.md`](../operations/OBSERVABILITY_BASELINE_2026-08-24.md); `apps/shared/runtimeMetrics.js`; endpoints protegidos no painel, Game API e bot; testes de cardinalidade, privacidade, DB, HTTP e autenticação.
 
 ### F8-003 — Rollback exercitado
 

@@ -21,6 +21,8 @@
 
 ### Adicionado
 
+- **Instrumentação operacional protegida nos três serviços Node.** `apps/shared/runtimeMetrics.js` agrega HTTP por rota normalizada/classe de status, duração em buckets, latência DB por sucesso/erro, rejeições enumeradas, CPU e memória — sem SQL, parâmetros, tokens, IPs ou payloads. Painel expõe o snapshot só para staff; Game API e bot exigem `X-Internal-Secret`. `X-Request-Id` validado é gerado em toda requisição e propagado do painel ao bot. A cardinalidade tem teto e 4 testes específicos cobrem privacidade e comportamento adversarial.
+
 - **Baseline verificável de observabilidade.** [`OBSERVABILITY_BASELINE_2026-08-24.md`](docs/operations/OBSERVABILITY_BASELINE_2026-08-24.md) separa, sinal por sinal, o que já existe apenas em log, o que já tem contador local e o que ainda não é medido; também fixa regras contra vazamento/cardinalidade e divide a implementação restante em instrumentação HTTP, banco/login, gamemode/processo e operação.
 
 - **Instalação e reparo automático da UI CEF pelo launcher.** Os sete arquivos de `skymp/ui/` viajam em `resources/skymp-ui`; antes de JOGAR, o launcher compara o bundle com `Data/Platform/UI` e repara arquivos ausentes ou divergentes. A tela de Configurações ganhou **Reparar Interface**, e bundle interno inválido bloqueia o fluxo antes de consumir o ticket da fila. Testes cobrem instalação limpa, corrupção, idempotência, preservação de extras, empacotamento e fail-closed.

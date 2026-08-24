@@ -92,7 +92,8 @@ describe('autenticação obrigatória', () => {
     '/api/criminal',
     '/api/factions',
     '/api/prison',
-    '/api/crashes'
+    '/api/crashes',
+    '/api/metrics'
   ];
 
   for (const route of protectedRoutes) {

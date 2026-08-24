@@ -29,12 +29,15 @@ const crypto = require('crypto');
 const { createMemoryRateLimiter } = require('./rateLimiter');
 const express = require('express');
 const mysql = require('mysql2/promise');
+const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
 
 const { createQueue } = require('./queue');
 const { createManifestLoader } = require('./modsManifest');
 
 const app = express();
+const runtimeMetrics = createRuntimeMetrics({ service: 'game-api' });
 app.disable('x-powered-by');
+app.use(runtimeMetrics.middleware);
 app.use(express.json({ limit: '64kb' }));
 
 const PORT = parseInt(process.env.GAME_API_PORT || '7758', 10);
@@ -59,8 +62,10 @@ const pool = mysql.createPool({
   connectionLimit: 5
 });
 
+const executeDb = (sql, params = []) => runtimeMetrics.timeDb(() => pool.execute(sql, params));
+
 const db = async (sql, params = []) => {
-  const [rows] = await pool.execute(sql, params);
+  const [rows] = await executeDb(sql, params);
   return rows;
 };
 
@@ -127,6 +132,7 @@ function isValidInternalSecret(provided) {
 
 function requireInternal(req, res, next) {
   if (!isValidInternalSecret(req.get('X-Internal-Secret'))) {
+    runtimeMetrics.recordRejection('internal_secret_invalid');
     return res.status(401).json({ error: 'Unauthorized' });
   }
   return next();
@@ -148,7 +154,7 @@ async function consumeLaunchTicket(token) {
   if (typeof token !== 'string' || token.length < 32) return null;
 
   const tokenHash = hashTicket(token);
-  const [result] = await pool.execute(
+  const [result] = await executeDb(
     `UPDATE launch_tickets SET consumed_at = NOW()
      WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > NOW()`,
     [tokenHash]
@@ -200,6 +206,7 @@ app.get('/mods.json', (req, res) => {
 app.post('/api/queue/join', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`queue-join:${ip}`, 20, 60 * 1000)) {
+    runtimeMetrics.recordRejection('rate_limit_queue_join');
     return res.status(429).json({ status: 'error', message: 'rate_limited' });
   }
 
@@ -247,6 +254,7 @@ app.post('/api/queue/join', async (req, res) => {
 app.post('/api/queue/status', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`queue-status:${ip}`, 120, 60 * 1000)) {
+    runtimeMetrics.recordRejection('rate_limit_queue_status');
     return res.status(429).json({ status: 'error', message: 'rate_limited' });
   }
 
@@ -297,6 +305,10 @@ app.post('/internal/session/release', requireInternal, (req, res) => {
   if (!Number.isInteger(accountId)) return res.status(400).json({ ok: false, error: 'invalid_account_id' });
   const released = queue.release(accountId, makeSessionTicket);
   res.json({ ok: true, released });
+});
+
+app.get('/internal/metrics', requireInternal, (req, res) => {
+  res.json(runtimeMetrics.snapshot());
 });
 
 // ── Diagnóstico ─────────────────────────────────────────────────────────────

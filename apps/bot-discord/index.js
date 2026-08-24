@@ -8,8 +8,11 @@ const moderationLog = require('./moderationLog');
 const { deployCommands } = require('./deploy-commands');
 const { createMemoryRateLimiter } = require('./rateLimiter');
 const { isDiscordSnowflake } = require('./inputValidation');
+const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
 
+const runtimeMetrics = createRuntimeMetrics({ service: 'bot-discord' });
 app.disable('x-powered-by');
+app.use(runtimeMetrics.middleware);
 app.use(express.json({ limit: '64kb' }));
 
 const client = new Client({
@@ -92,10 +95,12 @@ app.post('/api/sync-role', async (req, res) => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
 
     if (isRateLimited(`sync-role:${ip}`, 20, 60 * 1000)) {
+        runtimeMetrics.recordRejection('rate_limit_sync_role');
         return res.status(429).json({ error: 'Too many requests' });
     }
 
     if (!isValidInternalSecret(req.get('X-Internal-Secret'))) {
+        runtimeMetrics.recordRejection('internal_secret_invalid');
         console.warn(`[discord-bot] Tentativa de acesso não autorizada a /api/sync-role de ${ip}`);
         return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -145,10 +150,12 @@ app.post('/api/moderation-log', (req, res) => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
 
     if (isRateLimited(`moderation-log:${ip}`, 60, 60 * 1000)) {
+        runtimeMetrics.recordRejection('rate_limit_moderation_log');
         return res.status(429).json({ error: 'Too many requests' });
     }
 
     if (!isValidInternalSecret(req.get('X-Internal-Secret'))) {
+        runtimeMetrics.recordRejection('internal_secret_invalid');
         console.warn(`[discord-bot] Tentativa nao autorizada em /api/moderation-log de ${ip}`);
         return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -169,6 +176,14 @@ app.post('/api/moderation-log', (req, res) => {
                 console.error(`[discord-bot] Evento '${parsed.evento.kind}' nao chegou no canal: ${r.erro}`);
             }
         });
+});
+
+app.get('/api/metrics', (req, res) => {
+    if (!isValidInternalSecret(req.get('X-Internal-Secret'))) {
+        runtimeMetrics.recordRejection('internal_secret_invalid');
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    return res.json(runtimeMetrics.snapshot());
 });
 
 const PORT = process.env.PORT || 3002;
