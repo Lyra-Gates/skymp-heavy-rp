@@ -644,6 +644,40 @@
     };
   }
 
+  // ── Dispara a tentativa de autenticação (24/08/2026, primeira tentativa) ──
+  //
+  // O AuthService nativo do skymp5-client emite `authNeeded` e fica esperando
+  // uma resposta da UI (`setListenBrowserMessage: true`) antes de sequer abrir
+  // conexão com o servidor de jogo -- confirmado em runtime real: metricas do
+  // servidor mostravam `connections.total: 0` minutos depois do jogador estar
+  // parado no menu. A UI oficial do skymp5-client (que este arquivo substitui
+  // em Data/Platform/UI/index.html via ui-integrity) tem um botão "log in via
+  // skymp"/"log in via Discord" que dispara essa tentativa manualmente -- nossa
+  // UI de RP não tem esse botão porque a identidade já vem resolvida pelo
+  // `gameData.session` que o launcher escreve (ver AUTH-01 em
+  // AUTH_001_TRUST_BOUNDARY_INVENTORY.md), então não faz sentido esperar um
+  // clique que nunca vai vir.
+  //
+  // `authAttemptEvent` é o nome literal capturado do bundle oficial do
+  // skymp5-client (evento `events.authAttempt`, visto num crash real deste
+  // mesmo dia) -- não é inventado, mas também nunca foi confirmado que É o
+  // sinal certo pra "prossiga com o gameData.session que eu já tenho". Se isto
+  // não resolver, o próximo passo é capturar o handler de clique do botão
+  // "log in via skymp" no bundle oficial pra ver o payload exato que ele manda.
+  if (!RODANDO_FORA_DO_JOGO) {
+    let jaTentouAuth = false;
+    const tentativas = setInterval(() => {
+      if (jaTentouAuth) { clearInterval(tentativas); return; }
+      if (window.skyrimPlatform && typeof window.skyrimPlatform.sendMessage === 'function') {
+        jaTentouAuth = true;
+        clearInterval(tentativas);
+        window.skyrimPlatform.sendMessage('authAttemptEvent');
+      }
+    }, 200);
+    // Não fica tentando pra sempre se o bridge nunca aparecer.
+    setTimeout(() => clearInterval(tentativas), 30000);
+  }
+
   // ── Estado Local ──────────────────────────────────────────────────────────
   const state = {
     actorId: null,
