@@ -100,15 +100,15 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 
 ### Baseline de verificação em 24/08/2026
 
-- [x] Total atual: **1.348 testes de produto**, 0 falhas.
-- [x] Gamemode: **1.151 testes**, 0 falhas.
+- [x] Total atual: **1.362 testes de produto**, 0 falhas.
+- [x] Gamemode: **1.156 testes**, 0 falhas.
 - [x] Painel web: **46 testes**, 0 falhas.
-- [x] Game API: **48 testes**, 0 falhas.
+- [x] Game API: **50 testes**, 0 falhas.
 - [x] Bot Discord: **40 testes**, 0 falhas.
-- [x] Launcher: **63 testes**, 0 falhas.
+- [x] Launcher: **70 testes**, 0 falhas.
 - [x] Registro de patches: **46 testes**, 0 falhas.
-- [x] Checks de sistema: **13/13**.
-- [x] Registro do gamemode: **70 testes listados**, nenhum órfão.
+- [x] Checks de sistema: **14/14**.
+- [x] Registro do gamemode: **71 testes listados**, nenhum órfão.
 - [x] Schema declarado legível: **72 tabelas**.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
@@ -157,7 +157,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - **Ações:** coletar logs do launcher, painel, Game API, SkyMP e SkyrimPlatform; seguir ticket → fila → sessão → Master API → `profileId`.
 - **Aceite:** login e reconexão mantêm o mesmo `accountId/profileId`; ticket consumido não é reutilizável; refresh da sessão do launcher emite ticket novo.
 - **Teste de regressão:** obrigatório para a causa encontrada.
-- **Evidência parcial (24/08/2026):** boot curto do SkyMP aprovou artefato/assets, carregou o gamemode e abriu TCP 3000/UDP 7777. A governança falhou porque MariaDB recusou 127.0.0.1:3306; o Master API recusou 127.0.0.1:3001. O serviço Windows `MariaDB` existe, mas está parado e esta sessão não possui permissão para iniciá-lo. Falta iniciar MariaDB com privilégio administrativo, subir o painel/Master API e executar o login com cliente real.
+- **Evidência parcial (24/08/2026):** boot curto do SkyMP aprovou artefato/assets, carregou o gamemode e abriu TCP 3000/UDP 7777. A governança falhou porque MariaDB recusou 127.0.0.1:3306; o Master API recusou 127.0.0.1:3001. O usuário confirmou que MariaDB não está disponível e não pode ser instalada neste ambiente. Falta executar esta validação em outra máquina/ambiente com MariaDB, subir o painel/Master API e realizar o login pelo botão JOGAR do launcher.
 
 ### F1-002 — Instalar e reparar automaticamente a UI CEF (`P0`)
 
@@ -246,9 +246,9 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 
 ### F2-005 — Segredos e TLS
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (`auditor implementado; ambiente ainda não aprovado`)
 - **Aceite:** nenhum placeholder; segredos separados por ambiente; serviços públicos usam TLS; rotação documentada.
-- **Evidência:** _preencher sem copiar segredo_.
+- **Evidência:** `scripts/check-production-config.js` valida sem imprimir valores e possui 6 testes no CI. Execução local com `--skip-db` encontrou pendências nomeadas em credenciais Discord, URLs HTTPS, `NODE_ENV`, `TRUST_PROXY` e repositório de distribuição; nenhuma foi mascarada como pronta.
 
 ### Gate F2
 
@@ -545,10 +545,11 @@ Adicionar uma linha a cada mudança de status relevante.
 | 24/08/2026 | F1-006 | `TODO` → `CONCLUÍDO` | Docs reconciliados; 34 testes focados; launcher 61/61; schema 72 tabelas | Versões futuras do check de schema não dependem de texto fixo |
 | 24/08/2026 | F1-007 | `TODO` → `CONCLUÍDO` | Gate fail-closed no fluxo JOGAR; 2 testes; código morto removido | Cliente e launcher têm fontes de versão distintas e explícitas |
 | 24/08/2026 | Verificação F1 | — → atualizada | 1.348 testes de produto; 46 de patches; 13/13 checks; guards limpos | Todas as suítes automatizadas disponíveis estão verdes |
-| 24/08/2026 | F1-001 | `EM ANDAMENTO` → `BLOQUEADO NO AMBIENTE LOCAL` | SkyMP carregou; TCP 3000 e UDP 7777; MariaDB 3306 e Master API 3001 recusaram | MariaDB está parado e exige privilégio administrativo para iniciar |
+| 24/08/2026 | F1-001 | `EM ANDAMENTO` → `BLOQUEADO NO AMBIENTE LOCAL` | SkyMP carregou; TCP 3000 e UDP 7777; MariaDB 3306 e Master API 3001 recusaram | MariaDB não está disponível e não pode ser instalada neste ambiente |
 | 24/08/2026 | F0-002 | `PARCIAL` → `PARCIAL` | `BUILD_INFO.json` com pin e hashes; `commitVerified=false` | Identidade reproduzível criada; commit do artefato atual continua não comprovado |
 | 24/08/2026 | F0-003 | `PARCIAL` → `PARCIAL` | Manifesto SHA-256 dos cinco masters; Game API fail-closed | Falta validar em segunda instalação limpa |
 | 24/08/2026 | F1-002 | `TODO` → `PARCIAL` | UI embutida; reparo automático; build NSIS aprovado | Código em G1; renderização CEF real permanece G2 |
+| 24/08/2026 | F2-005 | `TODO` → `PARCIAL` | Auditor sem vazamento + 6 testes; execução `--skip-db` | Pendências externas de credenciais, URLs públicas e distribuição foram nomeadas |
 
 ---
 

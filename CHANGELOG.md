@@ -2,6 +2,12 @@
 
 ### Corrigido
 
+- **A Game API aceitava manifesto de mods vazio, MD5 ou com hash de tamanho arbitrário.** O loader agora falha fechado: exige `hashAlgorithm: "sha256"`, pelo menos um mod, load order não vazia e hashes hexadecimais de 64 caracteres. O `mods.json` da Fase 0 foi regenerado em SHA-256 a partir dos cinco masters carregados pelo servidor.
+
+- **O empacotamento do launcher incluía recursivamente a própria pasta `dist-electron`.** O build crescia até centenas de megabytes e o NSIS falhava ao gravar o instalador. A configuração agora inclui somente `main.mjs` e `preload.mjs`; o build completo produziu um instalador com aproximadamente 105 MB.
+
+- **Spawns padrão persistiam um FormDesc inválido (`0x162e2`).** Whitelist local e prisão padrão agora usam `162e2:Skyrim.esm`, com regressões estáticas. Dois erros JSDoc que quebravam o typecheck do gamemode também foram corrigidos, e as migrations sem guarda direta ganharam contratos mínimos.
+
 - **Todo login pelo launcher falhava na Master API do SkyMP — bug de raiz, não do jogador.** `apps/launcher/electron/main.ts` grava `config.session` como `ticket:<token>` (formato documentado em `AUTH_001_TRUST_BOUNDARY_INVENTORY.md`), mas `GET /api/servers/:masterKey/sessions/:session` (`apps/web/server.js`) hasheava a string inteira recebida do cliente, prefixo incluído — o hash nunca batia com o gravado em `game_sessions` (token cru, sem prefixo) por `apps/game-api`. Resultado: toda sessão resolvia como inexistente, o SkyMP nativo mostrava "technical difficulties" indefinidamente (visto em runtime real com um fork externo: `failCount` chegando a 9000, log do servidor mostrando `No credentials found in gameData`). Corrigido removendo o prefixo `ticket:` antes de hashear, com teste cobrindo o formato exato que o launcher grava.
 
 - **O mock de `mp`/`window.skyrimPlatform` em `skymp/ui/index.html` rodava dentro do jogo de verdade, não só em teste fora dele.** Achado na mesma sessão de runtime real acima: o bridge nativo do SkyrimPlatform injeta `window.skyrimPlatform`/`mp` de forma assíncrona, *depois* do nosso `<script>` já ter executado (confirmado pela ordem no `skyrim-platform.log`: "Executing script" antes de "registering browser api"). Sem guarda, `typeof mp === 'undefined'` sempre era verdade nesse instante — dentro do jogo também —, então criávamos um `window.skyrimPlatform` incompleto (só `sendMessage`) bem no caminho do bridge de verdade. Isso derrubou o próprio client oficial (`skymp5-client`): a tela de erro de login que ele mostra via `window.skyrimPlatform.widgets.set(...)` crashava com `Cannot read properties of undefined (reading 'set')`, escondendo o motivo real da falha de login do jogador. Agora o mock só roda quando `location.protocol !== 'file:'` (fora do jogo); os dois usos de `mp.trigger`/`mp.events.add` em jogo ganharam guarda pra não virar `ReferenceError` quando `mp` de fato não existe do lado do cliente. Não corrige a causa raiz do login falhar — só para de esconder ela.
@@ -12,6 +18,16 @@
 - **Manifesto de mods passou de MD5 para SHA-256**, launcher e gerador na mesma mudança. MD5 tem colisão prática, e o modelo de ameaça aqui não é corrupção acidental — é jogador alterando um mod de propósito, o único caso em que colisão importa. O manifesto agora **declara** o algoritmo, e um `mods.json` antigo falha dizendo "regere o manifesto" em vez de acusar duzentos mods de corrompidos. ⚠️ **O `mods.json` versionado precisa ser regerado** — passo 0.4b do roteiro da Fase 0.
 
 ### Adicionado
+
+- **Instalação e reparo automático da UI CEF pelo launcher.** Os sete arquivos de `skymp/ui/` viajam em `resources/skymp-ui`; antes de JOGAR, o launcher compara o bundle com `Data/Platform/UI` e repara arquivos ausentes ou divergentes. A tela de Configurações ganhou **Reparar Interface**, e bundle interno inválido bloqueia o fluxo antes de consumir o ticket da fila. Testes cobrem instalação limpa, corrupção, idempotência, preservação de extras, empacotamento e fail-closed.
+
+- **Gate real de versão do cliente antes da fila.** `clientVersion` do manifesto de distribuição virou a fonte autoritativa; manifesto indisponível ou atualização pendente bloqueia JOGAR. O antigo `version-check.js`, sem chamador e com constante paralela, foi removido.
+
+- **Identidade e compatibilidade do artefato SkyMP no boot.** `BUILD_INFO.json` registra pin declarado, versão e SHA-256 dos binários críticos; artefato que declarar commit divergente do pin é recusado. O gamemode também compara `mp.getEspmLoadOrder()` com a load order configurada e aborta em caso de plugin ausente, extra ou fora de ordem.
+
+- **Plano operacional vivo de prontidão para produção.** [`PRODUCTION_READINESS_ACTION_PLAN.md`](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) acompanha F0–F9, estados, gates, dependências e evidências verificáveis. A documentação operacional foi reconciliada com SHA-256, migrations até v25, opções realmente ligadas e limites do ambiente sem MariaDB.
+
+- **Auditor de configuração de produção sem vazamento de segredos.** `scripts/check-production-config.js` valida placeholders, tamanho mínimo de segredos, igualdade de `INTERNAL_API_SECRET` entre serviços, HTTPS público, proxy, ambiente e distribuição. `--skip-db` permite auditar o restante em máquinas sem MariaDB; seis testes rodam no job de higiene do CI.
 
 - **Checagem de espaço em disco antes de baixar** (`apps/launcher/electron/disk.mjs`, 12 testes). Verifica **os dois destinos**: o `.zip` vai para `temp` e o conteúdo é extraído na pasta do jogo, que podem estar em discos diferentes. Não bloqueia quando não consegue medir — impedir alguém de jogar porque `statfs` falhou seria pior que o problema original. E `ENOSPC` no meio do download deixou de chegar cru ao jogador.
 

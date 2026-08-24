@@ -119,6 +119,14 @@ Nunca commite `.env` — o `.gitignore` cobre e o CI verifica. Nunca coloque seg
 
 Em produção, `offlineMode: false`. Sempre. Com `offlineMode: true` o cliente declara a própria identidade e o servidor acredita — não há autenticação nenhuma.
 
+Antes de gerar um build público, rode da raiz:
+
+```powershell
+node scripts/check-production-config.js
+```
+
+Em uma máquina que deliberadamente não possui o banco, use `--skip-db` para validar todo o restante. O auditor não imprime valores: reporta apenas serviço, nome da variável e regra violada. Ele exige segredos com tamanho mínimo, igualdade de `INTERNAL_API_SECRET` entre painel/Game API/bot, URLs públicas HTTPS, `NODE_ENV=production`, proxy confiável e ausência de placeholders. Seus testes rodam no job de higiene do CI.
+
 ---
 
 ## 7. Quando algo dá errado em jogo
