@@ -21,6 +21,8 @@
 
 ### Adicionado
 
+- **Sessões persistentes do painel, sem dependência nova.** `apps/web/mysqlSessionStore.js` substitui o `MemoryStore` do `express-session` por uma store MariaDB sobre o `mysql2` já instalado. A `migration-v26-web-sessions.sql` cria armazenamento com expiração indexada; poda periódica não bloqueia o processo. Cinco testes sem banco cobrem leitura, UPSERT, touch, logout, poda, expiração e JSON corrompido. O gate F2-004 permanece parcial até aplicar a migration e provar restart em staging.
+
 - **Instrumentação operacional protegida nos três serviços Node.** `apps/shared/runtimeMetrics.js` agrega HTTP por rota normalizada/classe de status, duração em buckets, latência DB por sucesso/erro, rejeições enumeradas, CPU e memória — sem SQL, parâmetros, tokens, IPs ou payloads. Painel expõe o snapshot só para staff; Game API e bot exigem `X-Internal-Secret`. `X-Request-Id` validado é gerado em toda requisição e propagado do painel ao bot. A cardinalidade tem teto e 4 testes específicos cobrem privacidade e comportamento adversarial.
 
 - **Baseline verificável de observabilidade.** [`OBSERVABILITY_BASELINE_2026-08-24.md`](docs/operations/OBSERVABILITY_BASELINE_2026-08-24.md) separa, sinal por sinal, o que já existe apenas em log, o que já tem contador local e o que ainda não é medido; também fixa regras contra vazamento/cardinalidade e divide a implementação restante em instrumentação HTTP, banco/login, gamemode/processo e operação.
@@ -31,7 +33,7 @@
 
 - **Identidade e compatibilidade do artefato SkyMP no boot.** `BUILD_INFO.json` registra pin declarado, versão e SHA-256 dos binários críticos; artefato que declarar commit divergente do pin é recusado. O gamemode também compara `mp.getEspmLoadOrder()` com a load order configurada e aborta em caso de plugin ausente, extra ou fora de ordem.
 
-- **Plano operacional vivo de prontidão para produção.** [`PRODUCTION_READINESS_ACTION_PLAN.md`](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) acompanha F0–F9, estados, gates, dependências e evidências verificáveis. A documentação operacional foi reconciliada com SHA-256, migrations até v25, opções realmente ligadas e limites do ambiente sem MariaDB.
+- **Plano operacional vivo de prontidão para produção.** [`PRODUCTION_READINESS_ACTION_PLAN.md`](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) acompanha F0–F9, estados, gates, dependências e evidências verificáveis. A documentação operacional foi reconciliada com SHA-256, migrations até v26, opções realmente ligadas e limites do ambiente sem MariaDB.
 
 - **Auditor de configuração de produção sem vazamento de segredos.** `scripts/check-production-config.js` valida placeholders, tamanho mínimo de segredos, igualdade de `INTERNAL_API_SECRET` entre serviços, HTTPS público, proxy, ambiente e distribuição. `--skip-db` permite auditar o restante em máquinas sem MariaDB; seis testes rodam no job de higiene do CI.
 

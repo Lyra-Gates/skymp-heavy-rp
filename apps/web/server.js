@@ -10,6 +10,7 @@ const cors    = require('cors');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
+const { createMysqlSessionStore } = require('./mysqlSessionStore');
 
 const app  = express();
 const runtimeMetrics = createRuntimeMetrics({ service: 'web' });
@@ -58,6 +59,7 @@ const pool = mysql.createPool({
 });
 
 const executeDb = (sql, params = []) => runtimeMetrics.timeDb(() => pool.execute(sql, params));
+const sessionStore = createMysqlSessionStore(session, { execute: executeDb });
 
 const db = async (sql, params = []) => {
   const [rows] = await executeDb(sql, params);
@@ -116,6 +118,7 @@ app.use(express.json({ limit: '512kb' }));
 app.disable('x-powered-by');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
+  store: sessionStore,
   secret: requireEnv('SESSION_SECRET'),
   resave: false,
   saveUninitialized: false,

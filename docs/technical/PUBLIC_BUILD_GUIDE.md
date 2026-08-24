@@ -67,7 +67,7 @@ Estado em 06/08/2026 — ver `QA_REPORT_2026-08.md` para o detalhe de cada item.
 
 - [ ] `README` com um caminho de instalação que alguém de fora consiga seguir sem contexto prévio.
 - [ ] `.env.example` completo em cada serviço (já está) e um passo-a-passo de qual valor vem de onde.
-- [ ] Migrations aplicáveis em ordem numérica, do zero (`schema.sql` + todas as migrations disponíveis, atualmente v2→v25).
+- [ ] Migrations aplicáveis em ordem numérica, do zero (`schema.sql` + todas as migrations disponíveis, atualmente v2→v26).
 - [ ] Aviso de não-afiliação nos lugares da seção 3.
 - [ ] Checklist de release de `LICENSE_AND_AFFILIATION_POLICY.md` §8 cumprido.
 

@@ -25,7 +25,7 @@ cd apps/launcher    && npm ci && cd ../..
 
 Скопируйте каждый `.env.example` в `.env` и заполните — комментарии внутри объясняют, откуда берётся каждое значение.
 
-База: примените `skymp/packages/database/schema.sql`, затем все доступные миграции (сейчас с `v2` по `v25`), **по номеру версии**.
+База: примените `skymp/packages/database/schema.sql`, затем все доступные миграции (сейчас с `v2` по `v26`), **по номеру версии**.
 
 ```powershell
 .\scripts\phase0\Start-AllServices.ps1

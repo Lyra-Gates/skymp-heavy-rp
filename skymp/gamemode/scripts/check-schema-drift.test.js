@@ -48,7 +48,8 @@ const legacyMigrationContracts = [
   ['migration-v13-market-stall-idempotency.sql', /ADD COLUMN `idempotency_key`/i],
   ['migration-v14-inventory-framework.sql', /ADD COLUMN IF NOT EXISTS `owner_type`/i],
   ['migration-v15-economy-framework.sql', /CREATE TABLE IF NOT EXISTS `economy_escrow`/i],
-  ['migration-v25-launcher-sessions.sql', /CREATE TABLE IF NOT EXISTS `launcher_sessions`/i]
+  ['migration-v25-launcher-sessions.sql', /CREATE TABLE IF NOT EXISTS `launcher_sessions`/i],
+  ['migration-v26-web-sessions.sql', /CREATE TABLE IF NOT EXISTS `web_sessions`/i]
 ];
 
 describe('contratos mínimos das migrations versionadas', () => {
@@ -85,7 +86,7 @@ describe('parser, contra as migrations reais do repositório', () => {
   it('encontra as tabelas centrais', () => {
     for (const tabela of [
       'accounts', 'characters', 'character_inventory', 'audit_logs', 'gold_transactions',
-      'staff_roles', 'market_stalls', 'governance_roles', 'launch_tickets', 'game_sessions'
+      'staff_roles', 'market_stalls', 'governance_roles', 'launch_tickets', 'game_sessions', 'web_sessions'
     ]) {
       assert.ok(esperado.has(tabela), `tabela '${tabela}' nao foi extraida das migrations`);
     }

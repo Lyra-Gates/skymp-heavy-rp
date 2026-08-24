@@ -109,7 +109,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] Registro de patches: **46 testes**, 0 falhas.
 - [x] Checks de sistema: **14/14**.
 - [x] Registro do gamemode: **71 testes listados**, nenhum órfão.
-- [x] Schema declarado legível: **72 tabelas**.
+- [x] Schema declarado legível: **73 tabelas**.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
 - [x] `check-write-guards --all` sem ocorrências — os 2 FormDesc e a cobertura de 13 migrations foram corrigidos em 24/08/2026.
@@ -195,7 +195,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] **Status:** `CONCLUÍDO`
 - **Divergências conhecidas:** MD5 vs SHA-256; instruções que param em v9/v10; contagem antiga de opções ligadas; `version-check.js` descrito como ativo sem chamador.
 - **Aceite:** README, setup, modpack, operações e compatibilidade não contradizem o código atual.
-- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v25, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; 34 testes focados, 61 do launcher, typecheck e inventário de 72 tabelas aprovados em 24/08/2026.
+- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v26, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; inventário atual de 73 tabelas aprovado em 24/08/2026.
 
 ### F1-007 — Decidir e implementar a checagem de versão do cliente (`P1`)
 
@@ -225,7 +225,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - **Aceite:** um procedimento versionado sobe a stack; health checks confirmam cada serviço; `offlineMode=false`.
 - **Evidência:** _preencher_.
 
-### F2-002 — Migrar banco limpo até v25
+### F2-002 — Migrar banco limpo até v26
 
 - [ ] **Status:** `TODO`
 - **Aceite:** instalação vazia aplica schema + migrations em ordem; `npm run check:schema` não encontra faltas.
@@ -239,10 +239,10 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 
 ### F2-004 — Persistir sessões web
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (store e migration implementadas; restart real depende de MariaDB)
 - **Contexto:** `express-session` usa a store padrão em memória.
 - **Aceite:** sessão sobrevive a restart controlado e funciona com a arquitetura prevista de staging.
-- **Evidência:** _preencher_.
+- **Evidência:** `apps/web/mysqlSessionStore.js`; `migration-v26-web-sessions.sql`; 5 testes sem banco cobrem get/set/touch/destroy/poda, expiração, SQL parametrizado e JSON inválido. Falta aplicar v26 e testar restart/duas instâncias em staging.
 
 ### F2-005 — Segredos e TLS
 

@@ -10,7 +10,7 @@
 
 ### 1.1 База данных (MariaDB/MySQL)
 **MariaDB** — абсолютный источник истины. К ней подключаются все сервисы.
-- **Основные таблицы:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. Полная схема — в `skymp/packages/database/schema.sql` плюс все доступные миграции (сейчас `v2`–`v25`), применяемые **по номеру версии**. Авторитетный перечень выводит `npm run check:schema:list`.
+- **Основные таблицы:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. Полная схема — в `skymp/packages/database/schema.sql` плюс все доступные миграции (сейчас `v2`–`v26`), применяемые **по номеру версии**. Авторитетный перечень выводит `npm run check:schema:list`.
 - Некоторые таблицы есть в схеме, но их не читает никакой активный код (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — они принадлежат PARKED-модулям (см. 1.4).
 - **Жёсткое правило:** ни одно изменение игрового состояния (деньги, позиции, предметы) не происходит без записи в MariaDB или чтения из неё. Node.js не доверяет данным, долго живущим в памяти без сохранения.
 
