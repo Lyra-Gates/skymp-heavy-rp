@@ -21,6 +21,8 @@
 
 ### Adicionado
 
+- **Aplicador seguro de schema+migrations para banco vazio.** `npm run migrate:dry-run` inventaria 24 arquivos/149 instruções sem conectar; `npm run migrate:clean` aplica em ordem numérica, recusa banco já populado e recusa nome divergente do `USE skymp_rp` versionado. Erros informam arquivo/posição sem imprimir SQL. Cinco testes rodam sem MariaDB; F2-002 permanece parcial até a execução contra banco real seguida de `check:schema`.
+
 - **Sessões persistentes do painel, sem dependência nova.** `apps/web/mysqlSessionStore.js` substitui o `MemoryStore` do `express-session` por uma store MariaDB sobre o `mysql2` já instalado. A `migration-v26-web-sessions.sql` cria armazenamento com expiração indexada; poda periódica não bloqueia o processo. Cinco testes sem banco cobrem leitura, UPSERT, touch, logout, poda, expiração e JSON corrompido. O gate F2-004 permanece parcial até aplicar a migration e provar restart em staging.
 
 - **Instrumentação operacional protegida nos três serviços Node.** `apps/shared/runtimeMetrics.js` agrega HTTP por rota normalizada/classe de status, duração em buckets, latência DB por sucesso/erro, rejeições enumeradas, CPU e memória — sem SQL, parâmetros, tokens, IPs ou payloads. Painel expõe o snapshot só para staff; Game API e bot exigem `X-Internal-Secret`. `X-Request-Id` validado é gerado em toda requisição e propagado do painel ao bot. A cardinalidade tem teto e 4 testes específicos cobrem privacidade e comportamento adversarial.

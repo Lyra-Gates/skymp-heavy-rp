@@ -34,7 +34,21 @@ cd skymp/gamemode
 npm run check:schema
 ```
 
-Todas as migrations disponíveis (`v2`–`v26` atualmente) são aplicadas **à mão**, em ordem numérica. Nada garantia que foram todas aplicadas até este check existir. A v26 cria `web_sessions`, exigida pelo painel para persistir login entre restarts.
+Todas as migrations disponíveis (`v2`–`v26` atualmente) precisam ser aplicadas em ordem numérica. Bancos existentes ainda exigem tratamento explícito; instalações vazias ganharam o aplicador automatizado abaixo. A v26 cria `web_sessions`, exigida pelo painel para persistir login entre restarts.
+
+Para uma instalação **vazia**, o caminho automatizado é:
+
+```powershell
+cd skymp/gamemode
+npm run migrate:dry-run  # 24 arquivos / 149 instruções, sem conectar
+npm run migrate:clean    # lê ../config/database.local.json
+npm run check:schema     # prova alinhamento depois da aplicação
+```
+
+`migrate:clean` recusa banco com qualquer tabela e também recusa nome diferente
+de `skymp_rp`, porque os SQL versionados contêm `USE skymp_rp`. Ele não tenta
+"consertar" banco existente nem continuar uma aplicação parcial; nesses casos,
+preserve o banco, rode `check:schema` e trate a divergência explicitamente.
 
 **Por que isso é pior do que parece:** um banco meio-migrado não quebra o boot. O servidor sobe, o login passa, e só a query que toca a coluna faltante falha — às vezes semanas depois, numa cena, com ouro no meio. O sintoma clássico: alguém aplicou até a `v6`, o `game-api` tenta gravar em `game_sessions` (v8), e a admissão na fila falha com erro de SQL cru — que o jogador vê como "servidor offline".
 

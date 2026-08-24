@@ -227,9 +227,9 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 
 ### F2-002 — Migrar banco limpo até v26
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (aplicador seguro e dry-run concluídos; execução real depende de MariaDB)
 - **Aceite:** instalação vazia aplica schema + migrations em ordem; `npm run check:schema` não encontra faltas.
-- **Evidência:** _preencher saída do check + versão MariaDB_.
+- **Evidência:** `npm run migrate:dry-run` encontra 24 arquivos/149 instruções em ordem até v26; 5 testes cobrem ordenação, banco não vazio, nome divergente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
 
 ### F2-003 — Backup e restore exercitados
 
