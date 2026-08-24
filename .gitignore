@@ -26,6 +26,11 @@ skymp/gamemode/.voip-debug-ticket.json
 # depois que um arquivo cair ali. O que e do projeto mora em `.agents/`.
 generated-images/
 
+# Logs brutos das execucoes diarias do Claude sao artefatos locais. Quando uma
+# sessao produzir informacao duravel, registrar apenas o resumo curado
+# `DAILY_LOG_YYYY-MM-DD.md` na raiz do repositorio.
+.claude/daily-logs/
+
 # Relatórios locais de soak podem conter horários/topologia operacional e são
 # evidência de uma execução, não fonte. Anexar ao incidente/release, não ao Git.
 reports/
