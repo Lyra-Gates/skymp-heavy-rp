@@ -465,10 +465,10 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F8-002 — Observabilidade
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL` (baseline e lacunas inventariadas; instrumentação/collector pendentes)
 - **Métricas mínimas:** conexões, falhas de login, latência DB, eventos CEF, rejeições, transferências, reconciliações, polling, CPU e memória.
 - **Aceite:** incidente de teste pode ser explicado por logs/métricas sem reproduzir localmente.
-- **Evidência:** _preencher_.
+- **Evidência:** [`OBSERVABILITY_BASELINE_2026-08-24.md`](../operations/OBSERVABILITY_BASELINE_2026-08-24.md).
 
 ### F8-003 — Rollback exercitado
 

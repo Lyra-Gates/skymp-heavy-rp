@@ -21,6 +21,8 @@
 
 ### Adicionado
 
+- **Baseline verificável de observabilidade.** [`OBSERVABILITY_BASELINE_2026-08-24.md`](docs/operations/OBSERVABILITY_BASELINE_2026-08-24.md) separa, sinal por sinal, o que já existe apenas em log, o que já tem contador local e o que ainda não é medido; também fixa regras contra vazamento/cardinalidade e divide a implementação restante em instrumentação HTTP, banco/login, gamemode/processo e operação.
+
 - **Instalação e reparo automático da UI CEF pelo launcher.** Os sete arquivos de `skymp/ui/` viajam em `resources/skymp-ui`; antes de JOGAR, o launcher compara o bundle com `Data/Platform/UI` e repara arquivos ausentes ou divergentes. A tela de Configurações ganhou **Reparar Interface**, e bundle interno inválido bloqueia o fluxo antes de consumir o ticket da fila. Testes cobrem instalação limpa, corrupção, idempotência, preservação de extras, empacotamento e fail-closed.
 
 - **Gate real de versão do cliente antes da fila.** `clientVersion` do manifesto de distribuição virou a fonte autoritativa; manifesto indisponível ou atualização pendente bloqueia JOGAR. O antigo `version-check.js`, sem chamador e com constante paralela, foi removido.
