@@ -36,10 +36,10 @@ const interactionRegistry = require('./interaction-registry');
 const MODULE_ID = 'character-dashboard-bridge';
 
 /**
- * @param {{targets: {registerResolver: Function}, openPanel: (actorId: number) => void}} dependencies
+ * @param {{targets: {registerResolver: Function}, openPanel: (actorId: number) => void}} [dependencies]
  */
-function registerInteractions(dependencies = {}) {
-  const { targets, openPanel } = dependencies;
+function registerInteractions(dependencies) {
+  const { targets, openPanel } = dependencies || {};
   if (!targets || typeof targets.registerResolver !== 'function') {
     throw new Error(`[${MODULE_ID}] precisa de 'targets' (interaction-targets) para registrar o resolvedor SELF.`);
   }

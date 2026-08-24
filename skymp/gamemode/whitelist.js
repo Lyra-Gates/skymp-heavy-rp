@@ -166,7 +166,7 @@ async function checkWhitelist(userId, profileId, actorId) {
         console.log(`[whitelist] Auto-creating approved character: ${firstName} ${lastName}...`);
         const insertChar = await db.query(
           `INSERT INTO characters (account_id, first_name, last_name, status, pos_x, pos_y, pos_z, angle_z, cell_id) 
-           VALUES (?, ?, ?, 'approved', 35, -165, -189, 180, '0x162e2')`,
+           VALUES (?, ?, ?, 'approved', 35, -165, -189, 180, '162e2:Skyrim.esm')`,
           [account.id, firstName, lastName]
         );
         character = {
@@ -177,7 +177,7 @@ async function checkWhitelist(userId, profileId, actorId) {
           pos_y: -165,
           pos_z: -189,
           angle_z: 180,
-          cell_id: '0x162e2'
+          cell_id: '162e2:Skyrim.esm'
         };
       } else {
         console.log(`[whitelist] User ${userId} has no approved characters. Kicking...`);

@@ -397,6 +397,22 @@ addCheck('spawn visual usa Papyrus PlaceAtMe', () => {
   ]);
 });
 
+addCheck('artefato SkyMP registra identidade e confere o pin', () => {
+  assertFileContains(rel('scripts', 'phase0', 'Write-ServerBuildInfo.ps1'), [
+    'declaredUpstreamPin',
+    'commitVerified',
+    'Get-FileHash',
+    'diverge do pin declarado'
+  ]);
+  assertFileContains(rel('scripts', 'phase0', 'Install-SkyMPServerArtifact.ps1'), [
+    'Write-ServerBuildInfo.ps1'
+  ]);
+  assertFileContains(rel('scripts', 'phase0', 'Start-Phase0Server.ps1'), [
+    'BUILD_INFO.json',
+    'Commit do binario nao comprovado'
+  ]);
+});
+
 addCheck('schema real opcional', checkDatabaseSchemaIfRequested);
 
 async function runChecks() {

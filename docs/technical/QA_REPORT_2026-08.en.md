@@ -282,7 +282,7 @@ Ordered by **what unblocks what**. Phase 1 items are prerequisites for any test 
 
 | # | Item | Why |
 |---|---|---|
-| 2.1 | ✅ **Done** — `core/server-options.js` with 8 wired options, validation that aborts the boot, and a warning for the inert ones | |
+| 2.1 | ✅ **Done** — `core/server-options.js` with 17 wired options, validation that aborts the boot, and a warning for the inert ones | |
 | 2.2 | ✅ **Done** — registration on the bot's `ready`, without taking the process down on failure | |
 | 2.3 | ✅ **Done** — four deleted (`economy-service`, `justice`, `faction`, `survival`), seven kept as PARKED. Recorded in `PARKED_SERVICES_DECISION.md` | The most urgent was `economy-service.js`: it touched gold without atomicity or a ledger, and 6 PARKED modules imported it — reactivating any of them would have brought the unsafe economy along. The importers were migrated to `core/transaction-service` **before** removal. |
 | 2.4 | ✅ **Decided** — keep and document them as reserved (`ARCHITECTURE.md` 1.1). An empty table has no execution path and duplicates no logic; the cost of removing would exceed the gain | |

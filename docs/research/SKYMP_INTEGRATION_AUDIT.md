@@ -255,7 +255,7 @@ FormID de ator criado pelo servidor vive em `0xFF000000+`; passar isso para `Clo
 
 É a mesma classe do bug do `self` do Papyrus: dois formatos válidos para a mesma ideia, sem fronteira que force um. É a razão de existir do adaptador da §8, e os três sítios agora chamam `skymp.kick(actorId)`, que converte por `getUserByActor` — ou **recusa**, se o conversor não existir naquele servidor. Chutar aqui significaria desconectar a pessoa errada.
 
-`version-check.js` continua chamando `admin.kickPlayer(0, actorId, …)`, que passa `0` como quem manda: `hasPermission(0, 'kick')` nega, e a expulsão por versão incompatível nunca acontece. É outro defeito, de outra natureza, registrado na [matriz de compatibilidade](../technical/SKYMP_COMPATIBILITY_MATRIX.md) §1 como `COMPAT-002`.
+Na data desta auditoria, `version-check.js` chamava `admin.kickPlayer(0, actorId, …)`, passando `0` como quem manda: `hasPermission(0, 'kick')` negava, e a expulsão por versão incompatível nunca acontecia. **Resolvido em 24/08/2026:** o arquivo sem chamador foi removido e `COMPAT-002` passou a ser um gate fail-closed no launcher, antes da fila; veja a [matriz de compatibilidade](../technical/SKYMP_COMPATIBILITY_MATRIX.md) §1.
 
 ---
 

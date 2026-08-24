@@ -170,6 +170,25 @@ export function Home({ auth, setAuth }: HomeProps) {
         return;
       }
 
+      setStatus('Verificando interface do jogo...');
+      const ui = await window.electronAPI.ensureSkympUi(gamePath);
+      if (!ui.ok) {
+        setStatus(`Falha ao instalar a interface: ${ui.error || 'bundle indisponivel'}`);
+        return;
+      }
+
+      setStatus('Validando versao do cliente...');
+      const clientUpdate = await window.electronAPI.checkClientUpdate(gamePath);
+      if (clientUpdate.error) {
+        setStatus(`Nao foi possivel validar a versao do cliente: ${clientUpdate.error}`);
+        return;
+      }
+      if (clientUpdate.updateAvailable) {
+        setStatus(`Atualizacao obrigatoria do cliente: ${clientUpdate.version}. Instale em Configuracoes.`);
+        navigate('/settings');
+        return;
+      }
+
       await window.electronAPI.ensureSkyrimIni({ repairOnly: true });
 
       setStatus('Validando mods com o servidor...');

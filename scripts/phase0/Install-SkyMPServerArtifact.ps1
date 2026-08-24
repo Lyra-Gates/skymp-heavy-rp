@@ -68,6 +68,8 @@ if (Test-Path -LiteralPath $artifactScripts) {
   }
 }
 
+& (Join-Path $PSScriptRoot "Write-ServerBuildInfo.ps1") -ServerPath $server
+
 Write-Host "Installed server artifact into $server"
 Write-Host "Review $serverSettings before starting."
 Write-Host "offlineMode=$($settings.offlineMode)"

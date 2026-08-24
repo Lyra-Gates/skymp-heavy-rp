@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { after, beforeEach, test } = require('node:test');
 const Module = require('node:module');
+const fs = require('node:fs');
 
 const queries = [];
 const originalLoad = Module._load;
@@ -60,4 +61,10 @@ test('profile contract accepts only a positive safe integer', () => {
   assert.equal(whitelist.accountIdFromProfileId('42'), 42);
   assert.equal(whitelist.accountIdFromProfileId(0), null);
   assert.equal(whitelist.accountIdFromProfileId('discord-id'), null);
+});
+
+test('local auto-whitelist persists the canonical spawn FormDesc', () => {
+  const source = fs.readFileSync(require.resolve('./whitelist'), 'utf8');
+  assert.match(source, /cell_id: '162e2:Skyrim\.esm'/);
+  assert.doesNotMatch(source, /cell_id: '0x162e2'/);
 });

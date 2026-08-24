@@ -153,15 +153,14 @@ Sinais de sucesso no log do servidor SkyMP:
 
 ## 12. UI in-game (CEF)
 `skymp/ui/` (`index.html`, `player-panel.js`/`.css`, `depot-panel.js`/`.css`,
-`interaction-prompt.js`/`.css`) **não é copiado por nenhum script**. Copie a
-pasta inteira para dentro da instalação do jogo do jogador:
+`interaction-prompt.js`/`.css`) é empacotado dentro do launcher. Antes de
+JOGAR, o launcher compara e repara automaticamente estes arquivos em:
 ```
 <pasta do jogo>\Data\Platform\UI\
 ```
-Sem isso o menu do SkyMP conecta normalmente, mas fica preso no menu
-principal do Skyrim vanilla, sem nenhum overlay — porque o CEF tenta abrir
-`Data/Platform/UI/index.html` e a pasta nem existe. Ver "A UI do SkyMP não
-aparece" no troubleshooting.
+Também é possível forçar a operação em **Configurações → Reparar Interface**.
+Se o bundle interno estiver ausente ou incompleto, o launcher bloqueia JOGAR
+com erro explícito, antes de consumir o ticket da fila.
 
 ---
 
@@ -222,11 +221,11 @@ mundo inteiro como um único visitante.
 
 ### A UI do SkyMP não aparece — fica preso no menu principal do Skyrim vanilla
 O jogo conecta, o `AuthService` do servidor manda mostrar o diálogo de login,
-mas nada aparece na tela — nem o menu do SkyMP, nem qualquer overlay. Causa:
-`skymp/ui/` nunca foi copiado para `Data\Platform\UI\` na instalação do
-jogador (ver passo 12 acima), então o CEF (`Tilted UI (legacy)`) tenta abrir
-`file:///Data/Platform/UI/index.html` e falha silenciosamente — o
-`skyrim-platform.log` não mostra erro nenhum sobre isso.
+mas nada aparece na tela — nem o menu do SkyMP, nem qualquer overlay. Em builds
+anteriores a 24/08/2026, a causa comum era `skymp/ui/` não ter sido copiado para
+`Data\Platform\UI\`. No launcher atual, use **Configurações → Reparar Interface**
+e confirme que a operação encontrou os sete arquivos. O fluxo JOGAR também faz
+essa reparação automaticamente e bloqueia se o bundle interno estiver inválido.
 
 **Como confirmar:** abra `http://localhost:9000/json` num navegador de
 verdade (não clique no link simples da listagem — em CEF mais antigo isso

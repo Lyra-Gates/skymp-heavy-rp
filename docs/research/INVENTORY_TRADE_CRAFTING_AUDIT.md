@@ -415,7 +415,7 @@ A matriz completa, com o estado **depois**, está em
 
 ## 15. Migrations: estado
 
-`schema.sql` + `migration-v2` … `migration-v13`, aplicadas **à mão** e conferidas
+`schema.sql` + todas as migrations disponíveis (`migration-v2` … `migration-v25` atualmente), aplicadas **à mão** e conferidas
 por `scripts/check-schema-drift.js` (que lê os `.sql` como fonte da verdade e
 compara com `information_schema`).
 

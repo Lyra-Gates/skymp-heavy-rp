@@ -14,6 +14,16 @@ if (-not (Test-Path -LiteralPath $entry)) {
   Write-Error "Server entry not found. Run scripts/phase0/Install-SkyMPServerArtifact.ps1 first."
 }
 
+$buildInfoPath = Join-Path $server "BUILD_INFO.json"
+if (-not (Test-Path -LiteralPath $buildInfoPath)) {
+  & (Join-Path $PSScriptRoot "Write-ServerBuildInfo.ps1") -ServerPath $server
+}
+$buildInfo = Get-Content -Raw -LiteralPath $buildInfoPath | ConvertFrom-Json
+Write-Host "SkyMP artifact: pin=$($buildInfo.declaredUpstreamPin) commitVerified=$($buildInfo.commitVerified) package=$($buildInfo.packageVersion)"
+if (-not $buildInfo.commitVerified) {
+  Write-Warning "Commit do binario nao comprovado; identidade preservada pelos hashes em BUILD_INFO.json."
+}
+
 Push-Location $server
 try {
   if ($EnableFaunaCensus) {

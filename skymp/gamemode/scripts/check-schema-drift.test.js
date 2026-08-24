@@ -22,12 +22,43 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const { describe, it } = require('node:test');
 
 const drift = require('./check-schema-drift');
 
 const databaseDir = path.resolve(__dirname, '..', '..', 'packages', 'database');
+
+// Contratos mínimos das migrations que existiam antes de o guard de escrita
+// passar a exigir teste novo por arquivo. Não basta citar o nome: cada entrada
+// fixa a declaração de domínio que torna aquela migration necessária. Se o SQL
+// for apagado, renomeado ou perder sua tabela/coluna/índice principal, este
+// teste falha antes de um banco parcialmente migrado chegar ao runtime.
+const legacyMigrationContracts = [
+  ['migration-v3-governance.sql', /CREATE TABLE IF NOT EXISTS `governance_roles`/i],
+  ['migration-v4-market-stalls.sql', /CREATE TABLE IF NOT EXISTS `market_stall_sales`/i],
+  ['migration-v5-character-application.sql', /ADD COLUMN IF NOT EXISTS `motivations`/i],
+  ['migration-v6-launch-tickets.sql', /CREATE TABLE IF NOT EXISTS `launch_tickets`/i],
+  ['migration-v7-indexes.sql', /ADD INDEX IF NOT EXISTS `idx_audit_created`/i],
+  ['migration-v9-characters-gold.sql', /ADD COLUMN IF NOT EXISTS `gold`/i],
+  ['migration-v10-soul.sql', /CREATE TABLE IF NOT EXISTS `character_soul`/i],
+  ['migration-v11-institutional-treasury.sql', /CREATE TABLE IF NOT EXISTS `institutional_treasury_transactions`/i],
+  ['migration-v12-regional-market-ledger.sql', /CREATE TABLE IF NOT EXISTS `regional_market_transactions`/i],
+  ['migration-v13-market-stall-idempotency.sql', /ADD COLUMN `idempotency_key`/i],
+  ['migration-v14-inventory-framework.sql', /ADD COLUMN IF NOT EXISTS `owner_type`/i],
+  ['migration-v15-economy-framework.sql', /CREATE TABLE IF NOT EXISTS `economy_escrow`/i],
+  ['migration-v25-launcher-sessions.sql', /CREATE TABLE IF NOT EXISTS `launcher_sessions`/i]
+];
+
+describe('contratos mínimos das migrations versionadas', () => {
+  for (const [filename, expectedDeclaration] of legacyMigrationContracts) {
+    it(`${filename} preserva sua declaração principal`, () => {
+      const sql = fs.readFileSync(path.join(databaseDir, filename), 'utf8');
+      assert.match(sql, expectedDeclaration);
+    });
+  }
+});
 
 describe('ordenação dos arquivos', () => {
   it('schema.sql vem primeiro e as migrations em ordem numérica', () => {
@@ -40,8 +71,8 @@ describe('ordenação dos arquivos', () => {
   });
 
   it('ordena por número, não alfabeticamente', () => {
-    // Alfabético colocaria v10 antes de v2. Não temos v10 hoje; o dia que
-    // tiver, o erro seria silencioso — a v10 seria lida antes da v2.
+    // Alfabético colocaria v10 antes de v2; este teste impede que a v10 seja
+    // lida antes da v2 independentemente da maior versão disponível.
     assert.equal(drift.versaoDe('migration-v10-qualquer.sql'), 10);
     assert.equal(drift.versaoDe('migration-v2.sql'), 2);
     assert.ok(drift.versaoDe('migration-v10-qualquer.sql') > drift.versaoDe('migration-v2.sql'));

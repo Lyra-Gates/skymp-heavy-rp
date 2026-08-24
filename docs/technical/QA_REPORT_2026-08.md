@@ -283,7 +283,7 @@ Ordenado por **o que desbloqueia o quê**. Os itens da Fase 1 são pré-requisit
 
 | # | Item | Por quê |
 |---|---|---|
-| 2.1 | ✅ **Feito** — `core/server-options.js` com 8 opções ligadas, validação que aborta o boot e aviso pras inertes | |
+| 2.1 | ✅ **Feito** — `core/server-options.js` com 17 opções ligadas, validação que aborta o boot e aviso pras inertes | |
 | 2.2 | ✅ **Feito** — registro no `ready` do bot, sem derrubar o processo em caso de falha | |
 | 2.3 | ✅ **Feito** — quatro apagados (`economy-service`, `justice`, `faction`, `survival`), sete mantidos como PARKED. Registrado em `PARKED_SERVICES_DECISION.md` | O mais urgente era `economy-service.js`: mexia em ouro sem atomicidade nem ledger, e 6 módulos PARKED o importavam — reativar qualquer um traria a economia insegura junto. Os importadores foram migrados pro `core/transaction-service` **antes** da remoção. |
 | 2.4 | ✅ **Decidido** — manter e documentar como reservadas (`ARCHITECTURE.md` 1.1). Tabela vazia não tem caminho de execução nem duplica lógica; o custo de remover superaria o ganho | |

@@ -13,6 +13,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | 0 | [CONSTITUICAO.md](CONSTITUICAO.md) | **A constituição de design.** O que o projeto é, o que nunca criar, e por que toda mecânica precisa responder "como isso gera histórias?". O Anexo A traz as tensões conhecidas dela. |
 | 1 | [QA_REPORT_2026-08.md](technical/QA_REPORT_2026-08.md) | **O estado real de cada componente**, incluindo o que não está pronto e o plano priorizado. É o documento mais honesto do projeto. |
 | 1.1 | [../PROJECT_STATE.md](../PROJECT_STATE.md) | **O que o framework faz hoje**, pós-unificação de 22/08/2026 (Profissões + Economia/Vault + Depot + UX). Registra a ponte Depot↔Profissão como próximo passo, não implementada. |
+| 1.2 | [roadmap/PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) | **Quadro operacional da alfa fechada.** Tarefas com IDs, status, dependências, gates G0–G5, critérios de aceite e campo de evidência. É o documento a atualizar conforme o projeto avança. |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | Como banco, painel web, bot, API do jogo, launcher e gamemode conversam. |
 | 2.1 | [research/ADMIN_PLATFORM_AUDIT.md](research/ADMIN_PLATFORM_AUDIT.md) | **O estado real do painel de staff.** Doze rotas administrativas, zero verificações de permissão — e o que mais a auditoria de 13/08 encontrou. Leia antes de `skyadmin/`. |
 | 2.2 | [skyadmin/README.md](skyadmin/README.md) | Centro de orientação do painel de staff: escopo, arquitetura, plano, segurança, operação e referências. **É projeto, não estado** — ver a §7 da auditoria acima. |
@@ -126,6 +127,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
+| [roadmap/PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) | Plano operacional vivo para promover o projeto de `LAB` até alfa fechada e produção: dashboard, bloqueadores P0, fases F0–F9, critérios de saída e registro de execução. |
 | [HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md](technical/HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md) | Backlog de sistemas de gameplay. |
 | [GUIA_SESSAO_DE_TESTE.md](technical/GUIA_SESSAO_DE_TESTE.md) | **Como chegar até o roteiro:** ligar os quatro serviços, conferir as portas, e o guia copiável para mandar aos testadores. A Parte 2 é escrita para quem nunca viu o repositório. |
 | [FASE_0_ROTEIRO.md](technical/FASE_0_ROTEIRO.md) | **O roteiro do teste in-game — o único bloqueio real do projeto.** Passo a passo, o que observar, o que significa falhar, e o registro pra preencher enquanto testa. Comece pelo guia acima. |

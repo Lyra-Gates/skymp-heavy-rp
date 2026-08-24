@@ -19,11 +19,12 @@ const fs = require('fs');
 
 function isValidManifest(data) {
   if (!data || typeof data !== 'object') return false;
-  if (!Array.isArray(data.mods)) return false;
-  if (!Array.isArray(data.loadOrder)) return false;
+  if (data.hashAlgorithm !== 'sha256') return false;
+  if (!Array.isArray(data.mods) || data.mods.length === 0) return false;
+  if (!Array.isArray(data.loadOrder) || data.loadOrder.length === 0) return false;
   return data.mods.every((mod) =>
     mod && typeof mod.filename === 'string' && mod.filename.length > 0 &&
-    typeof mod.hash === 'string' && mod.hash.length > 0
+    typeof mod.hash === 'string' && /^[a-f0-9]{64}$/i.test(mod.hash)
   );
 }
 

@@ -6,7 +6,7 @@
  *
  * Por que isto existe
  * ───────────────────
- * As migrations `v2`–`v10` são aplicadas **à mão**, em ordem, e nada verifica
+ * As migrations versionadas são aplicadas **à mão**, em ordem numérica, e nada verifica
  * que foram todas aplicadas. Um banco meio-migrado é a falha mais cara de
  * diagnosticar que existe neste projeto, porque tudo *quase* funciona: o
  * servidor sobe, o login passa, e só a query que toca a coluna faltante
@@ -53,8 +53,8 @@ const databaseDir = path.resolve(gamemodeDir, '..', 'packages', 'database');
 
 /**
  * Ordena `schema.sql` primeiro e as migrations pelo número de versão.
- * Ordenação alfabética colocaria `v10` antes de `v2` — não temos v10 hoje, mas
- * o dia que tiver, o erro seria silencioso.
+ * Ordenação alfabética coloca `v10` antes de `v2`, o que tornaria o erro
+ * silencioso se a versão não fosse extraída do nome.
  */
 function listarArquivosSql(dir) {
   const arquivos = fs.readdirSync(dir).filter(nome => nome.endsWith('.sql'));
@@ -297,7 +297,7 @@ function imprimirEsperado(esperado) {
   }
 }
 
-function imprimirResultado(resultado, strict) {
+function imprimirResultado(resultado, strict, ultimaVersao) {
   const { tabelasFaltando, colunasFaltando, indicesFaltando, tabelasExtra } = resultado;
 
   for (const t of tabelasFaltando) {
@@ -325,7 +325,7 @@ function imprimirResultado(resultado, strict) {
   }
 
   console.error(
-    '\nAplique as migrations pendentes de skymp/packages/database, em ordem (v2 -> v10).\n' +
+    `\nAplique as migrations pendentes de skymp/packages/database, em ordem (v2 -> v${ultimaVersao}).\n` +
     'Se voce acha que ja aplicou todas, aplicou parcialmente: as migrations sao\n' +
     'idempotentes (IF NOT EXISTS), entao rodar de novo e seguro.'
   );
@@ -347,6 +347,7 @@ async function main() {
   }
 
   const esperado = extrairEsperado(arquivos);
+  const ultimaVersao = Math.max(...arquivos.map(arquivo => versaoDe(path.basename(arquivo))));
 
   if (apenasListar) {
     imprimirEsperado(esperado);
@@ -358,7 +359,7 @@ async function main() {
   try {
     const real = await lerBancoReal(db);
     const resultado = compararSchemas(esperado, real);
-    if (!imprimirResultado(resultado, strict)) {
+    if (!imprimirResultado(resultado, strict, ultimaVersao)) {
       process.exitCode = 1;
     }
   } finally {

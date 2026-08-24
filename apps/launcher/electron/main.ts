@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { URL, fileURLToPath } from 'url';
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
 import { avaliarEspaco, ehDiscoCheio } from './disk.mjs';
+import { syncUiBundle } from './ui-integrity.mjs';
 
 // package.json tem "type": "module", entao o Vite empacota este arquivo como
 // ESM — __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
@@ -36,6 +37,20 @@ const MODS_VERSION_FILENAME = 'skymp_mods_version.txt';
 const MODS_PARTS_FILENAME = 'skymp_mods_parts.json';
 
 let mainWindow: BrowserWindow | null = null;
+
+function bundledUiDir() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'skymp-ui')
+    : path.resolve(__dirname, '../../../skymp/ui');
+}
+
+function ensureSkympUi(gamePath: string) {
+  if (!gamePath) return { ok: false, repaired: [], error: 'Caminho do jogo invalido.' };
+  return syncUiBundle({
+    sourceDir: bundledUiDir(),
+    targetDir: path.join(gamePath, 'Data', 'Platform', 'UI')
+  });
+}
 
 type LauncherConfig = {
   gamePath?: string;
@@ -355,6 +370,8 @@ ipcMain.handle('ensure-skyrim-ini', async (_event, opts) => {
     return { ok: false, error: e.message };
   }
 });
+
+ipcMain.handle('ensure-skymp-ui', async (_event, gamePath) => ensureSkympUi(gamePath));
 
 ipcMain.handle('get-display-settings', async () => {
   const result: { displays: Array<{ width: number; height: number }>; current: any } = { displays: [], current: null };

@@ -9,14 +9,9 @@
  *   node scripts/generate-mods-manifest.js "D:\\Skyrim Special Edition\\Data"
  *   node scripts/generate-mods-manifest.js <Data> --out ./mods.json --plugins-txt <plugins.txt>
  *
- * Sobre o algoritmo de hash: usa MD5 porque é o que o `verify-mods` do launcher
- * já compara (`apps/launcher/electron/main.ts`). Isso é deliberado e não é uma
- * falha de segurança — este hash detecta divergência e corrupção entre clientes,
- * não protege contra adulteração maliciosa. Quem quer trapacear controla a
- * própria máquina e simplesmente não roda o launcher; a defesa contra isso é o
- * servidor não confiar no cliente (ver docs/technical/MODS_AND_GAMEMODE_CONTRACT.md),
- * não um hash mais forte aqui. MD5 é ~3x mais rápido, e um modpack de Skyrim
- * tem dezenas de GB.
+ * O manifesto declara SHA-256 e o launcher recusa algoritmos diferentes. Além
+ * de detectar corrupção, o hash participa do gate de paridade contra alteração
+ * deliberada dos arquivos distribuídos; por isso MD5 não é aceito.
  *
  * A ordem em `loadOrder` importa muito mais que o conteúdo de `mods`: é ela que
  * fixa o índice de load order embutido em todo FormID.

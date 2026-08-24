@@ -26,7 +26,7 @@ cd apps/launcher    && npm ci && cd ../..
 
 Copie cada `.env.example` para `.env` e preencha. Os comentários dentro deles dizem de onde vem cada valor.
 
-Banco: aplique `skymp/packages/database/schema.sql` e depois as migrations `v2` até `v9`, **em ordem**.
+Banco: aplique `skymp/packages/database/schema.sql` e depois todas as migrations disponíveis (`v2` até `v25` atualmente), **em ordem numérica**.
 
 ```powershell
 # Sobe painel, bot, API do jogo e servidor SkyMP

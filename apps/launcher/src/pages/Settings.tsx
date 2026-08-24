@@ -64,6 +64,21 @@ export function Settings() {
     }
   };
 
+  const handleRepairUi = async () => {
+    if (!requirePath()) return;
+    setBusy('repair-ui');
+    try {
+      const result = await window.electronAPI.ensureSkympUi(gamePath);
+      if (!result.ok) setError(result.error || 'Falha ao reparar a interface.');
+      else if (result.repaired.length > 0) setSuccess(`Interface reparada: ${result.repaired.length} arquivo(s).`);
+      else setSuccess(`Interface valida: ${result.files || 0} arquivo(s).`);
+    } catch (e: any) {
+      setError(e.message || 'Falha ao reparar a interface.');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const handleAnalyze = async () => {
     if (!requirePath()) return;
     setBusy('analyze-mods');
@@ -197,6 +212,9 @@ export function Settings() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '12px' }}>
           <button className="btn-secondary" onClick={handleRepairIni} disabled={!!busy}>
             <Wrench size={18} /> Reparar INI
+          </button>
+          <button className="btn-secondary" onClick={handleRepairUi} disabled={!!busy}>
+            <Wrench size={18} /> Reparar Interface
           </button>
           <button className="btn-secondary" onClick={handleAnalyze} disabled={!!busy}>
             <Search size={18} /> Analisar Mods

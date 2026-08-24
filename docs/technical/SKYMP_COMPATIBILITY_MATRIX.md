@@ -19,28 +19,26 @@ Data: **2026-08-14**. Responde ao briefing §17, §18 e §19.
 | **SKSE64** | build correspondente a 1.6.1170 | `SKYMP_SERVER_SETUP.md` |
 | **SkyrimPlatform** | **2.9.0** é a última release documentada; suporte a 1.6.1170.0 entrou nela | `docs/release/sp-2.9.md` do upstream |
 | **Modpack** | Ver `docs/MODPACK.md`; decisão de Creation Club **aberta** (`LOP-004`) | — |
-| **Cliente Heavy RP** | `MIN_VERSION = "1.0.0-beta"` em `version-check.js`; launcher em `0.0.0` | leitura de código |
+| **Cliente Heavy RP** | versão exigida pelo `client-manifest.json`; instalação registrada em `skymp_client_version.txt` | `check-client-update` do launcher |
+| **Launcher** | `0.0.0` | `apps/launcher/package.json` |
 
 ### O que esta tabela mostra que não é confortável
 
-**A versão do cliente é declarada em dois lugares que não se falam.** `version-check.js` exige `"1.0.0-beta"`; `apps/launcher/package.json` diz `0.0.0`. Nenhum jogador passaria pela checagem hoje — e o caminho de recusa dela chama `admin.kickPlayer(0, actorId, …)`, que é justamente a chamada com `actorId` no lugar de `userId` do achado nº 3 da [auditoria de fronteira](../research/SKYMP_INTEGRATION_AUDIT.md) §6.
+**Cliente instalado e launcher são artefatos diferentes e não compartilham número de versão.** A fonte autoritativa do cliente é `clientVersion` no manifesto de distribuição; o launcher grava a versão instalada em `skymp_client_version.txt` e o fluxo **JOGAR** falha fechado se não puder consultar o manifesto ou se a versão divergir. O antigo `version-check.js`, sem chamador e baseado numa constante paralela, foi removido. A versão do executável do launcher continua vindo apenas de `apps/launcher/package.json`.
 
-**Não existe registro de qual build de servidor está em `skymp/server/`.** O binário está no repositório, o commit de origem não. É o gatilho de `COMPAT-001`.
+**O artefato instalado agora possui identidade local, mas ainda não prova o commit de origem.** `skymp/server/BUILD_INFO.json` registra pin declarado, plataforma, versão do pacote e SHA-256 do bundle JavaScript e do módulo nativo. O artefato atual não trouxe `upstreamCommit`, portanto `commitVerified` permanece `false`. É o restante de `COMPAT-001`.
 
 **GOG e a Anniversary Edition não-patcheada estão declaradas incompatíveis** e nada verifica isso antes do download do modpack.
 
 ---
 
-## 2. Como saber em que commit o servidor que rodamos foi construído
+## 2. Como identificar o servidor que rodamos
 
-Hoje, não dá. É a lacuna mais barata de fechar deste documento.
+`Write-ServerBuildInfo.ps1` cria `skymp/server/BUILD_INFO.json` durante a instalação e o boot mostra pin, versão e estado da verificação. Os hashes SHA-256 permitem identificar exatamente o artefato instalado. Se um artefato trouxer `upstreamCommit`, a instalação falha quando ele diverge de `patches/manifest.json`.
 
-`COMPAT-001`: gravar o commit do SkyMP no artefato de build e expô-lo. Duas saídas, e a segunda é melhor:
+O artefato instalado em 06/08/2026 não trouxe esse campo, então ainda não é possível derivar seu commit apenas dos bytes. O estado aparece explicitamente como `commitVerified=false`, sem transformar o pin pretendido em fato. Para concluir `COMPAT-001`, o pipeline upstream precisa gravar `upstreamCommit` no artefato antes da distribuição.
 
-1. Um arquivo `skymp/server/BUILD_INFO.json` gerado no build, com commit, data e triplet.
-2. O gamemode logar no boot o que o servidor sabe de si — `mp.getServerSettings()` e `mp.getEspmLoadOrder()` — junto do pin declarado, e **recusar subir se divergirem**.
-
-A segunda é o mesmo *fail-closed* do `server-options` e do `LOP-003`, e responde uma pergunta que nenhum arquivo estático responde: *este binário carregou o que achamos que ele carregou?*
+Continua pendente conferir no boot `mp.getServerSettings()` e `mp.getEspmLoadOrder()` contra a configuração pretendida. Isso responde outra pergunta: *este binário carregou o que achamos que ele carregou?*
 
 ---
 
@@ -180,8 +178,8 @@ Toda atualização de pin repete o roteiro. Não uma versão reduzida — o rote
 
 | ID | Tarefa | Depende de |
 |---|---|---|
-| `COMPAT-001` | Registrar o commit do SkyMP no artefato de build, ou conferir no boot | — |
-| `COMPAT-002` | Unificar a versão do cliente: `version-check.js` e `package.json` do launcher | `BOUND-003` |
+| `COMPAT-001` | Parcial: identidade/hash registrados; fazer o artefato declarar `upstreamCommit` verificável | pipeline de build upstream |
+| `COMPAT-002` | ✅ Separar os domínios de versão e bloquear o fluxo JOGAR quando o cliente divergir do manifesto | — |
 | `COMPAT-003` | O diff da fronteira (§4.1) como script versionado, não como quatro `grep` num documento | — |
 | `PAP-001` | Gate de boot conferindo as funções Papyrus pela API `_sp3*` | — |
 | `BOUND-008` | Camada 2: harness de integração com servidor real | — |
@@ -192,7 +190,7 @@ Nenhuma depende da Fase 0. `BOUND-008` **reduz** o que a Fase 0 precisa provar.
 
 ## 7. O que este documento não sabe
 
-- **Em que commit o binário em `skymp/server/` foi construído.** É o `COMPAT-001`, e até ele existir a linha "SkyMP (pin)" da §1 é intenção, não fato verificado.
+- **Em que commit o binário atual em `skymp/server/` foi construído.** Os bytes estão identificados por SHA-256, mas o artefato antigo não declarou `upstreamCommit`; a linha "SkyMP (pin)" da §1 continua sendo intenção, não fato verificado.
 - **Se o SkyrimPlatform que os testadores instalam é o 2.9.0.** O modpack não fixa a versão.
 - **Se o modpack atual sobe com 1.6.1170.** A decisão de Creation Club continua aberta.
 - **Nada foi exercitado numa atualização de verdade.** O procedimento da §4 nunca rodou — o pin de hoje é o primeiro.

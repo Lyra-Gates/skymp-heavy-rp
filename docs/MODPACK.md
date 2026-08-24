@@ -19,7 +19,7 @@
 ## Masters Base
 
 Estes são os masters obrigatórios da base do Skyrim SE + conteúdo Creation Club
-que o servidor exige. São verificados por hash MD5 para garantir a versão correta.
+que o servidor exige. São verificados por hash SHA-256 para garantir a versão correta.
 
 | # | Arquivo | Tipo | Descrição |
 |---|---------|------|-----------|
@@ -185,10 +185,8 @@ O launcher detecta e bloqueia GOG e AE não-downgradeados.
 ### Geração do mods.json para o Servidor
 
 ```powershell
-# Gerar hashes MD5 de todos os mods na pasta Data
-Get-ChildItem "C:\Games\Skyrim Special Edition\Data" -Include "*.esp","*.esm","*.esl" |
-  ForEach-Object {
-    $hash = (Get-FileHash $_.FullName -Algorithm MD5).Hash.ToLower()
-    [PSCustomObject]@{ filename = $_.Name; hash = $hash }
-  } | ConvertTo-Json -Depth 2
+cd apps/game-api
+node scripts/generate-mods-manifest.js "C:\Games\Skyrim Special Edition\Data" --plugins-txt "$env:LOCALAPPDATA\Skyrim Special Edition\plugins.txt"
 ```
+
+O gerador oficial grava `hashAlgorithm: "sha256"`, calcula os hashes por stream e inclui a load order real. Não monte o manifesto manualmente: um manifesto sem algoritmo ou com MD5 é recusado pelo launcher.

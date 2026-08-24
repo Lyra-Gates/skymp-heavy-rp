@@ -33,11 +33,19 @@ Regras que o código já aplica (`apps/launcher/electron/main.ts`):
 - **Download em partes** com `contentSig` por parte, pra pular pedaços que não mudaram — o modpack é grande demais pra rebaixar inteiro a cada versão.
 - **Carimbos locais** (`skymp_client_version.txt`, `skymp_mods_version.txt`, `skymp_mods_parts.json`) na pasta do jogo dizem o que está instalado sem precisar re-hashear tudo.
 
+### Fontes de versão
+
+Há três artefatos independentes: launcher, cliente SkyMP e modpack. A versão do launcher vem somente de `apps/launcher/package.json`; as versões exigidas do cliente e dos mods vêm dos respectivos manifestos de distribuição e são registradas nos carimbos locais. Antes de consumir um ticket da fila, o fluxo **JOGAR** compara o carimbo do cliente com `clientVersion` e falha fechado se o manifesto estiver indisponível ou houver atualização pendente.
+
+### UI CEF embutida e reparável
+
+Os sete arquivos de `skymp/ui/` entram no instalador como `resources/skymp-ui`. Antes da validação de versão e antes da fila, o launcher compara SHA-256 arquivo a arquivo com `Data/Platform/UI` e copia somente os ausentes ou divergentes. Arquivos extras são preservados. **Configurações → Reparar Interface** executa a mesma operação manualmente. Um bundle interno sem `index.html` falha fechado.
+
 ## 3. Paridade em tempo de conexão — **falta o servidor**
 
 Antes de jogar, o launcher roda dois passos:
 
-1. **`verify-mods`** — baixa `http://<SERVER_IP>:<API_PORT>/mods.json`, no formato `{ mods: [{ filename, hash }], loadOrder: [...] }`, e compara o hash de cada arquivo correspondente em `Data/`. **Este passo usa MD5**, não SHA-256 — é uma checagem de integridade/paridade, não uma barreira criptográfica, e é diferente do SHA-256 usado no download (seção 2). O hash é tirado por **stream** (`hashFileMd5` em `electron/main.ts`), não `fs.readFileSync` do arquivo inteiro — um `Skyrim.esm` de referência passa de 280 MB, e ler cada mod inteiro pra memória antes de hashear estourava o processo do launcher antes do jogo abrir (achado 22/08/2026, ajudando um fork externo). `compareMods` (`parity.mjs`) é `async` e faz `await hashOf(...)` por mod, sequencial — só um arquivo "em voo" de cada vez.
+1. **`verify-mods`** — baixa `http://<SERVER_IP>:<API_PORT>/mods.json`, no formato `{ hashAlgorithm: "sha256", mods: [{ filename, hash }], loadOrder: [...] }`, e compara o hash de cada arquivo correspondente em `Data/`. O hash SHA-256 é calculado por **stream** (`hashFileForManifest` em `electron/main.ts`), sem carregar mods grandes inteiros na memória. `compareMods` (`parity.mjs`) processa até quatro arquivos em paralelo por padrão, com concorrência limitada; manifesto sem algoritmo ou com algoritmo diferente é recusado explicitamente.
 2. **`analyze-plugins`** — lê o header de cada `.esp`/`.esl`/`.esm`, confere que todo master existe localmente e aparece **antes** do dependente na ordem informada pelo servidor.
 
 Os dois juntos é que fecham o contrato de FormID descrito em `docs/technical/MODS_AND_GAMEMODE_CONTRACT.md` seção 3: o (1) garante conteúdo igual, o (2) garante ordem igual.

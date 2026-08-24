@@ -56,7 +56,7 @@ Espere **13/13**.
 cd skymp/gamemode && npm run check:schema
 ```
 
-Espere `[OK] banco e migrations estao alinhados`. Se faltar tabela ou coluna, **aplique as migrations pendentes (`v2`→`v10`, em ordem — são idempotentes)**. Banco meio-migrado não quebra o boot: o servidor sobe, o login passa, e só a query que toca a coluna faltante falha — no meio de uma cena, com ouro envolvido. Foi exatamente assim que a `v9` nasceu.
+Espere `[OK] banco e migrations estao alinhados`. Se faltar tabela ou coluna, **aplique todas as migrations pendentes (`v2`→`v25` atualmente, em ordem numérica — são idempotentes)**. Banco meio-migrado não quebra o boot: o servidor sobe, o login passa, e só a query que toca a coluna faltante falha — no meio de uma cena, com ouro envolvido. Foi exatamente assim que a `v9` nasceu.
 
 ```bash
 ls apps/game-api/mods.json

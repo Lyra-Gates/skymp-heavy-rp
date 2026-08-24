@@ -6,7 +6,15 @@
   },
   "files": [
     "dist/**/*",
-    "dist-electron/**/*"
+    "dist-electron/main.mjs",
+    "dist-electron/preload.mjs"
+  ],
+  "extraResources": [
+    {
+      "from": "../../skymp/ui",
+      "to": "skymp-ui",
+      "filter": ["**/*"]
+    }
   ],
   "extraMetadata": {
     "main": "dist-electron/main.mjs"

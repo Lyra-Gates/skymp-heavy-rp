@@ -79,8 +79,11 @@ const craftingService = require(path.join(gamemodeDir, 'crafting-service'));
 const playerShortcutsService = require(path.join(gamemodeDir, 'core', 'player-shortcuts-service'));
 const jobsService = require(path.join(gamemodeDir, 'jobs-service'));
 const contractsService = require(path.join(gamemodeDir, 'contracts-service'));
+const { verifyRuntimeCompatibility } = require(path.join(gamemodeDir, 'core', 'runtime-compatibility'));
 
 console.log("[phase0] SkyMP Heavy RP gamemode loaded");
+const runtimeCompatibility = verifyRuntimeCompatibility(mp);
+console.log(`[phase0] load order efetiva verificada: ${runtimeCompatibility.loadOrder.join(', ')}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Registro de módulos

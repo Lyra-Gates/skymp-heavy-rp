@@ -282,7 +282,7 @@ Ordenado por **qué desbloquea qué**. Los puntos de la Fase 1 son prerrequisito
 
 | # | Punto | Por qué |
 |---|---|---|
-| 2.1 | ✅ **Hecho** — `core/server-options.js` con 8 opciones conectadas, validación que aborta el arranque y aviso para las inertes | |
+| 2.1 | ✅ **Hecho** — `core/server-options.js` con 17 opciones conectadas, validación que aborta el arranque y aviso para las inertes | |
 | 2.2 | ✅ **Hecho** — registro en el `ready` del bot, sin tumbar el proceso ante un fallo | |
 | 2.3 | ✅ **Hecho** — cuatro borrados (`economy-service`, `justice`, `faction`, `survival`), siete mantenidos como PARKED. Registrado en `PARKED_SERVICES_DECISION.md` | El más urgente era `economy-service.js`: tocaba oro sin atomicidad ni libro mayor, y 6 módulos PARKED lo importaban — reactivar cualquiera habría traído la economía insegura consigo. Los importadores fueron migrados a `core/transaction-service` **antes** de la eliminación. |
 | 2.4 | ✅ **Decidido** — mantenerlas y documentarlas como reservadas (`ARCHITECTURE.md` 1.1). Una tabla vacía no tiene camino de ejecución ni duplica lógica; el coste de quitarla superaría la ganancia | |

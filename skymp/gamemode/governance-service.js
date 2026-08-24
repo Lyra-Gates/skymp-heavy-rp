@@ -980,7 +980,7 @@ async function getDefaultPrison() {
      LIMIT 1`
   );
   if (rows.length === 0) {
-    return { cellId: '0x162e2', pos: [35, -165, -189] };
+    return { cellId: '162e2:Skyrim.esm', pos: [35, -165, -189] };
   }
   return {
     cellId: rows[0].prison_cell_id,

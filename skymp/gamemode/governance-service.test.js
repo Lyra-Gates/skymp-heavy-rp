@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 
 const governance = require('./governance-service');
 
@@ -20,6 +21,12 @@ test('governance command definitions are unique and usable by module registry', 
       seen.add(name);
     }
   }
+});
+
+test('default prison uses the canonical spawn FormDesc', () => {
+  const source = fs.readFileSync(require.resolve('./governance-service'), 'utf8');
+  assert.match(source, /cellId: '162e2:Skyrim\.esm'/);
+  assert.doesNotMatch(source, /cellId: '0x162e2'/);
 });
 
 /*
@@ -45,4 +52,3 @@ test('governance command definitions are unique and usable by module registry', 
  * verificava o formato de um campo que a governanca validava e jogava fora — o
  * novo verifica que o duplo clique cobra uma vez so.
  */
-

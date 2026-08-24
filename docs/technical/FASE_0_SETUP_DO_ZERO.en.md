@@ -157,15 +157,14 @@ Success signals in the SkyMP server log:
 
 ## 12. In-game UI (CEF)
 `skymp/ui/` (`index.html`, `player-panel.js`/`.css`, `depot-panel.js`/`.css`,
-`interaction-prompt.js`/`.css`) **is not copied by any script**. Copy the
-whole folder into the player's game install:
+`interaction-prompt.js`/`.css`) is bundled with the launcher. Before PLAY,
+the launcher automatically compares and repairs these files at:
 ```
 <game folder>\Data\Platform\UI\
 ```
-Without this, the SkyMP connection succeeds normally, but the player stays
-stuck on Skyrim's vanilla main menu with no overlay at all — the CEF browser
-tries to open `Data/Platform/UI/index.html` and the folder doesn't even
-exist. See "SkyMP's UI never appears" in the troubleshooting section.
+The operation can also be forced through **Settings → Repair Interface**. If
+the embedded bundle is absent or incomplete, PLAY is blocked with an explicit
+error before a queue ticket is consumed.
 
 ---
 
@@ -226,11 +225,11 @@ the entire world as a single visitor.
 
 ### SkyMP's UI never appears — stuck on Skyrim's vanilla main menu
 The game connects, the server's `AuthService` sends the login dialog, but
-nothing shows up on screen — no SkyMP menu, no overlay at all. Cause:
-`skymp/ui/` was never copied into `Data\Platform\UI\` on the player's
-install (see step 12 above), so the CEF browser (`Tilted UI (legacy)`)
-tries to open `file:///Data/Platform/UI/index.html` and fails silently —
-`skyrim-platform.log` shows no error about it at all.
+nothing shows up on screen — no SkyMP menu, no overlay at all. In builds before
+2026-08-24, the common cause was that `skymp/ui/` had never been copied into
+`Data\Platform\UI\`. In the current launcher, use **Settings → Repair
+Interface** and confirm that all seven files are present. PLAY also performs
+this repair automatically and blocks if the embedded bundle is invalid.
 
 **How to confirm:** open `http://localhost:9000/json` in a real browser
 (don't click the plain link in the listing page — on older CEF that

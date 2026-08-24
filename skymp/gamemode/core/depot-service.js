@@ -335,7 +335,8 @@ async function resolveTerminal(objectFormId, dependencies = {}) {
  * pra um único renderizador do lado do cliente servir os dois.
  * @param {number} characterId
  * @param {string} holdId
- * @param {object} deps
+ * @param {number} targetFormId
+ * @param {object} dependencies
  */
 async function _panelPayload(characterId, holdId, targetFormId, dependencies) {
   const deps = _deps(dependencies);
