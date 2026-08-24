@@ -155,6 +155,18 @@ Success signals in the SkyMP server log:
 - `VITE_PANEL_URL` = the panel's URL (through the tunnel, or
   `http://127.0.0.1:3001` to test locally first).
 
+## 12. In-game UI (CEF)
+`skymp/ui/` (`index.html`, `player-panel.js`/`.css`, `depot-panel.js`/`.css`,
+`interaction-prompt.js`/`.css`) **is not copied by any script**. Copy the
+whole folder into the player's game install:
+```
+<game folder>\Data\Platform\UI\
+```
+Without this, the SkyMP connection succeeds normally, but the player stays
+stuck on Skyrim's vanilla main menu with no overlay at all — the CEF browser
+tries to open `Data/Platform/UI/index.html` and the folder doesn't even
+exist. See "SkyMP's UI never appears" in the troubleshooting section.
+
 ---
 
 ## Known issues and fixes
@@ -211,6 +223,24 @@ instead of the token.
 Without `TRUST_PROXY=true`, Express sees the Cloudflare Tunnel's IP instead
 of the player's — the rate limit keeps responding normally, it just counts
 the entire world as a single visitor.
+
+### SkyMP's UI never appears — stuck on Skyrim's vanilla main menu
+The game connects, the server's `AuthService` sends the login dialog, but
+nothing shows up on screen — no SkyMP menu, no overlay at all. Cause:
+`skymp/ui/` was never copied into `Data\Platform\UI\` on the player's
+install (see step 12 above), so the CEF browser (`Tilted UI (legacy)`)
+tries to open `file:///Data/Platform/UI/index.html` and fails silently —
+`skyrim-platform.log` shows no error about it at all.
+
+**How to confirm:** open `http://localhost:9000/json` in a real browser
+(don't click the plain link in the listing page — on older CEF that
+navigates your own tab into the `file://` URL and Chrome blocks it). Copy
+the `devtoolsFrontendUrl` field from the `index.html` entry and paste it
+into the address bar; that opens a real remote DevTools session. If the
+Elements panel shows an empty `<body></body>`, that's it — the file doesn't
+exist at that path. Confirmed against a real runtime on 2026-08-23 (the
+first time `skymp/ui/` had ever actually run inside a real game in this
+project).
 
 ### `client_id: Value "SEU_CLIENT_ID_AQUI" is not snowflake` on Discord login
 `apps\launcher\.env.example` ships with `VITE_DISCORD_CLIENT_ID=SEU_CLIENT_ID_AQUI`

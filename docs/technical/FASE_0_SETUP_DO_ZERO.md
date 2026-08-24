@@ -151,6 +151,18 @@ Sinais de sucesso no log do servidor SkyMP:
 - `VITE_PANEL_URL` = URL do painel (pelo túnel, ou `http://127.0.0.1:3001`
   pra testar local primeiro).
 
+## 12. UI in-game (CEF)
+`skymp/ui/` (`index.html`, `player-panel.js`/`.css`, `depot-panel.js`/`.css`,
+`interaction-prompt.js`/`.css`) **não é copiado por nenhum script**. Copie a
+pasta inteira para dentro da instalação do jogo do jogador:
+```
+<pasta do jogo>\Data\Platform\UI\
+```
+Sem isso o menu do SkyMP conecta normalmente, mas fica preso no menu
+principal do Skyrim vanilla, sem nenhum overlay — porque o CEF tenta abrir
+`Data/Platform/UI/index.html` e a pasta nem existe. Ver "A UI do SkyMP não
+aparece" no troubleshooting.
+
 ---
 
 ## Problemas conhecidos e como resolver
@@ -207,6 +219,23 @@ Dois sistemas de config diferentes, comportamento diferente:
 Sem `TRUST_PROXY=true`, o Express enxerga o IP do Cloudflare Tunnel em vez do
 IP do jogador — o rate limit continua respondendo normalmente, só que conta o
 mundo inteiro como um único visitante.
+
+### A UI do SkyMP não aparece — fica preso no menu principal do Skyrim vanilla
+O jogo conecta, o `AuthService` do servidor manda mostrar o diálogo de login,
+mas nada aparece na tela — nem o menu do SkyMP, nem qualquer overlay. Causa:
+`skymp/ui/` nunca foi copiado para `Data\Platform\UI\` na instalação do
+jogador (ver passo 12 acima), então o CEF (`Tilted UI (legacy)`) tenta abrir
+`file:///Data/Platform/UI/index.html` e falha silenciosamente — o
+`skyrim-platform.log` não mostra erro nenhum sobre isso.
+
+**Como confirmar:** abra `http://localhost:9000/json` num navegador de
+verdade (não clique no link simples da listagem — em CEF mais antigo isso
+navega sua própria aba pro `file://` e é bloqueado pelo Chrome). Copie o
+campo `devtoolsFrontendUrl` da entrada `index.html` e cole na barra de
+endereço; isso abre um DevTools remoto de verdade. Se o painel Elements
+mostrar `<body></body>` vazio, é isso — o arquivo não existe naquele caminho.
+Confirmado em runtime real em 23/08/2026 (esta era a primeira vez que
+`skymp/ui/` rodava dentro de um jogo real neste projeto).
 
 ### `client_id: Valor "SEU_CLIENT_ID_AQUI" não é snowflake` no login do Discord
 `apps\launcher\.env.example` vem com `VITE_DISCORD_CLIENT_ID=SEU_CLIENT_ID_AQUI`
