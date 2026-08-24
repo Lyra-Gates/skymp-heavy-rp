@@ -161,7 +161,7 @@ jobs:
           echo "OK: nenhum asset da Bethesda."
 
       - name: Auditor de configuração de produção
-        run: node --test scripts/check-production-config.test.js
+        run: node --test scripts/check-production-config.test.js scripts/run-service-soak.test.js
 
   # Confere que todo patch registrado ainda aplica limpo sobre o commit fixado
   # em patches/manifest.json.

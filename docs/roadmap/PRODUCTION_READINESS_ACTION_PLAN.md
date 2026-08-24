@@ -88,27 +88,27 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 | Fase | Objetivo | Status | Gate de saída | Dependência |
 |---|---|---|---|---|
 | F0 | Baseline e congelamento de escopo | `PARCIAL` | Escopo, versões e ambiente declarados | — |
-| F1 | Remover bloqueadores do caminho crítico | `EM ANDAMENTO` | Login, UI instalada e checks limpos | F0 |
-| F2 | Staging reproduzível | `TODO` | Stack completa + backup/restore | F1 |
-| F3 | Primeira fatia multiplayer | `TODO` | Identidade/chat/painel com 2 clientes | F2 |
-| F4 | Economia e inventário | `TODO` | Sem perda/duplicação sob concorrência | F3 |
-| F5 | Morte e governança | `TODO` | Cena completa, durável e auditada | F4 |
-| F6 | Loop econômico jogável | `TODO` | Cadeia Minerador→Ferreiro→Venda | F5 |
-| F7 | Crime e proveniência | `TODO` | Roubo/restituição/confisco rastreáveis | F6 |
-| F8 | Hardening | `TODO` | Segurança, métricas, rollback, assinatura | F7 |
-| F9 | Alfa fechada | `TODO` | 2 semanas sem perda de dados | F8 |
+| F1 | Remover bloqueadores do caminho crítico | `PARCIAL` | Login, UI instalada e checks limpos | F0 |
+| F2 | Staging reproduzível | `PARCIAL` | Stack completa + backup/restore | F1 |
+| F3 | Primeira fatia multiplayer | `PARCIAL` | Identidade/chat/painel com 2 clientes | F2 |
+| F4 | Economia e inventário | `PARCIAL` | Sem perda/duplicação sob concorrência | F3 |
+| F5 | Morte e governança | `PARCIAL` | Cena completa, durável e auditada | F4 |
+| F6 | Loop econômico jogável | `PARCIAL` | Cadeia Minerador→Ferreiro→Venda | F5 |
+| F7 | Crime e proveniência | `PARCIAL` | Roubo/restituição/confisco rastreáveis | F6 |
+| F8 | Hardening | `PARCIAL` | Segurança, métricas, rollback, assinatura | F7 |
+| F9 | Alfa fechada | `BLOQUEADO — NO-GO` | 2 semanas sem perda de dados | F8 |
 
 ### Baseline de verificação em 24/08/2026
 
-- [x] Total atual: **1.362 testes de produto**, 0 falhas.
-- [x] Gamemode: **1.156 testes**, 0 falhas.
-- [x] Painel web: **46 testes**, 0 falhas.
+- [x] Total atual: **1.457 testes de produto**, 0 falhas.
+- [x] Gamemode: **1.233 testes**, 0 falhas.
+- [x] Painel web: **59 testes**, 0 falhas.
 - [x] Game API: **50 testes**, 0 falhas.
-- [x] Bot Discord: **40 testes**, 0 falhas.
+- [x] Bot Discord: **45 testes**, 0 falhas.
 - [x] Launcher: **70 testes**, 0 falhas.
 - [x] Registro de patches: **46 testes**, 0 falhas.
 - [x] Checks de sistema: **14/14**.
-- [x] Registro do gamemode: **73 testes listados**, nenhum órfão.
+- [x] Registro do gamemode: **76 testes listados**, nenhum órfão.
 - [x] Schema declarado legível: **76 tabelas**.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
@@ -481,13 +481,13 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 - [ ] **Status:** `BLOQUEADO`
 - **Bloqueio:** certificado/serviço de assinatura ainda não adquirido.
 - **Aceite:** assinatura válida e timestamp; instalação testada em Windows limpo; comportamento do SmartScreen registrado.
-- **Evidência:** _preencher_.
+- **Evidência:** workflow/configuração de assinatura e verificação de timestamp estão documentados em `LAUNCHER_DISTRIBUTION.md`; falta adquirir/configurar o certificado e executar instalação em Windows limpo. Nenhuma assinatura foi alegada localmente.
 
 ### F8-005 — Sessão de soak test
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — runner/runbook prontos; sessão real bloqueada`
 - **Aceite:** 6–8 horas com 5–10 jogadores, sem perda/duplicação, com relatório de carga e incidentes.
-- **Evidência:** _preencher_.
+- **Evidência:** [`SOAK_TEST_PLAN.md`](../operations/SOAK_TEST_PLAN.md) e `scripts/run-service-soak.js`; 3 testes cobrem validação, privacidade/agregação e gate por taxa de erro. A execução de 6–8h ainda exige staging/MariaDB e jogadores reais.
 
 ---
 
@@ -495,21 +495,21 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F9-001 — Preparar operação
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — runbook/checklists prontos; responsáveis externos pendentes`
 - **Aceite:** calendário, janela de manutenção, canal de incidentes, responsáveis, backup pré-release e rollback definidos.
-- **Evidência:** _preencher_.
+- **Evidência:** [`CLOSED_ALPHA_RUNBOOK.md`](../operations/CLOSED_ALPHA_RUNBOOK.md) define ficha da janela, papéis, gates, severidades, rotina e ata. Datas, nomes, canal e backup dependem da equipe/infraestrutura.
 
 ### F9-002 — Operar por duas semanas
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `BLOQUEADO POR OPERAÇÃO EXTERNA`
 - **Aceite:** 10–20 jogadores convidados; duas semanas sem perda de dados; incidentes registrados; economia revisada semanalmente.
-- **Evidência:** _preencher relatório final_.
+- **Evidência:** roteiro e critérios estão no runbook; não há como produzir duas semanas de horas-jogador, incidentes e economia por teste unitário/local.
 
 ### F9-003 — Decisão de abertura
 
-- [ ] **Status:** `TODO`
+- [x] **Status:** `CONCLUÍDO PARA ESTE SNAPSHOT — NO-GO`
 - **Aceite:** revisão explícita `GO`, `GO COM RESTRIÇÕES` ou `NO-GO`, baseada nos gates e incidentes, não em percepção informal.
-- **Evidência:** _preencher decisão e responsáveis_.
+- **Evidência:** [`PRODUCTION_BLOCKERS_2026-08-24.md`](../operations/PRODUCTION_BLOCKERS_2026-08-24.md) registra `NO-GO` por MariaDB/staging, clientes reais, assinatura, conteúdo físico, soak e alfa ainda sem evidência. A decisão deve ser reaberta após F8-005/F9-002.
 
 ---
 
@@ -550,15 +550,19 @@ Adicionar uma linha a cada mudança de status relevante.
 | 24/08/2026 | F0-003 | `PARCIAL` → `PARCIAL` | Manifesto SHA-256 dos cinco masters; Game API fail-closed | Falta validar em segunda instalação limpa |
 | 24/08/2026 | F1-002 | `TODO` → `PARCIAL` | UI embutida; reparo automático; build NSIS aprovado | Código em G1; renderização CEF real permanece G2 |
 | 24/08/2026 | F2-005 | `TODO` → `PARCIAL` | Auditor sem vazamento + 6 testes; execução `--skip-db` | Pendências externas de credenciais, URLs públicas e distribuição foram nomeadas |
+| 24/08/2026 | F6-001/002 | `TODO` → `PARCIAL/CONCLUÍDO NO CÓDIGO` | Resource Node Framework, mineração autoritativa, migration v27 e testes | Homologação física continua externa |
+| 24/08/2026 | F6-004 | `TODO` → `PARCIAL` | Estação física, migration v28, placeholder removido; 1.233 testes verdes | Conteúdo confirmado e jogo real pendentes |
+| 24/08/2026 | F8-005 | `TODO` → `PARCIAL` | Runner JSON, 3 testes e plano de 6–8h | Execução depende de staging e jogadores |
+| 24/08/2026 | F9-001/002/003 | `TODO` → `PARCIAL/BLOQUEADO/NO-GO` | Runbook de alfa e parecer de bloqueios | Decisão atual é não promover |
 
 ---
 
 ## 16. Checklist de atualização deste documento
 
-- [ ] Status e checkbox contam a mesma história.
-- [ ] Toda conclusão possui evidência.
-- [ ] Gate do módulo foi atualizado no dashboard.
-- [ ] Dependências desbloqueadas foram revisadas.
-- [ ] Novo risco ganhou tarefa ou justificativa explícita.
-- [ ] Mudança de comportamento atualizou documentação técnica relacionada.
-- [ ] Se houve teste real, o roteiro/log da sessão foi anexado ou referenciado.
+- [x] Status e checkbox contam a mesma história.
+- [x] Toda conclusão possui evidência.
+- [x] Gate do módulo foi atualizado no dashboard.
+- [x] Dependências desbloqueadas foram revisadas.
+- [x] Novo risco ganhou tarefa ou justificativa explícita.
+- [x] Mudança de comportamento atualizou documentação técnica relacionada.
+- [x] Se houve teste real, o roteiro/log da sessão foi anexado ou referenciado; quando não houve, o bloqueio foi explicitado.

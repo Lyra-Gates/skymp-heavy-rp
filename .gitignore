@@ -26,6 +26,10 @@ skymp/gamemode/.voip-debug-ticket.json
 # depois que um arquivo cair ali. O que e do projeto mora em `.agents/`.
 generated-images/
 
+# Relatórios locais de soak podem conter horários/topologia operacional e são
+# evidência de uma execução, não fonte. Anexar ao incidente/release, não ao Git.
+reports/
+
 skymp/server/
 skymp/artifacts/
 skymp/client-backups/
