@@ -6,9 +6,11 @@ com gameplay automatizado, atrás de `ENABLE_MINING_SERVICE`; Fundidor e
 Curtidor já podem ser exigidos por receitas. Os demais continuam sendo
 catálogo e progressão, sem loop próprio.
 
-Arquivos: [`core/profession-registry.js`](../../skymp/gamemode/core/profession-registry.js),
-[`profession-service.js`](../../skymp/gamemode/profession-service.js),
-as sete ações em [`admin-actions.js`](../../skymp/gamemode/admin-actions.js).
+Arquivos: [`core/profession-registry.js`](../../skymp/gamemode/core/profession-registry.js)
+e [`profession-service.js`](../../skymp/gamemode/profession-service.js).
+A referência às sete ações em `admin-actions.js` foi descontinuada: o arquivo
+ficou apenas na branch `feat/admin-platform-expansion`, não foi integrado ao
+`main` e não possui substituto vigente nesta árvore.
 
 ---
 
