@@ -16,6 +16,7 @@ const { describe, it, beforeEach } = require('node:test');
 
 const depotService = require('./depot-service');
 const interactionRegistry = require('./interaction-registry');
+const physicalAnchorRegistry = require('./physical-anchor-registry');
 
 const CHAR_A = 101;
 const WHITERUN = 'whiterun';
@@ -107,6 +108,9 @@ function makeHarness(options = {}) {
       if (/SELECT hold_id FROM depot_terminals WHERE object_id = \?/i.test(sql)) {
         const holdId = state.terminals.get(params[0]);
         return [holdId ? [{ hold_id: holdId }] : []];
+      }
+      if (/SELECT object_id FROM depot_terminals ORDER BY object_id/i.test(sql)) {
+        return [[...state.terminals.keys()].map((object_id) => ({ object_id }))];
       }
 
       // ── leitura de conteúdo (join) ───────────────────────────────────────────
@@ -318,6 +322,23 @@ describe('resolveTerminal', () => {
       assert.strictEqual(holdId, null);
     } finally {
       delete global.mp;
+    }
+  });
+});
+
+describe('descoberta física de terminais', () => {
+  it('publica terminais cadastrados como âncoras object do prompt', async () => {
+    const h = makeHarness({ terminals: { 'abc123:Skyrim.esm': WHITERUN } });
+    global.mp = { getIdFromDesc: (desc) => desc === 'abc123:Skyrim.esm' ? 0xabc123 : 0 };
+    physicalAnchorRegistry._reset();
+    try {
+      depotService.registerPhysicalAnchors(h.dependencies);
+      assert.deepStrictEqual(await physicalAnchorRegistry.listAll(), [
+        { targetId: 0xabc123, targetType: interactionRegistry.TARGET_TYPES.OBJECT }
+      ]);
+    } finally {
+      delete global.mp;
+      physicalAnchorRegistry._reset();
     }
   });
 });

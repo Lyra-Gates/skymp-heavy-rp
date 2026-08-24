@@ -3,7 +3,7 @@
  * Sistema de Crafting Modular (Fase Beta).
  *
  * Funciona 100% server-side:
- * - O cliente envia a intenção de craftar (/craft [recipeId]).
+ * - O cliente envia a intenção pela interação `[E]` de uma estação cadastrada.
  * - O servidor consome os ingredientes e entrega o resultado numa transação só.
  *
  * ⚠️ **O que este cabeçalho afirmava e não era verdade.** Até 13/08/2026 esta
@@ -13,11 +13,11 @@
  * lado do mapa. **Perk: nunca** — `requires_perk` é lido em `listRecipes` e
  * nunca comparado com nada.
  *
- * Hoje o `craftItem` confere que a estação **declarada** é a da receita, que é
- * uma regra de verdade e não é proximidade. Perk e proximidade continuam sem
- * validação, e agora estão escritos como ausentes em vez de anunciados como
- * presentes. Ver `docs/research/INVENTORY_TRADE_CRAFTING_AUDIT.md` §11 e
- * `docs/gameplay/CRAFTING_SYSTEM.md` §5.
+ * Desde a migration v28, a entrada do jogador passa exclusivamente pelo
+ * Interaction Framework: o servidor resolve o FormDesc em
+ * `crafting_stations`, valida a distância física e deriva o `station_type`.
+ * `requires_perk` continua deliberadamente sem uso; profissão/rank é o gate
+ * adotado. Ver `docs/gameplay/CRAFTING_SYSTEM.md`.
  *
  * Registrado em `core/module-registry.js` como módulo `crafting` (fase `lab`,
  * `ENABLE_CRAFTING_SERVICE`, nasce desligado). A migração abaixo era de
@@ -79,6 +79,8 @@ const commands = require('./commands');
 const inventory = require('./core/inventory');
 const professionService = require('./profession-service');
 const serverOptions = require('./core/server-options');
+const interactionRegistry = require('./core/interaction-registry');
+const physicalAnchorRegistry = require('./core/physical-anchor-registry');
 const MODULE = 'crafting';
 
 function uuid() {
@@ -104,9 +106,85 @@ async function recordCraftSignature({ baseId, recipeId, makerCharacterId, ownerC
   }
 }
 
-// Tipos de estação e seus formDescs (objetos de referência do Skyrim)
-// Esses IDs são verificados por proximidade (futuro: mp.get distance)
+// Tipos de estação aceitos em `crafting_stations` (objetos reais do Skyrim).
 const STATION_TYPES = ['forge', 'cooking_pot', 'tanning_rack', 'alchemy_lab', 'enchanting_table'];
+
+async function resolveStation(formId) {
+  if (!Number.isSafeInteger(formId) || formId <= 0) return null;
+  if (typeof mp === 'undefined' || typeof mp.getDescFromId !== 'function') return null;
+  const rows = await db.query(
+    'SELECT station_type FROM crafting_stations WHERE form_desc = ? AND enabled = 1',
+    [mp.getDescFromId(formId)]
+  );
+  return rows.length > 0 && STATION_TYPES.includes(rows[0].station_type)
+    ? rows[0].station_type
+    : null;
+}
+
+async function listStationFormDescs() {
+  const rows = await db.query(
+    'SELECT form_desc FROM crafting_stations WHERE enabled = 1 ORDER BY form_desc'
+  );
+  return rows.map((row) => row.form_desc).filter((value) => typeof value === 'string' && value.includes(':'));
+}
+
+function registerPhysicalAnchors() {
+  physicalAnchorRegistry.register({
+    targetType: interactionRegistry.TARGET_TYPES.OBJECT,
+    list: async () => {
+      if (typeof mp === 'undefined' || typeof mp.getIdFromDesc !== 'function') return [];
+      return (await listStationFormDescs())
+        .map((formDesc) => mp.getIdFromDesc(formDesc))
+        .filter((targetId) => Number.isSafeInteger(targetId) && targetId > 0)
+        .map((targetId) => ({ targetId }));
+    }
+  });
+}
+
+function registerInteractions() {
+  const common = {
+    module: MODULE,
+    target: interactionRegistry.TARGET_TYPES.OBJECT,
+    section: 'crafting',
+    distance: serverOptions.get('crafting.maxDistance'),
+    canSee: async (ctx) => Boolean(await resolveStation(ctx.target.formId))
+  };
+
+  interactionRegistry.register({
+    ...common,
+    id: 'crafting.recipes',
+    label: 'Ver receitas',
+    audit: interactionRegistry.AUDIT_LEVELS.TRACE,
+    execute: async (ctx) => {
+      const stationType = await resolveStation(ctx.target.formId);
+      if (!stationType) return { message: 'Estação indisponível.' };
+      const recipes = await listRecipes(ctx.actorId, stationType);
+      return { message: recipes.length > 0 ? `${recipes.length} receita(s) disponível(is).` : 'Nenhuma receita disponível.' };
+    }
+  });
+
+  interactionRegistry.register({
+    ...common,
+    id: 'crafting.craft',
+    label: 'Criar item',
+    audit: interactionRegistry.AUDIT_LEVELS.ECONOMY,
+    idempotent: true,
+    schema: {
+      recipeId: { type: 'int', label: 'Receita', min: 1 },
+      signatureText: { type: 'string', label: 'Dedicatória', max: 64, required: false }
+    },
+    execute: async (ctx) => {
+      const stationType = await resolveStation(ctx.target.formId);
+      if (!stationType) return { message: 'Estação indisponível.' };
+      const ok = await craftItem(ctx.actorId, ctx.characterId, ctx.data.recipeId, {
+        stationType,
+        signatureText: ctx.data.signatureText,
+        requestId: ctx.requestId
+      });
+      return { message: ok ? 'Item criado.' : 'Não foi possível criar o item.' };
+    }
+  });
+}
 
 /**
  * Lista as receitas disponíveis para um tipo de estação.
@@ -133,13 +211,14 @@ async function listRecipes(actorId, stationType) {
 }
 
 /**
- * Executa um craft. /craft [recipeId] [estacao].
+ * Executa um craft. A chamada de jogador vem da interação física; chamadas
+ * internas/testes ainda podem fornecer opts diretamente.
  *
  * @param {number} actorId
  * @param {number} characterId
  * @param {number|string} recipeId
  * @param {object} [opts]
- * @param {string} [opts.stationType]    estação em que o jogador diz estar
+ * @param {string} [opts.stationType]    estação resolvida pelo servidor
  * @param {string} [opts.requestId]      chave de idempotência vinda de quem pediu
  * @param {string} [opts.signatureText]  dedicatória para a Assinatura do Artesão
  *   (docs/design/MAKERS_MARK.md); só é gravada se a receita tiver
@@ -156,16 +235,9 @@ async function craftItem(actorId, characterId, recipeId, opts = {}) {
   }
   const recipe = recipeRows[0];
 
-  // 2. A estacao declarada precisa ser a da receita.
-  //
-  // Isto NAO e proximidade: o servidor nao sabe onde estao as forjas do mundo,
-  // e nenhuma tabela guarda isso. O que esta checagem impede e forjar uma
-  // espada no caldeirao de cozinha — e ela existe agora porque o cabecalho
-  // deste arquivo afirmava, desde julho, que o servidor validava "station
-  // proximity", e nada no `craftItem` chegava perto de fazer isso
-  // (auditoria §11). Proximidade real depende do resolvedor de alvo `object`,
-  // que o Interaction Framework ainda nao tem — ver
-  // docs/gameplay/CRAFTING_SYSTEM.md §5.
+  // 2. A estação resolvida no alvo físico precisa ser a da receita. A distância
+  // é revalidada pelo Interaction Framework antes de `execute`; esta segunda
+  // checagem impede usar uma receita de forge num tanning_rack válido.
   if (opts.stationType && opts.stationType !== recipe.station_type) {
     if (typeof mp !== 'undefined') {
       mp.callPapyrusFunction('global', 'Debug', 'notification', null, [
@@ -397,59 +469,12 @@ async function getSignaturesHeldBy(characterId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Comandos de chat — sem UI CEF, mesmo padrão de `jobs-service.commandDefs()`.
-// `/craft` e `/receitas` resolvem `characterId` aqui porque `craftItem` e
-// `listRecipes` recebem `characterId` já resolvido (craftItem precisa dele
-// para o gate de profissão e para `inventory.exchange`); os comandos de staff
-// só repassam `actorId`, que é quem `addRecipe`/`addIngredient` já esperam.
+// Comandos administrativos. Crafting do jogador só passa pela interação em
+// estação física; os antigos `/craft` e `/receitas` contornavam proximidade.
 // ─────────────────────────────────────────────────────────────────────────────
-
-function _characterIdFor(actorId) {
-  const character = commands.getActiveCharacterData(actorId);
-  return character ? character.characterId : null;
-}
 
 function commandDefs() {
   return [
-    {
-      name: '/receitas',
-      description: '[Crafting] Lista as receitas de uma estação',
-      usage: `/receitas <${STATION_TYPES.join('|')}>`,
-      handler: async (actorId, args) => {
-        const stationType = String(args || '').trim();
-        await listRecipes(actorId, stationType);
-      }
-    },
-    {
-      name: '/craft',
-      description: '[Crafting] Fabrica um item numa estação, com dedicatória opcional',
-      usage: '/craft <recipeId> [estacao] [dedicatoria...]',
-      handler: async (actorId, args) => {
-        const characterId = _characterIdFor(actorId);
-        if (!characterId) {
-          if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Personagem não carregado.']);
-          return;
-        }
-        const partes = String(args || '').trim().split(/\s+/);
-        const recipeId = Number.parseInt(partes[0], 10);
-        if (!Number.isSafeInteger(recipeId)) {
-          if (typeof mp !== 'undefined') mp.callPapyrusFunction('global', 'Debug', 'notification', null, ['Uso: /craft <recipeId> [estacao] [dedicatoria...]']);
-          return;
-        }
-        // `estacao` é sempre o primeiro token depois do recipeId, mas só se
-        // for um dos tipos conhecidos — qualquer outra coisa ali já é o
-        // começo da dedicatória (a Assinatura do Artesão é texto livre, ver
-        // docs/design/MAKERS_MARK.md).
-        let resto = partes.slice(1);
-        let stationType;
-        if (resto.length > 0 && STATION_TYPES.includes(resto[0])) {
-          stationType = resto[0];
-          resto = resto.slice(1);
-        }
-        const signatureText = resto.length > 0 ? resto.join(' ') : undefined;
-        await craftItem(actorId, characterId, recipeId, { stationType, signatureText });
-      }
-    },
     {
       name: '/addrecipe',
       description: '[Staff] Cria uma receita (opcionalmente presa a uma profissão/rank)',
@@ -509,6 +534,10 @@ module.exports = {
   addRecipe,
   addIngredient,
   getSignaturesHeldBy,
+  resolveStation,
+  listStationFormDescs,
+  registerPhysicalAnchors,
+  registerInteractions,
   commandDefs,
   STATION_TYPES
 };

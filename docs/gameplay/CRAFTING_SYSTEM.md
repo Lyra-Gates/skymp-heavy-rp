@@ -1,232 +1,97 @@
 # Sistema de crafting
 
-**Estado: ATIVO (lab), reativado em 20/08/2026.** `crafting-service.js` está
-registrado em `core/module-registry.js` como módulo `crafting`
-(`ENABLE_CRAFTING_SERVICE`, nasce desligado como todo `lab`). A reativação
-ganhou o que faltava desde a migração para o Inventory Framework: comandos de
-chat (`/craft`, `/receitas`, `/addrecipe`, `/addingredient`) e um gate real de
-profissão/rank por receita (`required_profession`/`required_rank`,
-migration-v23-crafting-profession-gate.sql), checado dentro de `craftItem()` —
-ao contrário de `requires_perk`, que continua lido e nunca comparado. Nenhuma
-receita muda comportamento sozinha: o gate é NULL (livre) por padrão, e é a
-staff que amarra via `/addrecipe`. Subiu no boot local sem erro; **nunca
-rodou numa sessão real com cliente conectado.**
+**Estado: LAB, desligado por padrão e pronto para homologação no jogo.** O
+módulo `crafting` depende do Interaction Framework e é habilitado por
+`ENABLE_CRAFTING_SERVICE`. O fluxo do jogador não usa mais comandos de chat:
+`/craft` e `/receitas` foram removidos porque permitiam contornar o alvo físico.
 
-Arquivo: [`crafting-service.js`](../../skymp/gamemode/crafting-service.js).
+Arquivo principal: [`crafting-service.js`](../../skymp/gamemode/crafting-service.js).
 
----
+## Fluxo autoritativo
 
-## 1. O que a auditoria encontrou
-
-Três coisas, em ordem de gravidade
-([auditoria §5 e §11](../research/INVENTORY_TRADE_CRAFTING_AUDIT.md)):
-
-### 1.1 A chave de idempotência não deduplicava nada
-
-```js
-// ANTES
-// 3. Uma chave por (personagem, receita, instante) — se o comando for
-// reenviado, o ledger recusa a segunda gravacao em vez de craftar duas vezes.
-const idempotencyKey = `craft_${characterId}_${recipeId}_${Date.now()}`;
+```text
+objeto próximo cadastrado em crafting_stations
+  → prompt [E]
+  → interaction-service revalida alvo e crafting.maxDistance
+  → crafting.craft recebe recipeId + requestId
+  → servidor resolve formDesc → station_type
+  → profissão/rank e receita são validados
+  → inventory.exchange consome ingredientes e entrega resultado atomicamente
+  → XP e, quando permitido, assinatura do artesão
 ```
 
-O comentário afirmava uma proteção que o `Date.now()` tornava impossível: dois
-`/craft` seguidos produziam **duas chaves diferentes**, o `UNIQUE` não era
-violado, e o craft acontecia duas vezes.
+O cliente nunca informa `station_type`. A migration
+`v28-crafting-stations.sql` cria o cadastro `form_desc → station_type`; somente
+estações habilitadas e tipos conhecidos entram no `physical-anchor-registry`.
+O Interaction Framework mede a distância no servidor antes de executar a ação.
 
-Uma chave de idempotência vem de **quem pede** (o `requestId` do cliente) ou de
-um estado estável. Nunca do relógio de quem executa.
+As interações registradas são:
 
-**Corrigido:** `craftItem` aceita `opts.requestId`; sem ele, gera um com
-`inventory.newRequestId`, que é aleatório e não temporal.
+| ID | Uso | Auditoria |
+|---|---|---|
+| `crafting.recipes` | lista receitas da estação resolvida | `TRACE` |
+| `crafting.craft` | executa receita com `requestId` obrigatório no pipeline | `ECONOMY` |
 
-### 1.2 O cabeçalho anunciava validações que não existiam
+## Atomicidade e idempotência
 
-> *"O servidor valida ingredientes, station proximity e perks."*
+O craft usa uma única chamada de `inventory.exchange` com duas pernas:
 
-Ingrediente sim, pelo `FOR UPDATE`. **Estação: nunca** — `craftItem` sequer
-carregava a estação, então `/craft` funcionava do outro lado do mapa. **Perk:
-nunca** — `requires_perk` é lido em `listRecipes` e nunca comparado com nada.
-
-**Corrigido:** o cabeçalho diz a verdade, e `craftItem` passou a conferir que a
-estação **declarada** é a da receita. Isso não é proximidade (§5).
-
-### 1.3 A dívida de transação já tinha sido paga na Fase 3
-
-A correção de 07/08/2026 juntou consumo e entrega numa transação pelas
-primitivas `tx.*`, e estava certa. O que esta rodada mudou não é atomicidade — é
-que o outro lado de cada movimento passou a ter nome no razão.
-
----
-
-## 2. Como o craft funciona hoje
-
-```
-/craft <recipeId>
-      │
-      ├─ 1. carrega a receita
-      ├─ 2. estação declarada == recipe.station_type?      (não é proximidade)
-      ├─ 3. carrega os ingredientes
-      │      receita sem ingrediente cadastrado é RECUSADA — criaria item do nada
-      ├─ 4. requestId (de quem pediu, ou gerado sem relógio)
-      └─ 5. inventory.exchange, duas pernas, uma transação:
-               personagem      → system:consume    (ingredientes)
-               system:craft    → personagem        (resultado)
+```text
+personagem   → system:consume  (ingredientes)
+system:craft → personagem      (resultado)
 ```
 
-A checagem de estoque não tem passo próprio: o `applyStackDelta` lê com
-`FOR UPDATE` e lança se faltar. É estritamente melhor que um `hasItem` antes —
-aquele leria fora da transação, e entre a checagem e o consumo o item podia ter
-saído por outro caminho.
+O estoque é travado com `FOR UPDATE` pelas primitivas do Inventory Framework.
+O `requestId` da interação chega intacto ao ledger; um reenvio retorna o
+resultado anterior e não consome nem produz novamente. Receita sem ingrediente
+é recusada.
 
-As duas pernas nomeiam a contraparte `system`, o que faz a soma dos deltas do
-razão fechar em zero por `transfer_id` e torna respondível *"de onde saiu este
-item?"*.
+## Profissão, perk e assinatura
 
----
+`required_profession` e `required_rank` (migration v23) são o gate adotado. O
+campo legado `requires_perk` não participa da autorização; esta é uma decisão
+explícita. Craft livre não concede XP.
 
-## 3. O modelo de receita
+Receita vinculada a profissão concede `crafting.xpPerCraft`. A partir de
+`crafting.signatureMinRank`, uma dedicatória de até 64 caracteres pode ser
+gravada em `crafted_item_signatures` (migration v24). Essa gravação ocorre após
+o commit do inventário: perder a assinatura por falha não perde ou duplica item.
+Hoje `owner_character_id` registra quem recebeu o craft e não acompanha uma
+transferência posterior.
 
-O que existe no banco (`schema.sql`, inalterado nesta rodada):
+## Administração e conteúdo
+
+Somente os comandos administrativos permanecem:
+
+| Comando | Permissão |
+|---|---|
+| `/addrecipe` | `manage_recipes` |
+| `/addingredient` | `manage_recipes` |
+
+`seed-forging.sql` contém duas receitas vanilla de fundição. A antiga receita
+1003 usava o FormID inventado `999999`; foi removida do seed e a migration v28
+limpa instalações existentes. Não será criada uma receita de Ferreiro sem o
+FormID confirmado do modpack distribuído.
+
+Para ativar uma estação, a operação deve inserir um FormDesc real, por exemplo:
 
 ```sql
-crafting_recipes     ( id, name, station_type, result_base_id, result_count, requires_perk )
-crafting_ingredients ( id, recipe_id, base_id, count )
+INSERT INTO crafting_stations (form_desc, station_type)
+VALUES ('<formId>:<plugin>', 'forge');
 ```
 
-O §14 do pedido descreve um modelo maior:
+Tipos aceitos: `forge`, `cooking_pot`, `tanning_rack`, `alchemy_lab` e
+`enchanting_table`.
 
-| Campo | Estado |
-|---|---|
-| `id`, `name`, `ingredients`, `output`, `station` | **existe** |
-| `requirements` (perk) | coluna existe, **nunca é lida** |
-| `duration` | **não existe** — ver §6 |
-| profissão, skill, facção, conhecimento, licença, afinidade mágica | **não existem** |
+## Limites e evidência restante
 
-Nenhuma coluna foi adicionada. O §13 do pedido é explícito — *"não implementar
-tudo na primeira versão"* — e o critério deste projeto é mais estreito ainda:
-coluna sem consumidor é a mesma abstração prematura que seis resolvedores de
-alvo adivinhados seriam.
+- não há fila/duração; isso é uma escolha de escopo;
+- não há UI dedicada de receitas além da resposta da interação;
+- falta cadastrar FormDescs confirmados do mundo e uma receita real de Ferreiro;
+- falta homologar prompt, alcance e animação no Skyrim/SkyMP com MariaDB;
+- a assinatura ainda não acompanha posse em trade, venda ou depósito.
 
-**Quando profissão entrar**, o lugar é uma tabela de ligação
-`character_professions` + uma coluna `requires_profession` na receita, e a
-checagem entra no passo 2 do fluxo acima, ao lado da estação.
-
----
-
-## 4. Permissões de staff
-
-Decididas em 07/08/2026 e inalteradas
-([`PARKED_SERVICES_DECISION.md`](../technical/PARKED_SERVICES_DECISION.md) §7.4):
-
-| Comando | Permissão | Cargos |
-|---|---|---|
-| `/addrecipe`, `/addingredient` | `manage_recipes` | `admin`, `owner` |
-
-Não é `add_item`: aquele significa *"dê este item a este jogador"* — ato
-pontual, alcance de uma pessoa. Uma receita é uma regra permanente que todo
-jogador usa quantas vezes quiser. É casa da moeda, não presente.
-
----
-
-## 5. Proximidade de estação: o que falta
-
-A checagem que existe compara `opts.stationType` com `recipe.station_type`. Ela
-impede forjar uma espada no caldeirão de cozinha. **Ela não impede craftar longe
-de qualquer estação**, porque o servidor não sabe onde estão as forjas do mundo:
-nenhuma tabela guarda isso e nenhum `formDesc` de estação foi cadastrado.
-
-Proximidade real precisa de duas coisas, nesta ordem:
-
-1. **O resolvedor de alvo `object`** no Interaction Framework
-   ([`INTERACTION_FRAMEWORK.md`](../framework/INTERACTION_FRAMEWORK.md) §6). Com
-   ele, a estação vira alvo de verdade, o pipeline mede a distância com
-   `assertRange` como já faz para jogador, e o `execute` entrega ao
-   `craftItem` uma estação **verificada pelo servidor** em vez de declarada
-   pelo cliente.
-2. Um cadastro de estações (`formDesc` → `station_type`), que hoje não existe.
-
-O §17 do pedido descreve exatamente esse encadeamento:
-
-```
-crafting station → interaction → craft.open → receitas permitidas → craft.execute
-```
-
-`craft.open` e `craft.execute` **não estão registradas**. Registrá-las hoje
-seria registrar ações contra um tipo de alvo sem resolvedor — elas apareceriam
-no vocabulário e falhariam em toda chamada.
-
----
-
-## 6. Fila de crafting: não construída, e é o certo
-
-O §16 do pedido diz *"somente adicionar crafting com tempo se houver
-necessidade"*. Não há: nenhuma receita tem duração, nenhuma tela mostra
-progresso, e ninguém pediu.
-
-Se entrar, as perguntas que precisam de resposta **antes** da primeira linha:
-
-- **O que acontece na desconexão?** Um craft de 10 minutos com o jogador
-  offline ou completa sozinho (e o item aparece do nada, sem ninguém presente)
-  ou é perdido (e o ingrediente já foi consumido). As duas são decisões de jogo.
-- **Onde os ingredientes ficam durante a fila?** Consumidos na hora, ou em
-  custódia? A troca recusou custódia (`TRADE_SYSTEM.md` §6) pelos motivos que
-  valem aqui igualmente.
-- **O que impede enfileirar 200 crafts?**
-
-Estados seriam `PENDING`/`CRAFTING`/`COMPLETED`/`CANCELLED`, e a fila
-precisaria de tabela — porque, diferente da sessão de troca, ela **tem** que
-sobreviver ao restart.
-
----
-
-## 6.5. Assinatura do Artesão (22/08/2026)
-
-Ver [MAKERS_MARK.md](../design/MAKERS_MARK.md) para o gamedesign completo.
-Resumo: um artesão com rank suficiente (`crafting.signatureMinRank`, default
-2) pode craftar com `opts.signatureText` (`/craft <recipeId> [estacao]
-[dedicatoria...]`) e o servidor grava uma linha em `crafted_item_signatures`
-(migration-v24) ligando o item ao artesão. A revista institucional da guarda
-(`governance-service.notifyMakerSignatures`, mesmo canal de
-`notifyStolenProvenance` do sistema de Crime) mostra essa autoria.
-
-Só faz sentido para receita com `required_profession` — sem profissão dona
-não há rank pra checar. Gravação NÃO é a mesma transação do
-`inventory.exchange` do craft: é metadado de flavor, não move ouro nem item,
-então uma falha isolada fica só no log (ver o cabeçalho de
-`crafting-service.js`). `owner_character_id` reflete quem recebeu no craft,
-não é atualizado por trade/venda/depósito.
-
----
-
-## 7. O que NÃO está feito
-
-- **Perk não é validado**, apesar da coluna existir.
-- **Proximidade de estação não é validada** (§5).
-- **Profissão/rank agora É validado** (20/08/2026) — ver o topo deste
-  documento e `migration-v23-crafting-profession-gate.sql`. Skill e ferramenta
-  continuam de fora (§3).
-- **Não há fila nem duração** (§6) — por escolha.
-- **Não há interação `craft.open`/`craft.execute`** (§5).
-- **Não há UI.**
-- **Nenhuma receita de FORJAR arma/armadura existe** — `seed-forging.sql`
-  só tem receitas de *derreter* sucata (Fundidor) e uma de curtume
-  (Curtidor). O Ferreiro (`blacksmith`) tem o gate pronto e zero receita:
-  falta um `result_base_id` de arma/armadura confirmado, não inventado. É
-  também por isso que a Assinatura do Artesão (§6.5) não é demonstrável
-  fim-a-fim com uma receita real de Ferreiro hoje.
-- **Assinatura do Artesão não segue o item em trade/venda/depósito** (§6.5)
-  — `owner_character_id` fica com quem recebeu no craft.
-- **Nunca rodou numa sessão real.**
-
-## 8. Cobertura
-
-`parked-services-ledger.test.js` exercita o craft pelo caminho real: consumo e
-entrega commitam juntos (`['begin','commit']`, não três `begin`), falta de
-ingrediente reverte tudo sem nada chegar ao cliente, receita sem ingrediente não
-cria item do nada, erro de SQL não vai para a tela, e as seis linhas de razão
-somam zero por `transfer_id`. `crafting-service.test.js` cobre o gate de
-profissão/rank e a Assinatura do Artesão isoladamente;
-`crafting-governance-integration.test.js` cobre o fluxo completo craft
-assinado → revista mostra autoria, atravessando `crafting-service.js` e
-`governance-service.js` de verdade.
+`crafting-service.test.js` cobre resolução da estação, publicação da âncora,
+descritores, alcance configurado, payload sem `station_type`, idempotência,
+profissão/rank, XP, assinatura e troca atômica. As integrações de governança
+cobrem a exposição da autoria em revista institucional.

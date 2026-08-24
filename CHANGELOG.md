@@ -23,6 +23,8 @@
 
 ### Adicionado
 
+- **Crafting e Depot agora participam da descoberta física do prompt `[E]`.** Terminais de depósito e estações habilitadas publicam âncoras de objeto; crafting resolve `FormDesc → station_type` no servidor, revalida `crafting.maxDistance` pelo Interaction Framework e repassa o `requestId` ao ledger. Os atalhos `/craft` e `/receitas`, que contornavam o alvo físico, foram retirados. A migration v28 cria `crafting_stations` e remove com segurança a receita histórica `999999`; o seed não inventa mais FormID. O plano registra separadamente o que ainda depende de conteúdo confirmado, MariaDB e sessão real.
+
 - **Resource Node Framework e Minerador autoritativo recuperados para `main`.** A migration v27 cria nós com capacidade/regeneração e cooldown persistente por personagem; consumo trava o nó, valida profissão/rank e grava decremento + recompensa na mesma transação. `mining.mine` exige alvo físico, distância, picareta, `requestId` e deduplicação no ledger. Nós habilitados entram no `physical-anchor-registry`, permitindo ao prompt `[E]` descobrir o alvo por proximidade sem confiar em crosshair do cliente. Para fechar os bypasses, `jobs-service` deixou de publicar `/garimpar` e mantém `/pescar` fora da alfa enquanto a vara tiver FormID provisório. O módulo continua `LAB`, desligado por padrão, até homologação no Skyrim/SkyMP real.
 
 - **Telemetria agregada do gamemode sem identificadores.** O monitor de conexão agora conta ativos, estados, conexões/desconexões, aprovações/rejeições, ticks e duração máxima do polling. `runtime-telemetry.js` combina isso com eventos CEF, saúde booleana dos módulos e CPU/RSS/heap em JSON periódico; texto de erro, actorId, accountId e payload não entram. Testes travam a privacidade e o registro do gamemode confirma 76 arquivos sem órfãos.
@@ -31,7 +33,7 @@
 
 - **Stack de staging versionada sem exigir MariaDB instalado no host.** `deploy/staging` define MariaDB 11.4.8 pinado, painel, Game API e bot com volumes, rede interna, health checks e scripts PowerShell de start/stop; SkyMP e launcher permanecem no Windows. O bootstrap do banco é explícito e só aceita volume vazio. `docker compose config` e a sintaxe dos scripts passam localmente; o Engine não estava ativo, portanto F2-001 continua parcial sem alegar boot que não ocorreu.
 
-- **Aplicador seguro de schema+migrations para banco vazio.** `npm run migrate:dry-run` inventaria 25 arquivos/153 instruções sem conectar; `npm run migrate:clean` aplica em ordem numérica, recusa banco já populado e recusa nome divergente do `USE skymp_rp` versionado. Erros informam arquivo/posição sem imprimir SQL. Seis testes rodam sem MariaDB; F2-002 permanece parcial até a execução contra banco real seguida de `check:schema`.
+- **Aplicador seguro de schema+migrations para banco vazio.** `npm run migrate:dry-run` inventaria 26 arquivos/157 instruções sem conectar; `npm run migrate:clean` aplica em ordem numérica, recusa banco já populado e recusa nome divergente do `USE skymp_rp` versionado. Erros informam arquivo/posição sem imprimir SQL. Seis testes rodam sem MariaDB; F2-002 permanece parcial até a execução contra banco real seguida de `check:schema`.
 
 - **Sessões persistentes do painel, sem dependência nova.** `apps/web/mysqlSessionStore.js` substitui o `MemoryStore` do `express-session` por uma store MariaDB sobre o `mysql2` já instalado. A `migration-v26-web-sessions.sql` cria armazenamento com expiração indexada; poda periódica não bloqueia o processo. Cinco testes sem banco cobrem leitura, UPSERT, touch, logout, poda, expiração e JSON corrompido. O gate F2-004 permanece parcial até aplicar a migration e provar restart em staging.
 
@@ -45,7 +47,7 @@
 
 - **Identidade e compatibilidade do artefato SkyMP no boot.** `BUILD_INFO.json` registra pin declarado, versão e SHA-256 dos binários críticos; artefato que declarar commit divergente do pin é recusado. O gamemode também compara `mp.getEspmLoadOrder()` com a load order configurada e aborta em caso de plugin ausente, extra ou fora de ordem.
 
-- **Plano operacional vivo de prontidão para produção.** [`PRODUCTION_READINESS_ACTION_PLAN.md`](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) acompanha F0–F9, estados, gates, dependências e evidências verificáveis. A documentação operacional foi reconciliada com SHA-256, migrations até v27, opções realmente ligadas e limites do ambiente sem MariaDB.
+- **Plano operacional vivo de prontidão para produção.** [`PRODUCTION_READINESS_ACTION_PLAN.md`](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) acompanha F0–F9, estados, gates, dependências e evidências verificáveis. A documentação operacional foi reconciliada com SHA-256, migrations até v28, opções realmente ligadas e limites do ambiente sem MariaDB.
 
 - **Auditor de configuração de produção sem vazamento de segredos.** `scripts/check-production-config.js` valida placeholders, tamanho mínimo de segredos, igualdade de `INTERNAL_API_SECRET` entre serviços, HTTPS público, proxy, ambiente e distribuição. `--skip-db` permite auditar o restante em máquinas sem MariaDB; seis testes rodam no job de higiene do CI.
 

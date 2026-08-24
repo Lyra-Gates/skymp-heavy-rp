@@ -34,7 +34,7 @@ cd skymp/gamemode
 npm run check:schema
 ```
 
-Todas as migrations disponíveis (`v2`–`v27` atualmente) precisam ser aplicadas em ordem numérica. Bancos existentes ainda exigem tratamento explícito; instalações vazias ganharam o aplicador automatizado abaixo. A v26 cria `web_sessions`; a v27 cria os nós de recurso e seus cooldowns persistentes.
+Todas as migrations disponíveis (`v2`–`v28` atualmente) precisam ser aplicadas em ordem numérica. Bancos existentes ainda exigem tratamento explícito; instalações vazias ganharam o aplicador automatizado abaixo. A v26 cria `web_sessions`, a v27 cria os nós de recurso e a v28 cadastra estações físicas de crafting e remove o seed placeholder conhecido.
 
 Para uma instalação **vazia**, o caminho automatizado é:
 

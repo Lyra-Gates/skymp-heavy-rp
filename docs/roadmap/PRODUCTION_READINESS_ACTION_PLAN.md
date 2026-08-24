@@ -109,7 +109,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] Registro de patches: **46 testes**, 0 falhas.
 - [x] Checks de sistema: **14/14**.
 - [x] Registro do gamemode: **73 testes listados**, nenhum órfão.
-- [x] Schema declarado legível: **75 tabelas**.
+- [x] Schema declarado legível: **76 tabelas**.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
 - [x] `check-write-guards --all` sem ocorrências — os 2 FormDesc e a cobertura de 13 migrations foram corrigidos em 24/08/2026.
@@ -195,7 +195,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] **Status:** `CONCLUÍDO`
 - **Divergências conhecidas:** MD5 vs SHA-256; instruções que param em v9/v10; contagem antiga de opções ligadas; `version-check.js` descrito como ativo sem chamador.
 - **Aceite:** README, setup, modpack, operações e compatibilidade não contradizem o código atual.
-- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v27, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; inventário atual de 75 tabelas aprovado em 24/08/2026.
+- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v28, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; inventário atual de 76 tabelas aprovado em 24/08/2026.
 
 ### F1-007 — Decidir e implementar a checagem de versão do cliente (`P1`)
 
@@ -225,11 +225,11 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - **Aceite:** um procedimento versionado sobe a stack; health checks confirmam cada serviço; `offlineMode=false`.
 - **Evidência:** `deploy/staging/compose.yaml`, `Start-Staging.ps1`, `Stop-Staging.ps1` e README; Compose validado por `docker compose config`; painel, Game API, bot e MariaDB têm health checks. SkyMP/launcher ficam no host Windows. Docker CLI 29.6.2 presente, Engine indisponível em 24/08/2026, então o boot real segue pendente.
 
-### F2-002 — Migrar banco limpo até v27
+### F2-002 — Migrar banco limpo até v28
 
 - [ ] **Status:** `PARCIAL` (aplicador seguro e dry-run concluídos; execução real depende de MariaDB)
 - **Aceite:** instalação vazia aplica schema + migrations em ordem; `npm run check:schema` não encontra faltas.
-- **Evidência:** `npm run migrate:dry-run` encontra 25 arquivos/153 instruções em ordem até v27; 6 testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
+- **Evidência:** `npm run migrate:dry-run` encontra 26 arquivos/157 instruções em ordem até v28; 6 testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
 
 ### F2-003 — Backup e restore exercitados
 
@@ -265,39 +265,39 @@ Flags candidatas desta fase: Interaction Framework, Player Panel, Interaction Pr
 
 ### F3-001 — Dois clientes conectados
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `BLOQUEADO PELO RUNTIME EXTERNO`
 - **Aceite:** dois jogadores autenticados entram na mesma célula e permanecem conectados por 30 minutos.
-- **Evidência:** _preencher roteiro/log_.
+- **Evidência:** requer dois clientes Skyrim autenticados e 30 minutos de sessão; não é reproduzível apenas com Node e sem MariaDB. Roteiro preservado para staging.
 
 ### F3-002 — Identidade contextual
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — domínio/testes prontos; persistência real pendente`
 - **Aceite:** desconhecido → apresentação → nome conhecido → alias; tudo persiste após reconexão e não vaza nome civil.
-- **Evidência:** _preencher_.
+- **Evidência:** `identity-service.test.js` e `identity-staff-reveal.test.js` cobrem apresentação, alias, desconhecido e firewall de identidade; reconexão com MariaDB/jogo continua pendente.
 
 ### F3-003 — Chat por proximidade
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — regras automatizadas; dois clientes pendentes`
 - **Aceite:** local, sussurro e grito respeitam célula/alcance; flood é limitado; logs não vazam dados indevidos.
-- **Evidência:** _preencher_.
+- **Evidência:** `rp-chat-service.test.js` cobre alcance, célula, modos e flood; falta confirmar entrega/visual/log em dois clientes reais.
 
 ### F3-004 — Painel e atalhos
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — bridge e CEF testados fora do jogo`
 - **Aceite:** `/painel`, F2, abas e refresh funcionam dentro da CEF real; fechar/reabrir não prende foco ou movimento.
-- **Evidência:** _preencher_.
+- **Evidência:** `player-panel-service.test.js`, `player-shortcuts-service.test.js` e `character-dashboard-bridge.test.js`; foco/movimento e renderização exigem CEF real.
 
 ### F3-005 — Interaction Framework `[E]`
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — pipeline autoritativo coberto; runtime `[E]` pendente`
 - **Aceite:** alvo correto, distância validada no servidor, ação some quando não autorizada e payload forjado é recusado.
-- **Evidência:** _preencher_.
+- **Evidência:** `interaction-*` testa alvo, schema, permissão, política, distância, dedupe e payload forjado; `ui-event-gateway` usa o bridge real documentado, ainda sem sessão in-game.
 
 ### F3-006 — Desconexão, reconexão e restart
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — limpeza e corrida cobertas; restart real pendente`
 - **Aceite:** caches de personagem/staff são removidos; identidade e estado durável retornam; resposta antiga de whitelist não afeta reconexão.
-- **Evidência:** _preencher_.
+- **Evidência:** testes de `commands`, admin, trade, soul, VOIP e `connection-monitor` cobrem limpeza por `characterId` e invalidam resposta antiga; estado durável/restart exige MariaDB.
 
 ### Gate F3
 
@@ -314,33 +314,33 @@ Ordem de promoção: Economy Physical Sync → Trade → Market Stalls → Depot
 
 ### F4-001 — Economia concorrente em MariaDB real
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — contratos transacionais em mock; concorrência real bloqueada`
 - **Aceite:** saldo insuficiente, retry idempotente, duas transferências simultâneas, rollback e auditoria de valor alto comprovados.
-- **Evidência:** _preencher_.
+- **Evidência:** `economy-service`, tesouro e mercado regional cobrem saldo, idempotência, rollback e auditoria; `SELECT ... FOR UPDATE` só será provado sob duas conexões MariaDB.
 
 ### F4-002 — Inventário e projeção no cliente
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — autoridade/ledger cobertos; projeção real pendente`
 - **Aceite:** banco é autoridade; reconexão converge inventário; falha após commit não duplica nem perde item.
-- **Evidência:** _preencher_.
+- **Evidência:** `core/inventory.test.js` e `transaction-service.test.js` cobrem conservação, ledger, rollback e pós-commit; reconexão contra cliente real não executada.
 
 ### F4-003 — Trade com dois jogadores
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — fluxo completo automatizado; dois jogadores pendentes`
 - **Aceite:** convite, ofertas, confirmação bilateral, cancelamento, timeout e desconexão sem item em limbo.
-- **Evidência:** _preencher_.
+- **Evidência:** `trade-service.test.js` cobre convite, ofertas, confirmação bilateral, commit atômico, distância, cancelamento, TTL e desconexão.
 
 ### F4-004 — Barracas concorrentes
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — concorrência lógica e idempotência cobertas; MariaDB pendente`
 - **Aceite:** duas compras do último item resultam em uma venda; retry não cobra duas vezes; imposto e vendedor recebem exatamente o devido.
-- **Evidência:** _preencher_.
+- **Evidência:** suítes `market-stalls-*` cobrem última unidade, retry, imposto, vendedor, permissões e interações; falta disputa simultânea em InnoDB/jogo.
 
 ### F4-005 — Depot regional
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — domínio e interação cobertos; terminal físico/DB pendentes`
 - **Aceite:** capacidade, hold, depósito/retirada concorrentes e terminal físico real validados.
-- **Evidência:** _preencher_.
+- **Evidência:** `core/depot-service.test.js` cobre hold, capacidade, depósito/retirada atômicos e isolamento regional; terminal real e concorrência MariaDB não executados.
 
 ### Gate F4
 
@@ -354,28 +354,28 @@ Ordem de promoção: Economy Physical Sync → Trade → Market Stalls → Depot
 
 ### F5-001 — Confirmar `mp.onDeath` e reduzir polling
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — barramento/hook cobertos; evento SkyMP real pendente`
 - **Aceite:** hook real dispara, bloqueia respawn nativo e produz `DOWNED`; polling é removido ou reduzido com justificativa medida.
-- **Evidência:** _preencher_.
+- **Evidência:** `death-events.test.js` prova posse única do hook, múltiplos assinantes e bloqueio do respawn; confirmação do callback nativo e medição do polling exigem jogo.
 
 ### F5-002 — Socorro, bleed-out e restart
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — estados e consequências testados; restart pendente`
 - **Aceite:** `/socorrer` e `[E]`; bleed-out; penalidade; desconexão/restart durante `DOWNED`; sem duplicação de consequência.
-- **Evidência:** _preencher_.
+- **Evidência:** `death-service.test.js` cobre `DOWNED`, socorro por comando/`[E]`, bleed-out, penalidade, hijack de slot e dedupe; restart em MariaDB não executado.
 
 ### F5-003 — Permadeath administrativo
 
-- [ ] **Status:** `TODO`
+- [x] **Status:** `CONCLUÍDO NO CÓDIGO — runtime coberto pelo gate F5`
 - **Aceite:** motivo obrigatório, permissão correta, soft-delete, auditoria e impossibilidade de respawn/aprovação acidental.
-- **Evidência:** _preencher_.
+- **Evidência:** `admin-service.test.js` exige capability e motivo, usa soft-delete, audita e limpa sessão; whitelist/seleção recusam personagem aposentado.
 
 ### F5-004 — Cena completa de governança
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — ações isoladas/integradas testadas; cena real pendente`
 - **Fluxo:** plantão → abordagem → revista → mandado/multa → prisão → liberação.
 - **Aceite:** escopo, distância, consentimento e estados duráveis revalidados; toda ação forte auditada.
-- **Evidência:** _preencher_.
+- **Evidência:** `governance-service*`, busca e integrações de crime/crafting cobrem plantão, escopo, consentimento, distância e ações persistentes; falta executar a cena com dois jogadores e guarda.
 
 ### Gate F5
 
@@ -403,21 +403,21 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F6-003 — Integrar Profissão ao Depot
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `BLOQUEADO POR DECISÃO DE DESIGN`
 - **Aceite:** regra “rank acessa recurso raro” implementada sem bloquear funcionalidades gerais não relacionadas.
-- **Evidência:** _preencher_.
+- **Evidência:** o Depot já aplica capacidade, hold, autoridade e interação física, mas “acesso raro” não define se o rank deve liberar capacidade, aba, depósito, retirada ou estoque institucional. Bloquear retirada por profissão também impediria o Fundidor de receber minério do Minerador e quebraria a cooperação do próprio loop. A regra precisa ser decidida antes de virar código.
 
 ### F6-004 — Fechar Crafting real
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — runtime autoritativo pronto; conteúdo e jogo real pendentes`
 - **Aceite:** proximidade da estação, decisão sobre `requires_perk`, receitas com FormIDs confirmados, XP e assinatura do artesão.
-- **Evidência:** _preencher_.
+- **Evidência:** `crafting-service.test.js`, migrations v23/v24/v28 e `seed-forging.sql`; interação `[E]` resolve estação cadastrada no servidor, revalida distância e usa `requestId`; `/craft` e `/receitas` foram removidos por contornarem o alvo físico. `requires_perk` foi deliberadamente substituído por profissão/rank, e a receita placeholder `999999` foi removida. Ainda faltam cadastrar FormDescs reais, confirmar uma receita de Ferreiro no modpack e executar no Skyrim/SkyMP.
 
 ### F6-005 — Contratos como saída do loop
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — domínio completo em testes; jogadores reais pendentes`
 - **Aceite:** publicação, escrow, entrega, revisão, disputa e acerto exercitados por jogadores reais.
-- **Evidência:** _preencher_.
+- **Evidência:** `contracts-service.test.js` cobre publicação com escrow, aceite, entrega, revisão, disputa, expiração, cancelamento e acerto idempotente.
 
 ### Gate F6
 
@@ -431,21 +431,21 @@ Loop alvo: **Minerador → Depot → Fundidor → Ferreiro → item assinado →
 
 ### F7-001 — Roubo e item `hot`
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — domínio/interação cobertos; cena real pendente`
 - **Aceite:** item fungível vira instância UUID; dono original não muda; roubo exige alvo vulnerável.
-- **Evidência:** _preencher_.
+- **Evidência:** `core/crime-service.test.js` cria UUID, preserva dono original, exige alvo rendido/algemado/abatido e conserva item.
 
 ### F7-002 — Combat-log e restituição
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — alerta/grace/restituição cobertos; restart pendente`
 - **Aceite:** logout cria alerta; grace period funciona; restituição via depot não duplica nem some com item.
-- **Evidência:** _preencher_.
+- **Evidência:** `core/crime-service.test.js` cobre logout, janela hot, retorno online e restituição via depot sem resolver quando o depot falha/desliga.
 
 ### F7-003 — Revista e confisco institucionais
 
-- [ ] **Status:** `TODO`
+- [ ] **Status:** `PARCIAL — evidência/confisco cobertos; guarda real pendente`
 - **Aceite:** guarda vê proveniência como evidência, não culpa automática; confisco preserva estado roubado.
-- **Evidência:** _preencher_.
+- **Evidência:** buscas retornam proveniência sem culpa automática; confisco muda `hot→stolen` e preserva origem, coberto por `crime-governance-integration.test.js` e `crafting-governance-integration.test.js`.
 
 ### Gate F7
 

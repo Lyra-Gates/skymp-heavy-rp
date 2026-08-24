@@ -578,6 +578,7 @@ moduleRegistry.register({
   commands: depotService.commandDefs(),
   initialize: async () => {
     depotService.registerInteractions({ sendModal });
+    depotService.registerPhysicalAnchors();
   }
 });
 
@@ -615,10 +616,14 @@ moduleRegistry.register({
   id: 'crafting',
   enabledBy: 'ENABLE_CRAFTING_SERVICE',
   phase: 'lab',
-  version: '1.0.0',
-  dependencies: [],
+  version: '2.0.0',
+  dependencies: ['interaction'],
+  optionalDependencies: ['profession', 'interaction-prompt'],
   commands: craftingService.commandDefs(),
-  initialize: async () => {}
+  initialize: async () => {
+    craftingService.registerInteractions();
+    craftingService.registerPhysicalAnchors();
+  }
 });
 
 // LAB: Trabalhos livres (bicos) — coleta de lenha/minério/peixe sem profissão

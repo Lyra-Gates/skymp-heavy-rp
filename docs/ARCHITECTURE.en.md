@@ -10,7 +10,7 @@ The infrastructure splits into the following modules:
 
 ### 1.1 Database (MariaDB/MySQL)
 **MariaDB** is the absolute source of truth. Every service connects to it.
-- **Main tables:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. The full schema lives in `skymp/packages/database/schema.sql` plus every available migration (currently `v2`–`v27`), applied **in numeric order**. `npm run check:schema:list` produces the authoritative inventory.
+- **Main tables:** `accounts`, `characters`, `character_inventory`, `audit_logs`, `whitelist_applications`, `staff_roles`, `factions`, `holds`, `properties`, `market_stalls`, `crafting_recipes`, `crafting_ingredients`. The full schema lives in `skymp/packages/database/schema.sql` plus every available migration (currently `v2`–`v28`), applied **in numeric order**. `npm run check:schema:list` produces the authoritative inventory.
 - Some tables exist in the schema but aren't read by any active code (`store_purchases`, `trade_routes`, `magic_licenses`, `magic_violations`, `character_diseases`, `staff_permissions`) — they belong to PARKED modules (see 1.4).
 - **Strict rule:** no game state change (money, positions, items) happens without being written to or read from MariaDB. Node.js does not trust loose in-memory data over long stretches without persistence.
 

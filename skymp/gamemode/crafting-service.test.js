@@ -5,11 +5,9 @@
  * migração arquitetural deste domínio (ver docs/research/
  * WORK_ECOSYSTEM_DECISION_SUMMARY.md, "Next Implementation Task").
  *
- * Isto NÃO afirma que o comportamento é desejável. Comportamentos marcados
- * `LEGACY / KNOWN GAP` são caracterizados, não corrigidos: `requires_perk`
- * lido e nunca comparado (cabeçalho do próprio arquivo, linhas 9-14),
- * `station_type` comparado por igualdade de string, nunca por distância real
- * (cabeçalho, linhas 116-125).
+ * Além dos contratos legados ainda válidos, cobre a entrada autoritativa por
+ * estação física: o cliente escolhe a receita, mas alvo e station_type são
+ * resolvidos pelo servidor a partir de `crafting_stations`.
  *
  * `crafting-service.js` usa `require()` direto (sem injeção de dependência),
  * então `./database`, `./commands`, `./core/inventory`, `./profession-service`,
@@ -47,6 +45,7 @@ let signatureMinRank = 2;
 let insertedSignatures = [];
 let hasPermissionImpl = () => true;
 let characters = new Map();
+let stationsByFormDesc = new Map();
 
 const dbMock = {
   query: async (sql, params = []) => {
@@ -59,6 +58,13 @@ const dbMock = {
     }
     if (/SELECT base_id, count FROM crafting_ingredients WHERE recipe_id = \?/i.test(sql)) {
       return (ingredientsByRecipe.get(params[0]) || []).map((i) => ({ ...i }));
+    }
+    if (/SELECT station_type FROM crafting_stations WHERE form_desc = \? AND enabled = 1/i.test(sql)) {
+      const stationType = stationsByFormDesc.get(params[0]);
+      return stationType ? [{ station_type: stationType }] : [];
+    }
+    if (/SELECT form_desc FROM crafting_stations WHERE enabled = 1 ORDER BY form_desc/i.test(sql)) {
+      return [...stationsByFormDesc.keys()].map((form_desc) => ({ form_desc }));
     }
     if (/INSERT INTO crafting_recipes/i.test(sql)) {
       const insertId = 1000 + insertedRecipes.length;
@@ -100,6 +106,7 @@ const serverOptionsMock = {
   get: (key) => {
     if (key === 'crafting.xpPerCraft') return xpPerCraft;
     if (key === 'crafting.signatureMinRank') return signatureMinRank;
+    if (key === 'crafting.maxDistance') return 211;
     return undefined;
   }
 };
@@ -121,6 +128,8 @@ Module._load = function (request, parent, isMain) {
 };
 
 const crafting = require('./crafting-service');
+const interactionRegistry = require('./core/interaction-registry');
+const physicalAnchorRegistry = require('./core/physical-anchor-registry');
 
 after(() => {
   Module._load = originalLoad;
@@ -128,6 +137,8 @@ after(() => {
 });
 
 global.mp = {
+  getDescFromId: (formId) => formId === 0xabc123 ? 'abc123:Skyrim.esm' : '',
+  getIdFromDesc: (formDesc) => formDesc === 'abc123:Skyrim.esm' ? 0xabc123 : 0,
   callPapyrusFunction: (kind, className, fn, self, args) => {
     if (className === 'Debug' && fn === 'notification') notifications.push({ text: args[0] });
     return null;
@@ -137,6 +148,8 @@ global.mp = {
 const ACTOR = 0x100;
 const CHAR_A = 42;
 const RECIPE_ID = 7;
+const STATION_FORM_ID = 0xabc123;
+const STATION_FORM_DESC = 'abc123:Skyrim.esm';
 
 function baseRecipe(overrides = {}) {
   return {
@@ -167,6 +180,9 @@ function resetState(overrides = {}) {
   xpPerCraft = 0;
   signatureMinRank = 2;
   hasPermissionImpl = () => true;
+  stationsByFormDesc = new Map([[STATION_FORM_DESC, 'forge']]);
+  interactionRegistry._reset();
+  physicalAnchorRegistry._reset();
 
   const recipe = baseRecipe(overrides.recipe || {});
   recipesById = new Map([[recipe.id, recipe]]);
@@ -602,6 +618,65 @@ describe('crafting-service — Assinatura do Artesão [CURRENT CONTRACT]', () =>
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Estações físicas — alvo e station_type são sempre resolvidos no servidor
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('crafting-service — estações físicas autoritativas', () => {
+  it('resolve somente FormDesc habilitado e tipo de estação conhecido', async () => {
+    resetState();
+    assert.equal(await crafting.resolveStation(STATION_FORM_ID), 'forge');
+    assert.equal(await crafting.resolveStation(123), null);
+    stationsByFormDesc.set(STATION_FORM_DESC, 'tipo_forjado');
+    assert.equal(await crafting.resolveStation(STATION_FORM_ID), null);
+  });
+
+  it('publica a estação como âncora de objeto para o prompt [E]', async () => {
+    resetState();
+    crafting.registerPhysicalAnchors();
+    assert.deepEqual(await physicalAnchorRegistry.listAll(), [{
+      targetId: STATION_FORM_ID,
+      targetType: interactionRegistry.TARGET_TYPES.OBJECT
+    }]);
+  });
+
+  it('registra receitas/craft com alcance físico e idempotência', () => {
+    resetState();
+    crafting.registerInteractions();
+    const recipes = interactionRegistry.get('crafting.recipes');
+    const craft = interactionRegistry.get('crafting.craft');
+    assert.equal(recipes.target, interactionRegistry.TARGET_TYPES.OBJECT);
+    assert.equal(recipes.distance, 211);
+    assert.equal(craft.distance, 211);
+    assert.equal(craft.idempotent, true);
+    assert.deepEqual(Object.keys(craft.schema), ['recipeId', 'signatureText']);
+  });
+
+  it('não mostra ações para objeto não cadastrado', async () => {
+    resetState();
+    crafting.registerInteractions();
+    const craft = interactionRegistry.get('crafting.craft');
+    assert.equal(await craft.canSee({ target: { formId: STATION_FORM_ID } }), true);
+    assert.equal(await craft.canSee({ target: { formId: 123 } }), false);
+  });
+
+  it('craft usa estação resolvida e requestId do pipeline, sem aceitar station_type do cliente', async () => {
+    resetState();
+    crafting.registerInteractions();
+    const craft = interactionRegistry.get('crafting.craft');
+    const result = await craft.execute({
+      actorId: ACTOR,
+      characterId: CHAR_A,
+      target: { formId: STATION_FORM_ID },
+      data: { recipeId: RECIPE_ID, signatureText: '' },
+      requestId: 'interaction:craft:123'
+    });
+    assert.deepEqual(result, { message: 'Item criado.' });
+    assert.equal(exchangeCalls.length, 1);
+    assert.equal(exchangeCalls[0].requestId, 'interaction:craft:123');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // addRecipe / addIngredient — gate de permissão de staff
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -644,51 +719,11 @@ describe('crafting-service — addRecipe/addIngredient [CURRENT CONTRACT]', () =
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('crafting-service — commandDefs [CURRENT CONTRACT]', () => {
-  it('registra exatamente /receitas, /craft, /addrecipe, /addingredient', () => {
+  it('expõe somente comandos administrativos; crafting do jogador exige estação física', () => {
     const nomes = crafting.commandDefs().map((d) => d.name);
-    assert.deepEqual(nomes.sort(), ['/addingredient', '/addrecipe', '/craft', '/receitas']);
+    assert.deepEqual(nomes.sort(), ['/addingredient', '/addrecipe']);
     assert.equal(new Set(nomes).size, nomes.length);
-  });
-
-  it('/craft sem personagem carregado: notifica e não chama craftItem/exchange', async () => {
-    resetState();
-    characters = new Map(); // ninguém carregado
-    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
-    await handler(ACTOR, `${RECIPE_ID}`);
-    assert.equal(exchangeCalls.length, 0);
-    assert.ok(notifications.some((n) => n.text === 'Personagem não carregado.'));
-  });
-
-  it('/craft com recipeId não numérico: notifica uso e não chama exchange', async () => {
-    resetState();
-    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
-    await handler(ACTOR, 'abc');
-    assert.equal(exchangeCalls.length, 0);
-  });
-
-  it('/craft com argumentos válidos aciona craftItem de verdade', async () => {
-    resetState();
-    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
-    await handler(ACTOR, `${RECIPE_ID} forge`);
-    assert.equal(exchangeCalls.length, 1);
-  });
-
-  it('/craft com estação e dedicatória: separa station_type do texto livre', async () => {
-    resetState({ recipe: { required_profession: 'blacksmith' } });
-    getProfessionStateImpl = async () => ({ rank: 2 });
-    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
-    await handler(ACTOR, `${RECIPE_ID} forge Para Lydia, com carinho`);
-    assert.equal(exchangeCalls.length, 1);
-    assert.equal(insertedSignatures.length, 1);
-    assert.equal(insertedSignatures[0].params[5], 'Para Lydia, com carinho');
-  });
-
-  it('/craft sem estação, só dedicatória: o primeiro token não bate STATION_TYPES, então tudo depois do recipeId é dedicatória', async () => {
-    resetState({ recipe: { required_profession: 'blacksmith' } });
-    getProfessionStateImpl = async () => ({ rank: 2 });
-    const handler = crafting.commandDefs().find((d) => d.name === '/craft').handler;
-    await handler(ACTOR, `${RECIPE_ID} Para Lydia`);
-    assert.equal(exchangeCalls.length, 1);
-    assert.equal(insertedSignatures[0].params[5], 'Para Lydia');
+    assert.ok(!nomes.includes('/craft'));
+    assert.ok(!nomes.includes('/receitas'));
   });
 });

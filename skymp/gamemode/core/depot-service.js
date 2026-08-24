@@ -48,6 +48,7 @@ const serverOptions = require('./server-options');
 const transactionService = require('./transaction-service');
 const economyService = require('./economy-service');
 const interactionRegistry = require('./interaction-registry');
+const physicalAnchorRegistry = require('./physical-anchor-registry');
 const inventory = require('./inventory');
 const inventoryOwner = require('./inventory-owner');
 
@@ -325,6 +326,26 @@ async function resolveTerminal(objectFormId, dependencies = {}) {
   return rows.length > 0 ? rows[0].hold_id : null;
 }
 
+async function listTerminalFormDescs(dependencies = {}) {
+  const deps = _deps(dependencies);
+  const rows = await deps.db.query('SELECT object_id FROM depot_terminals ORDER BY object_id');
+  return rows.map((row) => row.object_id).filter((value) => typeof value === 'string' && value.includes(':'));
+}
+
+function registerPhysicalAnchors(dependencies = {}) {
+  physicalAnchorRegistry.register({
+    targetType: interactionRegistry.TARGET_TYPES.OBJECT,
+    list: async () => {
+      if (typeof mp === 'undefined' || typeof mp.getIdFromDesc !== 'function') return [];
+      const formDescs = await listTerminalFormDescs(dependencies);
+      return formDescs
+        .map((formDesc) => mp.getIdFromDesc(formDesc))
+        .filter((targetId) => Number.isSafeInteger(targetId) && targetId > 0)
+        .map((targetId) => ({ targetId }));
+    }
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Interaction Framework — DEPOT_CHEST
 // ─────────────────────────────────────────────────────────────────────────────
@@ -473,6 +494,8 @@ module.exports = {
   withdrawItem,
   getGoldBalance,
   resolveTerminal,
+  listTerminalFormDescs,
+  registerPhysicalAnchors,
   registerInteractions,
   commandDefs
 };
