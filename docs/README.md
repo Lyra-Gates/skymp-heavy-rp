@@ -112,6 +112,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
+| [design/ENFORCEMENT_PLAN.md](design/ENFORCEMENT_PLAN.md) | **Punição e permissão — plano.** A permissão `ban` é concedida e **nada no código a usa**: os três pontos de aplicação funcionam e ninguém escreve neles. Quatro itens, ordenados por dependência, nenhum bloqueado pela Fase 0. |
 | [design/ANTICHEAT.md](design/ANTICHEAT.md) | **Anti-cheat — scanner de cliente rejeitado, alternativa aprovada.** Por que varrer a máquina do jogador detecta a coisa errada, e por que a detecção de ActorValue implausível no servidor é inforjável e não custa privacidade. |
 | [design/SOUL_AFFINITY.md](design/SOUL_AFFINITY.md) | **Afinidade da Alma — desenho fechado, domínio e serviço implementados.** Unifica magia, vampirismo, licantropia, corrupção, encantamento e linhagem. Parte I: análise de 15 pontos. Parte II: como isso vira jogo bom. Parte III: especificação. |
 
