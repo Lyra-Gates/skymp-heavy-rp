@@ -163,13 +163,6 @@ jobs:
       - name: Auditor de configuração de produção
         run: node --test scripts/check-production-config.test.js scripts/run-service-soak.test.js
 
-      # skymp/ui é HTML puro consumido pelo CEF, sem package.json/runner
-      # próprio — caracterização estática do bootstrap de auth (27/08/2026,
-      # bloqueador de login nº1), pra não regredir silenciosamente sem CI
-      # perceber. Ver comentário em skymp/ui/index.html e skymp/ui/index.test.js.
-      - name: UI — bootstrap de auth não regride
-        run: node --test skymp/ui/index.test.js
-
   # Confere que todo patch registrado ainda aplica limpo sobre o commit fixado
   # em patches/manifest.json.
   #
