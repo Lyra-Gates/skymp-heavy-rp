@@ -18,6 +18,7 @@ endif()
 
 find_package(ixwebsocket CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Opus CONFIG REQUIRED)
 
 # rnnoise: supressão de ruído.
 #
@@ -66,6 +67,7 @@ endif()
 target_link_libraries(voice-helper PRIVATE
   ixwebsocket::ixwebsocket
   nlohmann_json::nlohmann_json
+  Opus::opus
 )
 
 target_link_libraries(voice-helper PRIVATE rnnoise)

@@ -371,8 +371,9 @@ function startVoipServer(port = VOIP_PORT, host = VOIP_BIND_HOST) {
           break;
 
         case 'audio_frame': {
-          // Caminho novo: o helper nativo manda PCM capturado fora do CEF e o
-          // servidor retransmite pra quem está em alcance. Só para autenticados
+          // Caminho novo: o helper nativo captura fora do CEF (Opus por padrão,
+          // PCM cru com `--pcm`) e o servidor retransmite pra quem está em
+          // alcance sem olhar dentro de `data`. Só para autenticados
           // — sem isso, uma conexão anônima injetaria áudio na cena de todo
           // mundo, que é o mesmo furo que o ticket fechou no `auth`.
           // Aceito de qualquer papel, não só do `sender`. Os dois sockets
@@ -562,14 +563,18 @@ function relayAudioFrame(fromActorId, msg) {
     if (!client) continue;
 
     // Serializado por ouvinte porque o `volume` muda por ouvinte. Custa uma
-    // cópia do payload por destinatário; com PCM cru isso é ~2,5KB cada. Está
-    // registrado como item da Fase 2 (com Opus o payload cai ~30x, e aí o
-    // desperdício deixa de importar).
+    // cópia do payload por destinatário; com Opus (~60 bytes/quadro) o custo é
+    // irrelevante. Com PCM cru (helper com `--pcm`, ou a sonda Node) são ~2,5KB.
+    //
+    // `codec` só é repassado quando vale `'opus'` — ausência significa PCM cru,
+    // que é o padrão histórico do fio e o que a sonda ainda fala. O servidor não
+    // decodifica nada; só carrega a etiqueta pro listener saber qual decoder usar.
     client.ws.send(JSON.stringify({
       type: 'audio_frame',
       fromActorId,
       volume: listener.volume,
       seq: msg.seq,
+      ...(msg.codec === 'opus' ? { codec: 'opus' } : {}),
       data: msg.data
     }));
     delivered++;

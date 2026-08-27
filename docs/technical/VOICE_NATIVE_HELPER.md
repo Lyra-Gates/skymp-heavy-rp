@@ -87,9 +87,14 @@ e repassa os bytes. Mixagem no servidor economizaria banda de descida, mas
 exigiria decodificar e somar N fluxos por ouvinte a cada 20ms. Numa prova de
 conceito isso é trocar um problema já provado por um que não foi.
 
-## 3. Decisão: PCM cru, não Opus (nesta fase)
+## 3. Decisão: PCM cru primeiro, Opus depois
 
-**Escolhido:** PCM 16-bit little-endian, mono, 48kHz, quadros de 20ms.
+> **27/08/2026 — Opus feito, ver §8.6.** O helper manda Opus por padrão
+> (`codec:"opus"` no fio) e `--pcm` volta ao PCM cru. Esta seção fica como
+> registro de por que o PCM veio primeiro; a lógica de "isolar falha" continua
+> valendo — é o que `--pcm` serve agora.
+
+**Escolhido (Fase 1):** PCM 16-bit little-endian, mono, 48kHz, quadros de 20ms.
 
 O motivo é isolar falhas. Codec e transporte quebram de formas parecidas do lado
 de quem escuta — sai silêncio, ou sai ruído. Depurando os dois ao mesmo tempo,
@@ -112,9 +117,9 @@ base64 (§4) infla 33% → **~1 Mbit/s de subida**. Na descida, o relay multipli
 pelo número de ouvintes em alcance. Isso é caro e é sabido — é aceitável para
 uma prova de conceito em rede local e **não é aceitável em produção**.
 
-**Fase 2: Opus** (`libopus`, disponível no vcpkg). A 24 kbit/s a voz fica
-transparente e o consumo cai ~30x, o que também torna irrelevante o desperdício
-do base64.
+**Opus** (`libopus`, vcpkg): a 24 kbit/s a voz fica transparente e o consumo cai
+~30x — na bancada, quadro de sala silenciosa caiu de 2560 chars base64 (PCM) pra
+~12 (Opus CNG). Feito em 27/08/2026, §8.6.
 
 ## 4. Decisão: mesma porta, mesmo ticket, JSON com base64
 
@@ -487,6 +492,52 @@ sem erro. O RNNoise rodou no caminho e não quebrou timing nem enquadramento.
 ouvido — vale integralmente a §8.2 (é julgamento, precisa de uma pessoa). É o
 que o teste com 2–3 jogadores do thithi vai dizer.
 
+### 8.6 Opus no lugar do PCM cru — 27/08/2026
+
+O PCM cru custava ~1 Mbit/s de subida por locutor (§3). Agora o helper encoda
+cada quadro (depois do denoise) com **libopus** — `OPUS_APPLICATION_VOIP`,
+24 kbit/s, FEC embutido, perda declarada 10% — e marca o `audio_frame` com
+`codec:"opus"`.
+
+**Três superfícies, decisões:**
+
+- **Helper** (`main.cpp`): classe `OpusEncoderWrap` no laço de envio, ao lado do
+  denoise. `--pcm` volta ao PCM s16le cru — é o que a sonda `frame-probe.js` fala
+  e o modo de bisseccionar defeito ("a voz quebrou: é o Opus ou o transporte?").
+  Se `opus_encoder_create` falha, cai pra PCM em vez de abortar, igual ao
+  denoise. libopus vem do vcpkg (`opus`, port suportada no Windows, ao contrário
+  do rnnoise) e é **DLL** — `opus.dll` fica ao lado do exe; o empacotamento da
+  §9.3 precisa carregá-la (ou trocar pro triplet estático).
+- **Servidor** (`voip-service.js`): **não decodifica nada.** Repassa a etiqueta
+  `codec` só quando vale `'opus'` (qualquer outro valor é tratado como ausente =
+  PCM). Uma linha no `relayAudioFrame`. O teto de payload de 8192 chars fica —
+  Opus a 24k passa longe.
+- **Listener** (`index.html`): `AudioDecoder` (WebCodecs) por locutor, um
+  `EncodedAudioChunk` por quadro, timestamp derivado do `seq` do helper
+  (monotônico, sobrevive a descarte). A saída `AudioData` entra no **mesmo**
+  jitter buffer que o PCM já usava (`scheduleRelayPcm`, extraído). Sem WebCodecs
+  no runtime, quadros Opus são perdidos e o aviso sai uma vez (`--pcm` é a
+  saída). CEF 108 tem WebCodecs (Chromium 94+).
+
+**Compat de transição:** `codec` por quadro, os dois formatos aceitos ao mesmo
+tempo. Helper antigo, sonda e helper novo com `--pcm` seguem funcionando sem
+tocar em nada.
+
+**Verificado (27/08/2026):**
+
+| O quê | Como | Resultado |
+|---|---|---|
+| Helper encoda e envia Opus | binário real → harness → ouvinte Node | 369 quadros/8s, **todos** com `codec:"opus"`, ~9 bytes/quadro (sala silenciosa, Opus CNG) |
+| Servidor repassa a etiqueta | teste unitário novo em `voip-service.test.js` | `'opus'` repassado; ausente = PCM; `'flac'` tratado como ausente. 49/49 verde |
+| Listener decodifica Opus | `index.html` real no navegador do app, helper real como fonte | `AudioDecoder` → `AudioData` de **960 amostras @ 48kHz** por quadro, 640+ buffers agendados no grafo de áudio, **0 erro de decode** |
+| Jitter buffer compartilhado | mesma rodada | quadros Opus e PCM passam pelo mesmo `scheduleRelayPcm` |
+
+**NÃO verificado:** inteligibilidade ao ouvido (§8.2); o decode no **CEF** do
+client (testado no Chromium do navegador do app — mesma base, mas não é o build
+do SkyrimPlatform); qualquer coisa com jitter/perda de rede real fora de
+`127.0.0.1`. O FEC do Opus está ligado no encoder mas o lado do decode não pede
+recuperação em perda — é ganho de robustez parcial, não o esquema completo.
+
 ## 9. Próxima rodada — listado, não implementado
 
 Nada abaixo foi feito neste PR.
@@ -507,7 +558,9 @@ Nada abaixo foi feito neste PR.
 
 **Qualidade**
 
-4. **Opus** no lugar do PCM cru (§3). ~30x menos banda.
+4. ~~**Opus** no lugar do PCM cru (§3).~~ **Feito em 27/08/2026 — ver §8.6.**
+   ~30x menos banda; base64 deixou de importar. Falta: pedir recuperação FEC no
+   decode em perda de rede, e o triplet estático do libopus pro empacotamento.
 5. ~~**Supressão de ruído.**~~ **Feita em 27/08/2026 — RNNoise, ver §8.5.**
    **Cancelamento de eco continua aberto.** RNNoise só suprime ruído; sem AEC,
    quem usa caixa de som em vez de fone realimenta a própria voz na cena.

@@ -722,6 +722,34 @@ describe('voip-service — helper e UI do mesmo ator convivendo', () => {
     assert.strictEqual(countFrames(aliceSender), 0, 'o helper não recebe áudio nenhum');
   });
 
+  it('a etiqueta codec:"opus" é repassada ao ouvinte; ausência = PCM', async () => {
+    positions.set(ALICE, [0, 0, 0]);
+    positions.set(BOB, [RANGE * 0.5, 0, 0]);
+
+    const aliceSender = await connectAs(ALICE, 'sender');
+    const bobListener = await connectAs(BOB, 'listener');
+    voip.tickProximity();
+
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', seq: 1, codec: 'opus', data: FRAME }));
+    const opus = await waitForType(bobListener, 'audio_frame');
+    assert.strictEqual(opus.codec, 'opus', 'o listener precisa saber qual decoder usar');
+    assert.strictEqual(opus.data, FRAME, 'o servidor não toca nos bytes');
+
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', seq: 2, data: FRAME }));
+    await settle();
+    const frames = bobListener.received.filter((m) => m.type === 'audio_frame');
+    const pcm = frames[frames.length - 1];
+    assert.strictEqual(pcm.seq, 2);
+    assert.ok(!('codec' in pcm), 'sem codec no fio = PCM cru, o padrão histórico');
+
+    // Um codec desconhecido não vaza: só 'opus' é repassado.
+    aliceSender.send(JSON.stringify({ type: 'audio_frame', seq: 3, codec: 'flac', data: FRAME }));
+    await settle();
+    const last = bobListener.received.filter((m) => m.type === 'audio_frame').pop();
+    assert.strictEqual(last.seq, 3);
+    assert.ok(!('codec' in last), 'codec não reconhecido é tratado como ausente');
+  });
+
   it('o sender não recebe proximity_update; o listener recebe', async () => {
     positions.set(ALICE, [0, 0, 0]);
     positions.set(BOB, [RANGE * 0.5, 0, 0]);

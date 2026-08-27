@@ -37,7 +37,12 @@ depois. A arquitetura e o porquê estão em
   helper segue com áudio cru em vez de abortar.
 - **Sem cancelamento de eco.** RNNoise só faz supressão de ruído, não AEC — quem
   usa caixa de som em vez de fone ainda realimenta a própria voz na cena.
-- **PCM cru** (~1 Mbit/s de subida). Opus fica pra Fase 2.
+- **Opus por padrão** (24 kbit/s VOIP, ~30x menos banda que o PCM cru). O quadro
+  vai marcado `codec:"opus"`; o servidor não decodifica, só repassa a etiqueta, e
+  o `index.html` decodifica via WebCodecs (`AudioDecoder`). `--pcm` volta ao PCM
+  s16le cru — é o que a sonda `frame-probe.js` fala e o modo de isolar defeito.
+  **Precisa de WebCodecs no runtime do client** (CEF 108 tem; se a build do
+  SkyrimPlatform tiver desligado, use `--pcm` até resolver).
 
 ## Compilar
 
@@ -170,12 +175,16 @@ Roteiro completo do teste e os números medidos: VOICE_NATIVE_HELPER.md §7.
 
 ## Formato do fio
 
-PCM 16-bit little-endian, mono, 48kHz, quadros de 20ms (960 amostras = 1920
-bytes → 2560 chars em base64).
+Mono, 48kHz, quadros de 20ms (960 amostras). O que vai dentro de `data` (base64):
 
-O mesmo formato aparece em três arquivos e os três precisam concordar; divergir
-faz o áudio sair em velocidade errada em vez de falhar limpo:
+- **Opus** (padrão) — pacote Opus VOIP, `codec:"opus"` no JSON. ~60 bytes/quadro.
+- **PCM** (`--pcm`) — s16le cru, 1920 bytes/quadro → 2560 chars base64, sem `codec`.
+
+A taxa e o tamanho de quadro aparecem em três arquivos e os três precisam
+concordar; divergir faz o áudio sair em velocidade errada em vez de falhar limpo:
 
 - `src/main.cpp` — `kSampleRate`, `kChannels`, `kFrameMs`
 - `skymp/gamemode/voip-service.js` — `AUDIO_SAMPLE_RATE`, `AUDIO_CHANNELS`, `AUDIO_FRAME_MS`
-- `skymp/ui/index.html` — `RELAY_SAMPLE_RATE`
+- `skymp/ui/index.html` — `RELAY_SAMPLE_RATE`, `RELAY_FRAME_US`
+
+O servidor nunca olha dentro de `data` — carrega a etiqueta `codec` e repassa.

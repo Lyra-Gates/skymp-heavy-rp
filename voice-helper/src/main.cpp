@@ -37,15 +37,29 @@
 
 #include <rnnoise.h>
 
+#include <opus.h>
+
 namespace {
 
 // Formato do fio — tem que bater com AUDIO_* em skymp/gamemode/voip-service.js
-// e com RELAY_SAMPLE_RATE em skymp/ui/index.html. Três lugares, um formato; se
-// algum divergir o áudio sai em velocidade errada em vez de falhar limpo.
+// e com RELAY_SAMPLE_RATE em skymp/ui/index.html. Três lugares, uma taxa de
+// amostragem e um tamanho de quadro; se algum divergir o áudio sai em
+// velocidade errada em vez de falhar limpo.
+//
+// O que vai DENTRO de `data` é Opus por padrão (etiqueta `codec:"opus"` no
+// JSON) ou PCM s16le cru com `--pcm`. O servidor não olha os bytes; quem decide
+// o decoder é o listener pela etiqueta. Opus a 48kHz mono, quadro de 20ms.
 constexpr ma_uint32 kSampleRate = 48000;
 constexpr ma_uint32 kChannels = 1;
 constexpr ma_uint32 kFrameMs = 20;
 constexpr ma_uint32 kSamplesPerFrame = kSampleRate / 1000 * kFrameMs;  // 960
+
+// Opus. 24 kbit/s é o ponto em que a voz fica transparente (libopus VOIP); FEC
+// embutido + 10% de perda declarada dão robustez a jitter de rede sem exigir
+// nada do lado de quem decodifica. Teto de pacote folgado — um quadro de 20ms a
+// 24k passa longe de 200 bytes, mas Opus pode inflar em transitório.
+constexpr opus_int32 kOpusBitrate = 24000;
+constexpr int kOpusMaxPacket = 1500;
 
 // RNNoise processa quadros de 480 amostras (10ms @ 48kHz) — o valor fixo que
 // `rnnoise_get_frame_size()` devolve. Nosso quadro de fio (20ms) tem que ser um
@@ -139,6 +153,51 @@ class Denoiser {
   DenoiseState* state_;
 };
 
+// ── codec (Opus) ─────────────────────────────────────────────────────────
+// Roda no laço de envio, junto do denoise: o callback de áudio continua só
+// acumulando. Um encoder, alimentado em ordem, um quadro de 20ms por vez.
+//
+// `--pcm` pula isto e manda PCM s16le cru — é o formato histórico do fio, o que
+// a sonda `frame-probe.js` fala, e o modo de isolar defeito (mesma lógica de
+// PCM-vs-codec da §3 do doc: se a voz sai quebrada, `--pcm` diz se o problema é
+// o Opus ou o transporte).
+class OpusEncoderWrap {
+ public:
+  OpusEncoderWrap() {
+    int err = OPUS_OK;
+    enc_ = opus_encoder_create(static_cast<opus_int32>(kSampleRate),
+                               static_cast<int>(kChannels),
+                               OPUS_APPLICATION_VOIP, &err);
+    if (err != OPUS_OK || enc_ == nullptr) {
+      enc_ = nullptr;
+      return;
+    }
+    opus_encoder_ctl(enc_, OPUS_SET_BITRATE(kOpusBitrate));
+    opus_encoder_ctl(enc_, OPUS_SET_INBAND_FEC(1));
+    opus_encoder_ctl(enc_, OPUS_SET_PACKET_LOSS_PERC(10));
+    opus_encoder_ctl(enc_, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
+  }
+  ~OpusEncoderWrap() {
+    if (enc_ != nullptr) opus_encoder_destroy(enc_);
+  }
+  OpusEncoderWrap(const OpusEncoderWrap&) = delete;
+  OpusEncoderWrap& operator=(const OpusEncoderWrap&) = delete;
+
+  bool ok() const { return enc_ != nullptr; }
+
+  // Devolve o nº de bytes do pacote, ou -1 em erro. `frame` tem que ter
+  // exatamente kSamplesPerFrame amostras.
+  int Encode(const std::vector<int16_t>& frame, uint8_t* out, int max_out) {
+    if (enc_ == nullptr) return -1;
+    const int n = opus_encode(enc_, frame.data(),
+                              static_cast<int>(kSamplesPerFrame), out, max_out);
+    return n < 0 ? -1 : n;
+  }
+
+ private:
+  OpusEncoder* enc_ = nullptr;
+};
+
 // ── fila entre a thread de áudio e a de rede ──────────────────────────────
 class FrameQueue {
  public:
@@ -211,6 +270,7 @@ struct Options {
   std::string host = "127.0.0.1";
   uint16_t port = 7778;
   bool denoise = true;
+  bool pcm = false;  // manda PCM cru em vez de Opus
   bool valid = false;
 };
 
@@ -226,6 +286,7 @@ void PrintUsage(const char* argv0) {
     "  --host       host do voip-service (padrao: 127.0.0.1)\n"
     "  --port       porta do voip-service (padrao: 7778)\n"
     "  --no-denoise desliga a supressao de ruido (RNNoise); ligada por padrao\n"
+    "  --pcm        manda PCM s16le cru em vez de Opus (para depuracao/sonda)\n"
     "\n"
     "O ticket vale 30 segundos e so pode ser usado uma vez. Na Fase 1 ele e\n"
     "passado a mao — nao existe handoff automatico entre o jogo e o helper.\n"
@@ -255,6 +316,8 @@ Options ParseArgs(int argc, char** argv) {
       opt.port = static_cast<uint16_t>(std::stoul(argv[++i]));
     } else if (arg == "--no-denoise") {
       opt.denoise = false;
+    } else if (arg == "--pcm") {
+      opt.pcm = true;
     } else if (arg == "--help" || arg == "-h") {
       return opt;
     } else {
@@ -292,6 +355,17 @@ int main(int argc, char** argv) {
       "[helper] RNNoise nao inicializou; seguindo com audio cru.\n");
   }
   std::printf("[helper] Supressao de ruido: %s\n", denoise ? "ligada" : "desligada");
+
+  // ── codec ──────────────────────────────────────────────────────────────
+  // Mesma política do denoise: se o encoder Opus não criar, cai pra PCM cru em
+  // vez de abortar. `--pcm` força PCM de propósito.
+  OpusEncoderWrap encoder;
+  bool use_opus = !opt.pcm && encoder.ok();
+  if (!opt.pcm && !encoder.ok()) {
+    std::fprintf(stderr,
+      "[helper] Encoder Opus nao inicializou; enviando PCM cru.\n");
+  }
+  std::printf("[helper] Codec: %s\n", use_opus ? "opus" : "pcm");
 
   FrameQueue queue;
   CaptureState capture_state;
@@ -406,11 +480,24 @@ int main(int argc, char** argv) {
 
     if (denoise) denoiser.Process(frame);
 
-    const std::string data = Base64Encode(
-        reinterpret_cast<const uint8_t*>(frame.data()),
-        frame.size() * sizeof(int16_t));
+    std::string data;
+    if (use_opus) {
+      uint8_t packet[kOpusMaxPacket];
+      const int n = encoder.Encode(frame, packet, kOpusMaxPacket);
+      if (n < 0) {
+        // Erro de encode é raro e não recuperável quadro a quadro; conta como
+        // quadro perdido, igual a um descarte de fila.
+        frame.clear();
+        continue;
+      }
+      data = Base64Encode(packet, static_cast<size_t>(n));
+    } else {
+      data = Base64Encode(reinterpret_cast<const uint8_t*>(frame.data()),
+                          frame.size() * sizeof(int16_t));
+    }
 
     nlohmann::json out{{"type", "audio_frame"}, {"seq", seq++}, {"data", data}};
+    if (use_opus) out["codec"] = "opus";
     ws.send(out.dump());
     frame.clear();
 

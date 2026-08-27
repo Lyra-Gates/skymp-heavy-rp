@@ -883,10 +883,12 @@
         break;
 
       case 'audio_frame':
-        // Caminho novo: PCM cru vindo do helper nativo, já retransmitido pelo
+        // Caminho novo: áudio vindo do helper nativo, já retransmitido pelo
         // servidor com o volume calculado para *este* ouvinte. Não há WebRTC
-        // envolvido — só decodificar e tocar. Ver docs/technical/VOICE_NATIVE_HELPER.md.
-        playRelayFrame(msg.fromActorId, msg.volume, msg.data);
+        // envolvido. `codec:'opus'` → decodifica via WebCodecs; ausente → PCM
+        // s16le cru (formato histórico, o que a sonda ainda fala). Ver
+        // docs/technical/VOICE_NATIVE_HELPER.md.
+        playRelayFrame(msg.fromActorId, msg.volume, msg.data, msg.codec, msg.seq);
         break;
 
       case 'peer_left':
@@ -896,9 +898,12 @@
   }
 
   // ── Áudio retransmitido pelo servidor (helper nativo) ─────────────────────
-  // Formato do fio, fixo na Fase 1 e igual ao declarado em voip-service.js:
-  // PCM 16-bit little-endian, mono, 48kHz, quadros de 20ms.
+  // Taxa e quadro fixos, iguais aos de voip-service.js e main.cpp. O que vem
+  // dentro de `data` é Opus (msg.codec === 'opus') ou PCM 16-bit little-endian
+  // cru — mono, 48kHz, quadros de 20ms nos dois casos.
   const RELAY_SAMPLE_RATE = 48000;
+  const RELAY_FRAME_US = 20000; // 20ms em microssegundos, p/ o timestamp do Opus
+  const OPUS_SUPPORTED = typeof AudioDecoder !== 'undefined';
 
   // Jitter buffer: quanto agendar à frente do relógio do AudioContext. Menos que
   // isso e qualquer atraso de rede vira um buraco audível entre quadros de 20ms.
@@ -943,7 +948,15 @@
     return chain;
   }
 
-  /** base64 → Float32 mono. PCM 16-bit little-endian, como o helper envia. */
+  /** base64 → Uint8Array. */
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /** base64 → Float32 mono. PCM 16-bit little-endian, como o helper com --pcm. */
   function decodeRelayFrame(b64) {
     const bin = atob(b64);
     const samples = bin.length >> 1;
@@ -957,17 +970,87 @@
     return pcm;
   }
 
-  function playRelayFrame(fromActorId, volume, b64) {
-    if (typeof b64 !== 'string' || !b64.length) return;
+  /**
+   * Agenda um bloco de PCM (Float32 mono @ RELAY_SAMPLE_RATE) na cadeia de ganho
+   * do locutor, mantendo o jitter buffer. Chamado tanto pelo caminho PCM cru
+   * quanto pelo `output` do AudioDecoder de Opus.
+   */
+  function scheduleRelayPcm(chain, ctx, pcm) {
+    if (!pcm.length) return;
+    const buffer = ctx.createBuffer(1, pcm.length, RELAY_SAMPLE_RATE);
+    buffer.getChannelData(0).set(pcm);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(chain.gainNode);
 
-    let pcm;
+    const now = ctx.currentTime;
+    if (chain.nextPlayTime < now || chain.nextPlayTime > now + RELAY_MAX_QUEUE_S) {
+      chain.nextPlayTime = now + RELAY_JITTER_S;
+    }
+    source.start(chain.nextPlayTime);
+    chain.nextPlayTime += buffer.duration;
+  }
+
+  /**
+   * AudioDecoder de Opus para um locutor, criado sob demanda. `null` quando o
+   * runtime não tem WebCodecs — nesse caso frames Opus são perdidos e o aviso
+   * sai uma vez só (o helper pode voltar a PCM com `--pcm`).
+   */
+  function getOpusDecoder(chain, fromActorId) {
+    if (chain.opusDec) return chain.opusDec;
+    if (!OPUS_SUPPORTED) {
+      if (!state.opusUnsupportedWarned) {
+        state.opusUnsupportedWarned = true;
+        console.error('[voip] audio_frame Opus recebido mas este runtime não tem WebCodecs (AudioDecoder). Áudio Opus será perdido; rode o helper com --pcm.');
+        setStatus('warn', 'VOZ — CODEC NÃO SUPORTADO');
+      }
+      return null;
+    }
+    const ctx = ensureAudioContext();
+    const dec = new AudioDecoder({
+      output: (audioData) => {
+        try {
+          const n = audioData.numberOfFrames;
+          const f32 = new Float32Array(n);
+          audioData.copyTo(f32, { planeIndex: 0, format: 'f32-planar' });
+          scheduleRelayPcm(chain, ctx, f32);
+        } catch (err) {
+          console.error('[voip] falha ao copiar AudioData do Opus:', err);
+        } finally {
+          audioData.close();
+        }
+      },
+      error: (err) => console.error('[voip] AudioDecoder Opus:', err)
+    });
+    dec.configure({ codec: 'opus', sampleRate: RELAY_SAMPLE_RATE, numberOfChannels: 1 });
+    chain.opusDec = dec;
+    chain.opusTs = 0;
+    return dec;
+  }
+
+  function feedOpusFrame(chain, fromActorId, b64, seq) {
+    const dec = getOpusDecoder(chain, fromActorId);
+    if (!dec || dec.state === 'closed') return;
+    let bytes;
     try {
-      pcm = decodeRelayFrame(b64);
+      bytes = b64ToBytes(b64);
     } catch (err) {
-      console.error('[voip] audio_frame ilegível:', err);
+      console.error('[voip] audio_frame Opus ilegível:', err);
       return;
     }
-    if (!pcm.length) return;
+    // Timestamp derivado do seq do helper quando disponível (monotônico, e
+    // sobrevive a quadros descartados pelo servidor); senão, contador local.
+    const ts = Number.isFinite(seq) ? seq * RELAY_FRAME_US : chain.opusTs;
+    chain.opusTs = ts + RELAY_FRAME_US;
+    try {
+      dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: ts, duration: RELAY_FRAME_US, data: bytes }));
+    } catch (err) {
+      console.error('[voip] decode Opus:', err);
+    }
+  }
+
+  function playRelayFrame(fromActorId, volume, b64, codec, seq) {
+    if (typeof b64 !== 'string' || !b64.length) return;
 
     const ctx = ensureAudioContext();
     const chain = getRelayChain(fromActorId);
@@ -981,18 +1064,18 @@
       chain.gainNode.gain.setTargetAtTime(volume, ctx.currentTime, 0.1);
     }
 
-    const buffer = ctx.createBuffer(1, pcm.length, RELAY_SAMPLE_RATE);
-    buffer.getChannelData(0).set(pcm);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(chain.gainNode);
-
-    const now = ctx.currentTime;
-    if (chain.nextPlayTime < now || chain.nextPlayTime > now + RELAY_MAX_QUEUE_S) {
-      chain.nextPlayTime = now + RELAY_JITTER_S;
+    if (codec === 'opus') {
+      feedOpusFrame(chain, fromActorId, b64, seq);
+    } else {
+      let pcm;
+      try {
+        pcm = decodeRelayFrame(b64);
+      } catch (err) {
+        console.error('[voip] audio_frame ilegível:', err);
+        return;
+      }
+      scheduleRelayPcm(chain, ctx, pcm);
     }
-    source.start(chain.nextPlayTime);
-    chain.nextPlayTime += buffer.duration;
 
     // Pelo mesmo motivo do ganho: o HUD só muda quando o volume muda. Sem a
     // guarda seriam 50 escritas de DOM por segundo por locutor, num overlay
@@ -1014,6 +1097,10 @@
   function removeRelayPeer(actorId) {
     const chain = state.relayPeers.get(actorId);
     if (!chain) return;
+    if (chain.opusDec) {
+      try { chain.opusDec.close(); } catch { /* já fechado */ }
+      chain.opusDec = null;
+    }
     try { chain.gainNode.disconnect(); } catch { /* contexto já fechado */ }
     state.relayPeers.delete(actorId);
   }
