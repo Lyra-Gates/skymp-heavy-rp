@@ -644,26 +644,35 @@
     };
   }
 
-  // ── Dispara a tentativa de autenticação (24/08/2026, primeira tentativa) ──
+  // ── Dispara a tentativa de autenticação (27/08/2026, prova de bundle real) ─
   //
-  // O AuthService nativo do skymp5-client emite `authNeeded` e fica esperando
-  // uma resposta da UI (`setListenBrowserMessage: true`) antes de sequer abrir
-  // conexão com o servidor de jogo -- confirmado em runtime real: metricas do
-  // servidor mostravam `connections.total: 0` minutos depois do jogador estar
-  // parado no menu. A UI oficial do skymp5-client (que este arquivo substitui
-  // em Data/Platform/UI/index.html via ui-integrity) tem um botão "log in via
-  // skymp"/"log in via Discord" que dispara essa tentativa manualmente -- nossa
-  // UI de RP não tem esse botão porque a identidade já vem resolvida pelo
-  // `gameData.session` que o launcher escreve (ver AUTH-01 em
-  // AUTH_001_TRUST_BOUNDARY_INVENTORY.md), então não faz sentido esperar um
-  // clique que nunca vai vir.
+  // 24/08: a primeira tentativa mandava só `authAttemptEvent`, capturado de um
+  // crash real mas nunca confirmado como o sinal certo -- e não resolveu
+  // (`connections.total: 0` continuava). 27/08: encontrei DOIS bundles reais
+  // de cliente na máquina de teste (fora deste repo, em instalações Steam
+  // locais) e um deles é o skymp5-client genuino sem nenhuma marca própria
+  // (`index.html` sem título/branding, só `<script defer src="build.js">`,
+  // nomes de classe batendo com os já citados em
+  // AUTH_001_TRUST_BOUNDARY_INVENTORY.md -- AuthService, SkympClient,
+  // SettingsService, NetworkingService, RemoteServer). O outro é o launcher
+  // de um produto concorrente (Skyland Roleplay, já citado como referência de
+  // design em LAUNCHER_UI_GUIDE.md) -- então só o primeiro serve de prova
+  // sobre o CLIENTE OFICIAL; o `authAttemptEvent` daquele bundle é feature
+  // própria de outro fork, não prova upstream.
   //
-  // `authAttemptEvent` é o nome literal capturado do bundle oficial do
-  // skymp5-client (evento `events.authAttempt`, visto num crash real deste
-  // mesmo dia) -- não é inventado, mas também nunca foi confirmado que É o
-  // sinal certo pra "prossiga com o gameData.session que eu já tenho". Se isto
-  // não resolver, o próximo passo é capturar o handler de clique do botão
-  // "log in via skymp" no bundle oficial pra ver o payload exato que ele manda.
+  // No bundle oficial, a PRIMEIRA coisa que o app faz depois de renderizar a
+  // raiz React -- sem esperar clique nenhum -- é:
+  //   if (window.skyrimPlatform?.sendMessage) sendMessage(FRONT_LOADED_EVENT)
+  // Um log real de sessão do mesmo bundle (`skymp5-client.log`) confirma a
+  // cadeia: `AuthService: onBrowserMessage: ["front-loaded"]` → "Received
+  // browserWindowLoaded event" → "Received authNeeded event" → (a partir daí
+  // o AuthService nativo decide sozinho, offline ou online, sem esperar outro
+  // clique quando offlineMode é true). Nossa UI nunca mandou `front-loaded` --
+  // o AuthService pode estar preso esperando esse aceno antes mesmo de chegar
+  // em `authNeeded`, o que explica `connections.total: 0` independente do
+  // `gameData.session` estar certo. `authAttemptEvent` continua sendo mandado
+  // depois, sem confirmação de que o modo online (`offlineMode: false`, o
+  // nosso) precisa dele -- mantido por precaução, não custa nada mandar.
   if (!RODANDO_FORA_DO_JOGO) {
     let jaTentouAuth = false;
     const tentativas = setInterval(() => {
@@ -671,6 +680,7 @@
       if (window.skyrimPlatform && typeof window.skyrimPlatform.sendMessage === 'function') {
         jaTentouAuth = true;
         clearInterval(tentativas);
+        window.skyrimPlatform.sendMessage('front-loaded');
         window.skyrimPlatform.sendMessage('authAttemptEvent');
       }
     }, 200);
