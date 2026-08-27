@@ -181,3 +181,47 @@ e branches remotas) achou banners de status desatualizados e conferiu contra
   ([`SKYMP_FORK_RESEARCH_INDEX.md`](docs/research/SKYMP_FORK_RESEARCH_INDEX.md))
   e duas notas de correção onde um fato datado de 14/08 não tinha propagado
   para os documentos de 13/08 que ele corrigia (commit `531233c`).
+
+## Voz nativa fora do CEF (27/08/2026)
+
+O CEF do client recusa `getUserMedia`, então a captura de microfone saiu para um
+executável separado, `voice-helper/` (a reprodução continua no navegador do
+jogo). Estado atual, tudo em `main`:
+
+- **Captura + relay** (`voice-helper.exe` ↔ `voip-service.js` ↔ `index.html`):
+  WASAPI → PCM 20ms → servidor anexa volume por proximidade → CEF toca. Medido
+  na bancada (mic real → ouvinte instrumentado), nunca ouvido por uma pessoa.
+- **Supressão de ruído**: RNNoise no laço de envio (`--no-denoise` desliga).
+- **Opus** no lugar do PCM cru (`codec:"opus"` por quadro, compat com PCM;
+  `--pcm` volta ao cru). Decodificado na CEF via WebCodecs `AudioDecoder`.
+- **Empacotamento**: `voice-helper.exe` entra no instalador do launcher como
+  `resources/vendor/` (build estático `x64-windows-static`, um arquivo), copiado
+  para `Data/Platform/` no JOGAR. Fail-open — a voz é opcional.
+- **Handoff do ticket**: `/voz` → `senderTicket` na property `voipTicket` → a CEF
+  faz POST em `127.0.0.1:19848` → o launcher sobe o helper. O andaime
+  `VOIP_DEBUG_EXPOSE_TICKET` fica como fallback de bancada.
+
+Detalhe completo e as verificações em
+[`VOICE_NATIVE_HELPER.md`](docs/technical/VOICE_NATIVE_HELPER.md) §8.3–8.7.
+
+### TODO — teste com 2–3 jogadores reais (bloqueia o fechamento desta trilha)
+
+Nada abaixo dá pra verificar sem cliente Skyrim real; o que existe é teste
+automatizado e verificação no Chromium do navegador do app (mesma base do CEF
+108, mas não o build do SkyrimPlatform):
+
+1. **Inteligibilidade** — alguém fala no microfone e outro jogador ouve voz
+   reconhecível, não só "tem sinal" (passo 6 da etapa 8.2 do
+   [`FASE_0_ROTEIRO.md`](docs/technical/FASE_0_ROTEIRO.md)).
+2. **RNNoise no ouvido** — o ruído de teclado/ambiente de fato cai.
+3. **Decode Opus no CEF real** — o `AudioDecoder` (WebCodecs) funciona no CEF do
+   client, não só no navegador do app.
+4. **`fetch` da CEF pro loopback** — o POST de `file://` para `127.0.0.1:19848`
+   passa (PNA/CSP/sandbox do CEF). Se **não** passar, o handoff automático não
+   funciona e o fallback `VOIP_DEBUG_EXPOSE_TICKET` **não pode ser removido**.
+5. **Cadeia inteira** — `/voz` no jogo → launcher sobe o helper → jogador na
+   cena ouve.
+
+Quando (4) e a cadeia passarem, remover o scaffold `VOIP_DEBUG_EXPOSE_TICKET`
+(`_exposeDebugTicket`, a flag, a §11 do doc de voz, os testes) — lista exata na
+§11.
