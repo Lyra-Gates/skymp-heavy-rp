@@ -552,9 +552,11 @@ Nada abaixo foi feito neste PR.
    a §10 (o ticket agora é por papel, e um `/voz` emite os dois); o handoff
    automático continua aberto e é Fase 3. O andaime temporário que destrava o
    teste manual está na §11.
-3. **Empacotamento e assinatura do executável**, e integração com o launcher —
-   mesma exigência de carimbo de tempo já registrada em
-   [`LAUNCHER_DISTRIBUTION.md` §6](LAUNCHER_DISTRIBUTION.md).
+3. **Empacotamento e assinatura do executável**, e integração com o launcher.
+   O exe carrega `opus.dll` e `z.dll` (build dinâmico) — o triplet
+   `x64-windows-static` elimina isso. Requisitos e a tabela de arquivos em
+   [`LAUNCHER_DISTRIBUTION.md` §2 "voice-helper e suas DLLs"](LAUNCHER_DISTRIBUTION.md);
+   assinatura com carimbo de tempo, mesma exigência da §6 de lá.
 
 **Qualidade**
 
