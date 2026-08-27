@@ -9,6 +9,17 @@ project(voice-helper LANGUAGES CXX C)  # C: rnnoise (FetchContent) é C puro
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Empacotamento sem DLLs: o build padrão é o triplet estático do vcpkg
+# (`x64-windows-static`), então `opus` e `zlib` entram no exe e o launcher
+# carrega um arquivo só. Ver docs/technical/LAUNCHER_DISTRIBUTION.md §2.
+#
+# Triplet estático linka a CRT estática (/MT); nosso código e o alvo `rnnoise`
+# têm que casar com isso, senão o link falha com LNK2038 (RuntimeLibrary
+# mismatch) — o vcpkg cuida das dependências, não dos alvos deste arquivo.
+if(VCPKG_TARGET_TRIPLET MATCHES "-static")
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 find_package(unofficial-miniaudio CONFIG QUIET)
 if(NOT unofficial-miniaudio_FOUND)
   # A port do miniaudio no vcpkg ja exportou o alvo com nomes diferentes ao

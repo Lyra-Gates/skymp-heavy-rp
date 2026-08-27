@@ -41,30 +41,21 @@ Há três artefatos independentes: launcher, cliente SkyMP e modpack. A versão 
 
 Os sete arquivos de `skymp/ui/` entram no instalador como `resources/skymp-ui`. Antes da validação de versão e antes da fila, o launcher compara SHA-256 arquivo a arquivo com `Data/Platform/UI` e copia somente os ausentes ou divergentes. Arquivos extras são preservados. **Configurações → Reparar Interface** executa a mesma operação manualmente. Um bundle interno sem `index.html` falha fechado.
 
-### voice-helper e suas DLLs — planejado, não empacotado
+### voice-helper — não empacotado ainda, mas já é um arquivo só
 
 O `voice-helper/` (captura de microfone fora do CEF, para a voz por proximidade —
 ver [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md)) **ainda não entra no
-instalador**. Quando entrar, o requisito que não pode passar batido: o
-`voice-helper.exe` **não roda sozinho** — o build atual (vcpkg triplet
-`x64-windows`, dinâmico) produz duas DLLs ao lado do exe, e as duas precisam ir
-junto na mesma pasta:
+instalador**. Quando entrar, é **um arquivo**: `voice-helper.exe` (~2,2 MB).
 
-| Arquivo | De onde vem | Tamanho aprox. |
-|---|---|---|
-| `voice-helper.exe` | build próprio | ~1,5 MB |
-| `opus.dll` | vcpkg (`opus`) — codec Opus do fio | ~460 KB |
-| `z.dll` | vcpkg (zlib, arrastado pelo `ixwebsocket`) | ~90 KB |
+O build padrão usa o triplet estático do vcpkg (`x64-windows-static`) — `opus`,
+`zlib` e a CRT entram no exe. O RNNoise também é estático (`FetchContent` + lib
+estática). Confirmado com `dumpbin /dependents`: o exe só depende de DLLs de
+sistema do Windows (`WS2_32`, `CRYPT32`, `KERNEL32`, `bcrypt`). Não há `opus.dll`
+nem `z.dll` pra carregar junto — quem montar o pacote copia só o exe.
 
-O RNNoise **não** aparece aqui: é compilado estático (`FetchContent` + lib
-estática, ver `voice-helper/CMakeLists.txt`).
-
-**A alternativa que elimina o problema:** compilar com o triplet
-`x64-windows-static` — `opus` e `zlib` entram no exe e o empacotamento passa a
-carregar **um arquivo só**. É a rota recomendada quando o empacotamento for
-implementado; o custo é um exe maior e um `-DVCPKG_TARGET_TRIPLET` diferente na
-linha de configuração. Enquanto isso não é feito, quem montar o pacote a mão tem
-que copiar as três linhas da tabela, não só o exe.
+> Com o triplet dinâmico (`x64-windows`) o build também passa, mas aí `opus.dll`
+> e `z.dll` ficam ao lado do exe e teriam que ir junto. Não use esse pra
+> empacotar.
 
 Assinatura: o `voice-helper.exe` é executável distribuído, então cai na mesma
 exigência de Authenticode com carimbo de tempo da §6 — não é coberto pelo

@@ -506,8 +506,10 @@ cada quadro (depois do denoise) com **libopus** — `OPUS_APPLICATION_VOIP`,
   e o modo de bisseccionar defeito ("a voz quebrou: é o Opus ou o transporte?").
   Se `opus_encoder_create` falha, cai pra PCM em vez de abortar, igual ao
   denoise. libopus vem do vcpkg (`opus`, port suportada no Windows, ao contrário
-  do rnnoise) e é **DLL** — `opus.dll` fica ao lado do exe; o empacotamento da
-  §9.3 precisa carregá-la (ou trocar pro triplet estático).
+  do rnnoise). O build passou ao triplet **`x64-windows-static`** (27/08): `opus`
+  e `zlib` entram no exe, que sai standalone (~2,2 MB, só DLLs de sistema) — o
+  empacotamento da §9.3 carrega um arquivo só. O `CMakeLists.txt` casa a CRT
+  estática sozinho pra triplet `-static`.
 - **Servidor** (`voip-service.js`): **não decodifica nada.** Repassa a etiqueta
   `codec` só quando vale `'opus'` (qualquer outro valor é tratado como ausente =
   PCM). Uma linha no `relayAudioFrame`. O teto de payload de 8192 chars fica —
@@ -553,16 +555,16 @@ Nada abaixo foi feito neste PR.
    automático continua aberto e é Fase 3. O andaime temporário que destrava o
    teste manual está na §11.
 3. **Empacotamento e assinatura do executável**, e integração com o launcher.
-   O exe carrega `opus.dll` e `z.dll` (build dinâmico) — o triplet
-   `x64-windows-static` elimina isso. Requisitos e a tabela de arquivos em
-   [`LAUNCHER_DISTRIBUTION.md` §2 "voice-helper e suas DLLs"](LAUNCHER_DISTRIBUTION.md);
-   assinatura com carimbo de tempo, mesma exigência da §6 de lá.
+   O exe já sai standalone (triplet `x64-windows-static`, sem DLLs próprias) —
+   falta a cópia pro instalador e a assinatura com carimbo de tempo (mesma
+   exigência da §6 do launcher). Ver
+   [`LAUNCHER_DISTRIBUTION.md` §2 "voice-helper"](LAUNCHER_DISTRIBUTION.md).
 
 **Qualidade**
 
 4. ~~**Opus** no lugar do PCM cru (§3).~~ **Feito em 27/08/2026 — ver §8.6.**
    ~30x menos banda; base64 deixou de importar. Falta: pedir recuperação FEC no
-   decode em perda de rede, e o triplet estático do libopus pro empacotamento.
+   decode em perda de rede real.
 5. ~~**Supressão de ruído.**~~ **Feita em 27/08/2026 — RNNoise, ver §8.5.**
    **Cancelamento de eco continua aberto.** RNNoise só suprime ruído; sem AEC,
    quem usa caixa de som em vez de fone realimenta a própria voz na cena.

@@ -76,12 +76,19 @@ C:/vcpkg/bootstrap-vcpkg.bat
 ```
 
 **2. Configurar** (a partir de `voice-helper/`). O `vcpkg.json` está em modo
-manifesto: as dependências (`miniaudio`, `ixwebsocket`, `nlohmann-json`) são
-baixadas e compiladas nesta etapa, sem `vcpkg install` separado.
+manifesto: as dependências (`miniaudio`, `ixwebsocket`, `nlohmann-json`, `opus`)
+são baixadas e compiladas nesta etapa, sem `vcpkg install` separado.
 
 ```bash
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows
+cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static
 ```
+
+**Triplet estático de propósito:** `opus` e `zlib` entram no exe, que sai
+**standalone** — só depende de DLLs de sistema do Windows. É o que o
+empacotamento pelo launcher espera (um arquivo, não um exe + DLLs soltas). O
+`CMakeLists.txt` casa a CRT estática (`/MT`) sozinho quando o triplet termina em
+`-static`. Com `x64-windows` (dinâmico) o build também passa, mas aí `opus.dll`
+e `z.dll` precisam ficar ao lado do exe.
 
 **3. Compilar**
 
@@ -89,7 +96,7 @@ cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.c
 cmake --build build --config Release
 ```
 
-O binário sai em `build/Release/voice-helper.exe`.
+O binário sai em `build/Release/voice-helper.exe` (~2,2 MB, standalone).
 
 Se alguma port não resolver, **anote o erro exato em VOICE_NATIVE_HELPER.md §8
 antes de trocar de biblioteca** — a decisão de usar `miniaudio` está registrada
