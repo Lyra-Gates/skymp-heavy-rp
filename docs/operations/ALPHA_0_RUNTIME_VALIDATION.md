@@ -139,6 +139,48 @@ capacidade real durante o pior momento possível. Precisa de decisão de
 design (a promoção deveria ser side-effect de request de terceiro?) antes
 de mexer — não é fix de uma linha.
 
+### Achado e corrigido — migration v28 sem teste de caracterização
+
+`check-write-guards.js --all` já bloqueava isso, só ninguém tinha rodado
+depois que v28 entrou: `migration-v28-crafting-stations.sql` não era
+referenciada por nenhum teste — a única migration nessa situação (v29 já
+tinha `public-work-migration.test.js`). Adicionado
+`skymp/gamemode/migration-v28-crafting-stations.test.js` no mesmo padrão de
+v29 (lê o `.sql` como texto, confere `CREATE TABLE`, índice e o cleanup do
+seed com FormID placeholder). Guard volta a passar limpo, suite 1265/1265.
+
+### Revisão de `skymp/ui` (client-side, dentro do CEF) — nada sobreviveu
+
+Revisão de `player-panel.js`, `depot-panel.js` e `interaction-prompt.js`
+(lógica/fluxo, sem infra). Todos os achados do sweep inicial não se
+confirmaram ao ler o código real:
+- `player-panel.js`: o guard `if (!alias || !targetCharacterId) return;`
+  já bloqueia `characterId` nulo/vazio/zero corretamente (`Number('')` é
+  `0`, `!0` é `true`) — os três cenários levantados (null, NaN, zero) caem
+  todos no mesmo guard.
+- `depot-panel.js:106` (`data.holdId != null ? data.holdId : state.holdId`):
+  tecnicamente aceitaria um `holdId` obsoleto se o servidor mandasse
+  `null`, mas `depot-service.js` nunca manda — `holdId` é `string`
+  obrigatória e não-vazia em todo o caminho server-side (`typeof holdId
+  !== 'string' || !holdId` rejeita antes). Código defensivo pra um caminho
+  que a própria contraparte server-side não permite existir.
+- `interaction-prompt.js`: usa `=== null || === undefined` (não `!data.
+  targetId`), então FormID `0` já é tratado como alvo válido — nenhuma
+  armadilha atual.
+
+### Migrations v1→v29 — organização
+
+`check:schema:list` (80 tabelas) e o parser de `check-schema-drift.js`
+(`listarArquivosSql`) não exigem numeração contígua — ordenam por versão
+extraída do nome, não por presença de todos os números. `v1`, `v16` e `v17`
+não existem como arquivos (histórico de branches abandonadas antes da
+unificação de 22/08 — ver
+[BRANCH_LEGACY_2026-08-27.md](../technical/BRANCH_LEGACY_2026-08-27.md)),
+mas isso não é bug: confirmei que não há números duplicados na sequência
+atual (`v2`...`v29`, 27 arquivos), o que seria o cenário realmente perigoso
+(ordem de aplicação ambígua). Organização cosmeticamente inconsistente,
+funcionalmente sã.
+
 ## Bloqueadores reais
 
 1. **MariaDB/Docker ausentes nesta máquina** — impede montar staging
