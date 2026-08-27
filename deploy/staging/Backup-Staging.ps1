@@ -21,7 +21,14 @@ $previousEnvFile = $env:STAGING_ENV_FILE
 $env:MYSQL_PWD = $values.DB_ROOT_PASS
 $env:STAGING_ENV_FILE = '.env'
 try {
-  & docker compose --env-file $envFile -f $composeFile exec -T -e MYSQL_PWD mariadb sh -c "mariadb-dump -uroot --single-transaction --routines --events --triggers --databases skymp_rp --add-drop-database | gzip > /backups/$filename"
+  # Dump pra arquivo temporario ANTES de comprimir, e sai com o codigo do
+  # mariadb-dump, nao do gzip. `dump | gzip > arquivo` teria o defeito oposto:
+  # `sh` (dash/ash nas imagens oficiais, sem pipefail) devolve o exit code do
+  # ULTIMO comando do pipe -- se mariadb-dump falhar no meio (lock timeout,
+  # conexao caindo), gzip comprime feliz o que recebeu ate o EOF e sai 0. O
+  # backup ficaria não-vazio, com SHA-256 valido, e silenciosamente truncado
+  # -- so descobriria no dia de precisar restaurar de verdade.
+  & docker compose --env-file $envFile -f $composeFile exec -T -e MYSQL_PWD mariadb sh -c "mariadb-dump -uroot --single-transaction --routines --events --triggers --databases skymp_rp --add-drop-database > /tmp/skymp-backup.sql; ec=`$?; gzip -c /tmp/skymp-backup.sql > /backups/$filename; rm -f /tmp/skymp-backup.sql; exit `$ec"
   if ($LASTEXITCODE -ne 0) { throw 'mariadb-dump falhou.' }
 } finally {
   $env:MYSQL_PWD = $previousPwd

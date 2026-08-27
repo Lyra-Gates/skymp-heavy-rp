@@ -40,7 +40,14 @@ try {
   & docker compose --env-file $envFile -f $composeFile stop web game-api bot-discord
   if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel parar os consumidores do banco.' }
 
-  & docker compose --env-file $envFile -f $composeFile exec -T -e MYSQL_PWD mariadb sh -c "gzip -dc /backups/$filename | mariadb -uroot"
+  # `gzip -dc ... | mariadb -uroot` teria o mesmo defeito do backup: `sh`
+  # (dash/ash, sem pipefail) devolve o exit code do mariadb, nao do gzip. Se
+  # o volume /backups estiver montado errado (arquivo nao existe no
+  # container mesmo existindo no host), gzip falha e nao escreve nada, mas
+  # mariadb le stdin vazio, nao executa nenhuma instrucao e sai 0 -- restore
+  # "bem sucedido" que nao restaurou nada. Descomprime pra arquivo primeiro
+  # e usa `&&`, que propaga o primeiro erro real corretamente.
+  & docker compose --env-file $envFile -f $composeFile exec -T -e MYSQL_PWD mariadb sh -c "gzip -dc /backups/$filename > /tmp/skymp-restore.sql && mariadb -uroot < /tmp/skymp-restore.sql; ec=`$?; rm -f /tmp/skymp-restore.sql; exit `$ec"
   if ($LASTEXITCODE -ne 0) { throw 'Restore falhou; mantenha os servicos parados e investigue o dump.' }
 
   & docker compose --env-file $envFile -f $composeFile --profile bootstrap run --rm --entrypoint sh migrate -c "npm ci --omit=dev && npm run check:schema:env -- --strict"

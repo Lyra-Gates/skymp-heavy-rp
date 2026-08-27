@@ -90,6 +90,55 @@ stack ainda.
   `offlineMode: true`, não do fluxo `offlineMode: false` que a produção usa
   — o `authNeeded` → resolução online continua sem prova direta de log.
 
+### AUTH-06 — backup/restore de staging podiam "ter sucesso" sem fazer nada
+
+Revisão estática (sem Docker disponível nesta máquina — não validado em
+runtime, só por leitura+lint) de `deploy/staging/Backup-Staging.ps1` e
+`Restore-Staging.ps1` achou a mesma classe de bug nos dois:
+
+- **Backup:** `mariadb-dump | gzip > arquivo` dentro de `sh -c`. `/bin/sh`
+  nas imagens oficiais (dash/ash) não tem `pipefail` — o exit code do `sh -c`
+  é o do ÚLTIMO comando do pipe (`gzip`), não do `mariadb-dump`. Se o dump
+  falhar no meio (lock timeout, conexão caindo), `gzip` comprime o que
+  recebeu até o EOF e sai `0`. O backup resultante é não-vazio, tem SHA-256
+  válido, passa em todas as checagens do script — e está truncado. Só se
+  descobre tentando restaurar de verdade.
+- **Restore:** mesmo padrão, invertido: `gzip -dc arquivo | mariadb -uroot`.
+  Se o volume `/backups` estiver montado errado e o arquivo não existir
+  dentro do container (apesar de existir no host, já validado por
+  checksum), `gzip` falha e não escreve nada — mas `mariadb -uroot` recebe
+  stdin vazio, não executa nenhuma instrução e sai `0`. "Restore concluído"
+  sem ter restaurado nada.
+- **Correção:** os dois passaram a gravar em arquivo intermediário e
+  encadear com `;`/`&&` de forma que o exit code propagado seja o do comando
+  que realmente pode falhar, não o do último do pipe. Sintaxe validada com
+  `[System.Management.Automation.Language.Parser]::ParseFile` (sem erros) e
+  a string final resolvida conferida manualmente — **não exercitado contra
+  Docker real**, porque não há Docker nesta máquina.
+- **Reteste necessário:** rodar um backup, corromper/truncar o dump
+  deliberadamente (ex: matar o container no meio do `mariadb-dump`), e
+  confirmar que `Backup-Staging.ps1` agora lança erro em vez de reportar
+  sucesso. Mesma coisa pro restore com um volume mal montado.
+
+### Achado documentado, não corrigido — fila pode "promover" contas sem nunca persistir a sessão
+
+`apps/game-api/queue.js` + `server.js`: `_promoteFromWaiting` roda como
+efeito colateral de QUALQUER `join()`/`status()` — inclusive o de outra
+conta, e inclusive dentro do `catch` de `persistAdmission` (via
+`queue.release(..., makeSessionTicket)`). Se `persistGameSession` falhar
+(banco fora do ar), a conta que causou a falha é liberada, mas isso
+promove a PRÓXIMA da fila pra dentro de `_admitted` — com um ticket novo
+que ninguém tentou persistir ainda. Se essa segunda conta nunca mais
+consultar `/api/queue/status` sozinha (ex: desistiu, fechou o launcher),
+ela ocupa um slot real sem sessão persistida até o TTL de reserva (3 min)
+expirar. Durante uma instabilidade de banco, isso pode drenar `_waiting`
+mais rápido do que deveria, sem nenhuma dessas admissões ter se
+concretizado. Não é um bug de segurança nem gera dado inconsistente
+(idempotência protege contra dupla gravação), mas é desperdício de
+capacidade real durante o pior momento possível. Precisa de decisão de
+design (a promoção deveria ser side-effect de request de terceiro?) antes
+de mexer — não é fix de uma linha.
+
 ## Bloqueadores reais
 
 1. **MariaDB/Docker ausentes nesta máquina** — impede montar staging
