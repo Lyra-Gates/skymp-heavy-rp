@@ -6,6 +6,13 @@ export interface AuthData {
   loginDate: string;
 }
 
+export interface LaunchGameResult {
+  ok: boolean;
+  pid?: number;
+  code?: string;
+  error?: string;
+}
+
 export interface ElectronAPI {
   windowMinimize: () => void;
   windowClose: () => void;
@@ -37,7 +44,7 @@ export interface ElectronAPI {
   reportRecentCrashes: () => Promise<any>;
   onUpdateProgress: (callback: (value: any) => void) => void;
   onModsUpdateProgress: (callback: (value: any) => void) => void;
-  launchGame: (folderPath: string, ticket: string) => Promise<boolean>;
+  launchGame: (folderPath: string, ticket: string) => Promise<LaunchGameResult>;
 }
 
 declare global {

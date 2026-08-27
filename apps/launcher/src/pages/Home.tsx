@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { AuthData } from '../types/electron';
+import type { AuthData, LaunchGameResult } from '../types/electron';
 import { Play, Settings as SettingsIcon, LogOut, FolderOpen, RefreshCw } from 'lucide-react';
 import heroBg from '../assets/launcher-bg.png';
 
@@ -18,6 +18,13 @@ type AppInfo = {
 
 const QUEUE_POLL_INTERVAL_MS = 4000;
 const SERVER_STATUS_POLL_INTERVAL_MS = 15000;
+
+const launchFailureMessage = (result: LaunchGameResult) => {
+  const detail = result.error?.trim() || result.code?.trim();
+  return detail
+    ? `Falha ao iniciar Skyrim: ${detail}`
+    : 'Falha ao iniciar Skyrim. Verifique a instalacao e tente novamente.';
+};
 
 export function Home({ auth, setAuth }: HomeProps) {
   const navigate = useNavigate();
@@ -98,8 +105,12 @@ export function Home({ auth, setAuth }: HomeProps) {
         if (pollRes.status === 'success') {
           setStatus('Iniciando Skyrim...');
           setIsPlaying(true);
-          await window.electronAPI.launchGame(gamePath, pollRes.ticket);
-          setIsPlaying(false);
+          try {
+            const launchResult = await window.electronAPI.launchGame(gamePath, pollRes.ticket);
+            setStatus(launchResult.ok ? 'Skyrim iniciado.' : launchFailureMessage(launchResult));
+          } finally {
+            setIsPlaying(false);
+          }
           return;
         }
         if (isSessionExpiredMessage(pollRes.message)) {
@@ -216,7 +227,8 @@ export function Home({ auth, setAuth }: HomeProps) {
       }
       if (queueRes.status === 'success') {
         setStatus('Iniciando Skyrim...');
-        await window.electronAPI.launchGame(gamePath, queueRes.ticket);
+        const launchResult = await window.electronAPI.launchGame(gamePath, queueRes.ticket);
+        setStatus(launchResult.ok ? 'Skyrim iniciado.' : launchFailureMessage(launchResult));
         return;
       }
       if (isSessionExpiredMessage(queueRes.message)) {

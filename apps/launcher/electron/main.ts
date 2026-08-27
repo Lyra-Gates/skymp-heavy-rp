@@ -9,6 +9,8 @@ import { URL, fileURLToPath } from 'url';
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
 import { avaliarEspaco, ehDiscoCheio } from './disk.mjs';
 import { syncUiBundle } from './ui-integrity.mjs';
+import { prepararConfiguracaoConexao } from './connection-settings.mjs';
+import { iniciarProcessoJogo } from './game-process.mjs';
 
 // package.json tem "type": "module", entao o Vite empacota este arquivo como
 // ESM — __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
@@ -1387,62 +1389,42 @@ ipcMain.handle('report-recent-crashes', async () => {
 });
 
 ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
-  if (!folderPath) return false;
+  if (!folderPath) {
+    return { ok: false, code: 'GAME_PATH_REQUIRED', error: 'Caminho do jogo nao configurado.' };
+  }
   const exePath = path.join(folderPath, 'skse64_loader.exe');
-  if (!fs.existsSync(exePath)) return false;
+  if (!fs.existsSync(exePath)) {
+    return { ok: false, code: 'SKSE_MISSING', error: 'skse64_loader.exe nao encontrado na pasta do jogo.' };
+  }
 
   try {
     const auth = readAuthFile();
-    if (auth && auth.discordId) {
-      const configPath = path.join(folderPath, 'Data', 'Platform', 'Plugins', 'skymp_config.json');
-      let config: any = {};
-      if (fs.existsSync(configPath)) {
-        try { config = JSON.parse(fs.readFileSync(configPath, 'utf8')); } catch {}
-      }
-      
-      config.session = `ticket:${ticket || ''}`;
-      config.serverAddress = `${SERVER_IP}:${SERVER_PORT}`;
-      config.discordId = auth.discordId;
-      delete config.profileId;
-      
-      const configDir = path.dirname(configPath);
-      if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-
-      const clientSettingsPath = path.join(folderPath, 'Data', 'Platform', 'Plugins', 'skymp5-client-settings.txt');
-      let clientSettings: any = {};
-      if (fs.existsSync(clientSettingsPath)) {
-        try { clientSettings = JSON.parse(fs.readFileSync(clientSettingsPath, 'utf8')); } catch {}
-      }
-      if (!clientSettings.gameData) clientSettings.gameData = {};
-      
-      // AUTH-01, agora corrigido: o SkyMP nativo (skymp5-server/ts/systems/login.ts)
-      // resolve `offlineMode: false` lendo `gameData.session` daqui e chamando o
-      // Master API com ele -- nao existe `gameData.launcherTicket` no contrato
-      // upstream, e um `gameData.profileId` declarado pelo cliente e exatamente o
-      // que offlineMode:false existe pra nao precisar confiar. A versao anterior
-      // apagava o unico campo que o engine realmente le e escrevia dois que ele
-      // ignora, entao a resolucao de identidade nunca completava -- confirmado em
-      // runtime real em 24/08/2026 (log do servidor: "No credentials found in
-      // gameData"), apos o jogador ja ter passado pela fila com um ticket valido.
-      delete clientSettings.gameData.token;
-      delete clientSettings.gameData.profileId;
-      delete clientSettings.gameData.launcherTicket;
-
-      clientSettings.gameData.session = String(ticket || '');
-      clientSettings['server-ip'] = SERVER_IP;
-      clientSettings['server-port'] = SERVER_PORT;
-      clientSettings['master'] = '';
-      
-      fs.writeFileSync(clientSettingsPath, JSON.stringify(clientSettings, null, 2));
+    if (!auth || !auth.discordId) {
+      return { ok: false, code: 'NOT_AUTHENTICATED', error: 'Faca login novamente antes de iniciar o jogo.' };
     }
-  } catch (e) {
-    console.error('Error injecting session:', e);
+
+    // AUTH-01 + CONNECT-P0: o arquivo realmente consumido pelo cliente recebe
+    // a sessao opaca, nunca profileId. O writer tambem grava o destino direto
+    // com server-info-ignore, trata read-only, rele e valida os dois JSONs. Se
+    // qualquer passo falhar, o SKSE nao nasce com credenciais antigas.
+    prepararConfiguracaoConexao({
+      gamePath: folderPath,
+      ticket,
+      serverIp: SERVER_IP,
+      serverPort: SERVER_PORT,
+      discordId: auth.discordId,
+    });
+
+    await killGameProcesses();
+    const processResult = await iniciarProcessoJogo(exePath, folderPath);
+    console.info(`[launcher] Skyrim iniciado com pid=${processResult.pid}`);
+    return { ok: true, pid: processResult.pid };
+  } catch (e: any) {
+    const code = typeof e?.code === 'string' ? e.code : 'GAME_LAUNCH_FAILED';
+    const message = typeof e?.message === 'string' && e.message
+      ? e.message
+      : 'Nao foi possivel preparar ou iniciar o jogo.';
+    console.error(`[launcher] Falha no bootstrap do jogo (${code}):`, e);
+    return { ok: false, code, error: message };
   }
-
-  exec('taskkill /F /T /IM SkyrimSE.exe & taskkill /F /T /IM skse64_loader.exe & taskkill /F /IM "SkyrimPlatformCEF.exe.hidden" & taskkill /F /IM "SkyrimPlatformCEF.exe"', () => {
-    exec(`"${exePath}"`, { cwd: folderPath });
-  });
-
-  return true;
 });
