@@ -75,7 +75,7 @@ const CONFIG_PATH = path.resolve(__dirname, '..', '..', 'config', 'safe-zones.js
 
 /** Categorias da action-policy que uma zona pode proibir. */
 const CATEGORIAS_VALIDAS = new Set([
-  'gameplay', 'combat', 'trade', 'craft', 'gather', 'move', 'move_world', 'use_item', 'speak_rp', 'sell'
+  'gameplay', 'combat', 'trade', 'craft', 'gather', 'work', 'move', 'move_world', 'use_item', 'speak_rp', 'sell'
 ]);
 
 let _zonas = null;

@@ -68,9 +68,11 @@ test('auth boundary — sessão inválida não possui fallback para identidade d
 
 test('auth boundary — launcher online injeta sessão opaca e remove profileId da config principal', () => {
   const launcher = read('apps/launcher/electron/main.ts');
+  const connectionSettings = read('apps/launcher/electron/connection-settings.mjs');
 
-  assert.match(launcher, /config\.session\s*=\s*`ticket:\$\{ticket \|\| ''\}`/);
-  assert.match(launcher, /delete config\.profileId/);
+  assert.match(launcher, /prepararConfiguracaoConexao\s*\(\s*\{/);
+  assert.match(connectionSettings, /config\.session\s*=\s*`ticket:\$\{ticket\}`/);
+  assert.match(connectionSettings, /removeUntrustedCredentials\(config\)/);
 });
 
 test('auth boundary — AUTH-01 corrigido: client settings gravam gameData.session, não profileId legado', () => {
@@ -80,11 +82,13 @@ test('auth boundary — AUTH-01 corrigido: client settings gravam gameData.sessi
   // antes nunca era lido pelo engine, e `gameData.session` era apagado bem
   // antes de a sessão ser resolvida via Master API.
   const launcher = read('apps/launcher/electron/main.ts');
+  const connectionSettings = read('apps/launcher/electron/connection-settings.mjs');
 
-  assert.match(launcher, /clientSettings\.gameData\.session\s*=\s*String\(ticket \|\| ''\)/);
-  assert.match(launcher, /delete clientSettings\.gameData\.profileId/);
-  assert.match(launcher, /delete clientSettings\.gameData\.launcherTicket/);
-  assert.doesNotMatch(launcher, /clientSettings\.gameData\.profileId\s*=\s*parseInt/);
+  assert.match(launcher, /prepararConfiguracaoConexao\s*\(\s*\{/);
+  assert.match(connectionSettings, /gameData\.session\s*=\s*ticket/);
+  assert.match(connectionSettings, /removeUntrustedCredentials\(gameData\)/);
+  assert.match(connectionSettings, /clientSettings\['server-info-ignore'\]\s*=\s*true/);
+  assert.doesNotMatch(connectionSettings, /gameData\.profileId\s*=/);
 });
 
 test('auth boundary — consumo do launch ticket é um UPDATE condicional atômico', () => {

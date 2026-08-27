@@ -1351,7 +1351,7 @@
     // resolvedor errado e o menu voltaria vazio pra qualquer alvo que não
     // fosse ator.
     state.interaction.targetType = d.targetType || INTERACTION_TARGET_TYPE;
-    state.interaction.sections = [];
+    state.interaction.sections = Array.isArray(d.sections) ? d.sections : [];
     state.interaction.selectedAction = null;
 
     document.getElementById('interaction-target').textContent =
@@ -1362,7 +1362,7 @@
     document.getElementById('interaction-menu').classList.add('open');
     document.getElementById('interaction-menu').setAttribute('aria-hidden', 'false');
 
-    if (state.interaction.targetActorId) {
+    if (state.interaction.targetActorId && !Array.isArray(d.sections)) {
       sendUiEvent('interaction:query', {
         targetType: state.interaction.targetType,
         targetId: formatActorId(state.interaction.targetActorId)

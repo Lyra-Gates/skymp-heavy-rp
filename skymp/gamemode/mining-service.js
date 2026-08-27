@@ -163,6 +163,7 @@ function registerMiningInteractions() {
     distance: serverOptions.get('mining.maxDistance'),
     idempotent: true,
     audit: interactionRegistry.AUDIT_LEVELS.ECONOMY,
+    policyAction: 'mining',
     // Só aparece no menu se o FormId mirado for de fato um veio ativo. Quem
     // decide de verdade continua sendo `consume()`, revalidado abaixo.
     canSee: async ctx => {
@@ -239,6 +240,20 @@ function registerMiningInteractions() {
   });
 }
 
+async function registerPhysicalAnchors() {
+  const anchors = typeof mp === 'undefined' || typeof mp.getIdFromDesc !== 'function'
+    ? []
+    : (await resourceNodeService.listEnabledNodes())
+      .map(formDesc => mp.getIdFromDesc(formDesc))
+      .filter(targetId => Number.isSafeInteger(targetId) && targetId > 0)
+      .map(targetId => ({ targetId }));
+  physicalAnchorRegistry.register({
+    targetType: interactionRegistry.TARGET_TYPES.OBJECT,
+    list: async () => anchors
+  });
+  await physicalAnchorRegistry.refresh();
+}
+
 /**
  * Confere, por reflexão real do VM Papyrus do servidor (`mp._sp3ListMethods`,
  * `[UPSTREAM CODE]` `ScampServer::SP3ListMethods` → `GetPapyrusVm().ListMethods`),
@@ -277,19 +292,9 @@ function _diagnoseItemCountAvailability() {
   }
 }
 
-function initMiningService() {
+async function initMiningService() {
   registerMiningInteractions();
-  physicalAnchorRegistry.register({
-    targetType: interactionRegistry.TARGET_TYPES.OBJECT,
-    list: async () => {
-      if (typeof mp === 'undefined') return [];
-      const formDescs = await resourceNodeService.listEnabledNodes();
-      return formDescs
-        .map((formDesc) => mp.getIdFromDesc(formDesc))
-        .filter((targetId) => Number.isSafeInteger(targetId) && targetId > 0)
-        .map((targetId) => ({ targetId }));
-    }
-  });
+  await registerPhysicalAnchors();
   _diagnoseItemCountAvailability();
 }
 
@@ -305,6 +310,7 @@ module.exports = {
   initMiningService,
   shutdownMiningService,
   registerMiningInteractions,
+  registerPhysicalAnchors,
   FAILURE_MESSAGES,
   // Exposto só para teste.
   activeGatherers,

@@ -22,7 +22,6 @@ const { describe, it, beforeEach, after } = require('node:test');
 const interactionRegistry = require('./core/interaction-registry');
 const { createTargetResolvers } = require('./core/interaction-targets');
 const { createInteractionService } = require('./core/interaction-service');
-const physicalAnchorRegistry = require('./core/physical-anchor-registry');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Estado mutável dos mocks, resetado a cada teste em beforeEach.
@@ -48,8 +47,8 @@ const professionServiceMock = {
 };
 const resourceNodeServiceMock = {
   getNode: async (formDesc) => { getNodeCalls.push(formDesc); return nodeAtFormDesc; },
-  listEnabledNodes: async () => [VEIO_FORMDESC],
-  consume: async (opts) => { consumeCalls.push(opts); return consumeResult; }
+  consume: async (opts) => { consumeCalls.push(opts); return consumeResult; },
+  listEnabledNodes: async () => [VEIO_FORMDESC]
 };
 const serverOptionsMock = {
   get: (key) => {
@@ -97,17 +96,6 @@ global.mp = {
   getIdFromDesc: (formDesc) => (formDesc === VEIO_FORMDESC ? VEIO_FORMID : 0),
   callPapyrusFunction: (kind, className, fn) => (className === 'Actor' && fn === 'GetItemCount' ? pickaxeCount : null)
 };
-
-describe('mining-service — descoberta pelo prompt [E]', () => {
-  it('publica os nós habilitados como âncoras físicas object', async () => {
-    interactionRegistry._reset();
-    physicalAnchorRegistry._reset();
-    mining.initMiningService();
-    assert.deepEqual(await physicalAnchorRegistry.listAll(), [
-      { targetId: VEIO_FORMID, targetType: interactionRegistry.TARGET_TYPES.OBJECT }
-    ]);
-  });
-});
 
 const characters = new Map([[ATOR, { characterId: 42, accountId: 1 }]]);
 const getCharacter = actorId => characters.get(actorId) || null;

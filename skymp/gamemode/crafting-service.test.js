@@ -632,7 +632,7 @@ describe('crafting-service — estações físicas autoritativas', () => {
 
   it('publica a estação como âncora de objeto para o prompt [E]', async () => {
     resetState();
-    crafting.registerPhysicalAnchors();
+    await crafting.registerPhysicalAnchors();
     assert.deepEqual(await physicalAnchorRegistry.listAll(), [{
       targetId: STATION_FORM_ID,
       targetType: interactionRegistry.TARGET_TYPES.OBJECT

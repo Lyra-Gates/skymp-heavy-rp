@@ -31,6 +31,7 @@
 
 /** @type {Array<{targetType: string, list: Function}>} */
 const _providers = [];
+let _snapshot = new Map();
 
 /**
  * @param {{targetType: string, list: () => Promise<Array<{targetId: number}>>}} provider
@@ -40,6 +41,28 @@ function register(provider) {
     throw new Error('[physical-anchor-registry] provider precisa de targetType (string) e list() (function).');
   }
   _providers.push(provider);
+}
+
+/**
+ * Reconstrói o índice síncrono usado por `mp.onActivate`. O hook nativo não
+ * pode esperar banco; por isso módulos carregam seus anchors no boot e a
+ * ativação faz somente uma consulta O(1) neste snapshot.
+ */
+async function refresh() {
+  const next = new Map();
+  for (const anchor of await listAll()) {
+    if (!next.has(anchor.targetId)) next.set(anchor.targetId, anchor.targetType);
+  }
+  _snapshot = next;
+  return _snapshot.size;
+}
+
+function getTargetType(targetId) {
+  return Number.isSafeInteger(targetId) ? (_snapshot.get(targetId) || null) : null;
+}
+
+function has(targetId) {
+  return getTargetType(targetId) !== null;
 }
 
 /**
@@ -68,6 +91,7 @@ async function listAll() {
 /** Só para teste. */
 function _reset() {
   _providers.length = 0;
+  _snapshot = new Map();
 }
 
-module.exports = { register, listAll, _reset };
+module.exports = { register, listAll, refresh, getTargetType, has, _reset };

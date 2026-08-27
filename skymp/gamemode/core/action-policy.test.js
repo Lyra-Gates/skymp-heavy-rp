@@ -43,7 +43,7 @@ describe('action-policy', () => {
 
   describe('Estado NORMAL', () => {
     it('deve permitir qualquer ação registrada', () => {
-      const actions = ['woodcutting', 'fishing', 'mining', 'craft', 'trade', 'speak'];
+      const actions = ['woodcutting', 'fishing', 'mining', 'craft', 'trade', 'speak', 'public_work'];
       for (const action of actions) {
         const { allowed } = actionPolicy.canPerform(CHAR_ID, action);
         assert.ok(allowed, `NORMAL deve permitir '${action}'`);
@@ -128,6 +128,11 @@ describe('action-policy', () => {
     it('deve bloquear crafting enquanto ocupado', () => {
       const { allowed } = actionPolicy.canPerform(CHAR_ID, 'craft');
       assert.strictEqual(allowed, false, 'BUSY deve bloquear craft');
+    });
+
+    it('deve bloquear trabalho público enquanto ocupado', () => {
+      const { allowed } = actionPolicy.canPerform(CHAR_ID, 'public_work');
+      assert.strictEqual(allowed, false, 'BUSY deve bloquear public_work');
     });
   });
 

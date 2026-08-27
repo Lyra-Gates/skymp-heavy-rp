@@ -16,11 +16,10 @@
  * só chama `playerPanelService.openPanel(actorId)` — o MESMO código que
  * `/painel` já chama. Zero UI nova, zero leitura de dado duplicada.
  *
- * Isso é o que faz o prompt `[E]` (`core/interaction-prompt-service.js`) ter
- * um candidato mesmo quando não há ator nem âncora física por perto: SELF é
- * sempre "alcançável" (sem `assertRange` — nunca fora de alcance de si
- * mesmo), então vira o fallback natural quando `_melhorCandidato` não acha
- * nada melhor.
+ * O adaptador de alvo exato não usa SELF como fallback: E sem alvo físico não
+ * faz nada. O painel continua acessível por `/painel` e pelo atalho F2. Este
+ * bridge permanece para consumidores que abram explicitamente uma interação
+ * SELF, sem misturá-la ao alvo de mundo.
  *
  * TODO: Hook para Profession-Service (PR #34, branch `feat/professions-
  * foundation`, ainda não mergeada em `main`). Quando mergear, o lugar certo

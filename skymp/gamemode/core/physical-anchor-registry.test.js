@@ -46,4 +46,23 @@ describe('physical-anchor-registry', () => {
     const todas = await registry.listAll();
     assert.deepStrictEqual(todas, [{ targetId: 0x999, targetType: 'door' }]);
   });
+
+  it('publica snapshot sincrono somente depois de refresh atomico', async () => {
+    registry.register({ targetType: 'object', list: async () => [{ targetId: 0x111 }] });
+    assert.equal(registry.has(0x111), false);
+    assert.equal(await registry.refresh(), 1);
+    assert.equal(registry.has(0x111), true);
+    assert.equal(registry.getTargetType(0x111), 'object');
+    assert.equal(registry.getTargetType(0x222), null);
+  });
+
+  it('refresh troca o snapshot inteiro sem preservar anchor removido', async () => {
+    let ids = [0x111];
+    registry.register({ targetType: 'object', list: async () => ids.map(targetId => ({ targetId })) });
+    await registry.refresh();
+    ids = [0x222];
+    await registry.refresh();
+    assert.equal(registry.has(0x111), false);
+    assert.equal(registry.has(0x222), true);
+  });
 });

@@ -128,17 +128,18 @@ async function listStationFormDescs() {
   return rows.map((row) => row.form_desc).filter((value) => typeof value === 'string' && value.includes(':'));
 }
 
-function registerPhysicalAnchors() {
+async function registerPhysicalAnchors() {
+  const anchors = typeof mp === 'undefined' || typeof mp.getIdFromDesc !== 'function'
+    ? []
+    : (await listStationFormDescs())
+      .map((formDesc) => mp.getIdFromDesc(formDesc))
+      .filter((targetId) => Number.isSafeInteger(targetId) && targetId > 0)
+      .map((targetId) => ({ targetId }));
   physicalAnchorRegistry.register({
     targetType: interactionRegistry.TARGET_TYPES.OBJECT,
-    list: async () => {
-      if (typeof mp === 'undefined' || typeof mp.getIdFromDesc !== 'function') return [];
-      return (await listStationFormDescs())
-        .map((formDesc) => mp.getIdFromDesc(formDesc))
-        .filter((targetId) => Number.isSafeInteger(targetId) && targetId > 0)
-        .map((targetId) => ({ targetId }));
-    }
+    list: async () => anchors
   });
+  await physicalAnchorRegistry.refresh();
 }
 
 function registerInteractions() {
@@ -147,6 +148,7 @@ function registerInteractions() {
     target: interactionRegistry.TARGET_TYPES.OBJECT,
     section: 'crafting',
     distance: serverOptions.get('crafting.maxDistance'),
+    policyAction: 'craft',
     canSee: async (ctx) => Boolean(await resolveStation(ctx.target.formId))
   };
 

@@ -32,7 +32,7 @@ const STATE_RESTRICTIONS = {
     message: 'Você está algemado e não pode realizar essa ação.'
   },
   [STATES.IMPRISONED]: {
-    blocked: ['trade', 'craft', 'gather', 'combat', 'move_world', 'sell'],
+    blocked: ['trade', 'craft', 'gather', 'work', 'combat', 'move_world', 'sell'],
     message: 'Você está preso e não pode realizar essa ação.'
   },
   [STATES.DOWNED]: {
@@ -44,19 +44,19 @@ const STATE_RESTRICTIONS = {
     message: 'Você está morto.'
   },
   [STATES.IN_TRADE]: {
-    blocked: ['gather', 'craft', 'combat', 'move_world'],
+    blocked: ['gather', 'work', 'craft', 'combat', 'move_world'],
     message: 'Você está em uma negociação. Cancele antes de realizar essa ação.'
   },
   [STATES.IN_CRAFT]: {
-    blocked: ['gather', 'trade', 'combat', 'move_world'],
+    blocked: ['gather', 'work', 'trade', 'combat', 'move_world'],
     message: 'Você está fabricando um item. Conclua ou cancele antes.'
   },
   [STATES.IN_DIALOG]: {
-    blocked: ['gather', 'trade', 'craft', 'combat'],
+    blocked: ['gather', 'work', 'trade', 'craft', 'combat'],
     message: 'Você está em um diálogo. Conclua-o antes.'
   },
   [STATES.BUSY]: {
-    blocked: ['gather', 'craft', 'trade', 'combat'],
+    blocked: ['gather', 'work', 'craft', 'trade', 'combat'],
     message: 'Você está ocupado com outra atividade.'
   }
 };
@@ -108,6 +108,7 @@ registerAction('use_item',    ['use_item'],            'Usar item');
 registerAction('eat',         ['use_item'],            'Comer');
 registerAction('drink',       ['use_item'],            'Beber');
 registerAction('sleep',       ['use_item'],            'Dormir');
+registerAction('public_work', ['gameplay', 'work'],    'Trabalho público');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API Pública

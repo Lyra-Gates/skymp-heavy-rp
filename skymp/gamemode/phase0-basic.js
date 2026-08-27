@@ -78,6 +78,7 @@ const crimeService  = require(path.join(gamemodeDir, 'core', 'crime-service'));
 const interactionPromptService = require(path.join(gamemodeDir, 'core', 'interaction-prompt-service'));
 const characterDashboardBridge = require(path.join(gamemodeDir, 'core', 'character-dashboard-bridge'));
 const craftingService = require(path.join(gamemodeDir, 'crafting-service'));
+const publicWorkService = require(path.join(gamemodeDir, 'public-work-service'));
 const playerShortcutsService = require(path.join(gamemodeDir, 'core', 'player-shortcuts-service'));
 const jobsService = require(path.join(gamemodeDir, 'jobs-service'));
 const contractsService = require(path.join(gamemodeDir, 'contracts-service'));
@@ -171,7 +172,7 @@ const interactionService = createInteractionService({
 // `peek()` (Tarefa 11) precisa da MESMA instância acima — não pode montar a
 // dele, senão o prompt calcularia contra um registry/canSee desalinhado do
 // que a CEF de verdade vê.
-interactionPromptService.configure({ interactionService });
+interactionPromptService.configure({ interactionService, sendModal });
 
 moduleRegistry.register({
   id: 'interaction',
@@ -454,18 +455,14 @@ moduleRegistry.register({
   }
 });
 
-// LAB: Prompt de interação `[E]` (Tarefa 11) — PROVA DE CONCEITO no mesmo
-// sentido da nametag: alvo mais próximo por proximidade, NÃO raycast (ver
-// cabeçalho de `core/interaction-prompt-service.js` pra por quê). Depende de
-// `interaction` só na ordem de boot (usa a instância já criada acima via
-// `configure()`), não no framework de dependências do registry — por isso
-// `dependencies: []` e não `['interaction']`: não HÁ `initialize()` de outro
-// módulo esperando por este, e o contrário também não é verdade.
+// LAB: Prompt de interação `[E]` com FormID exato sob a mira. O cliente apenas
+// sugere a referência; servidor resolve tipo, alcance, ação e permissão pelo
+// Interaction Framework. Não há fallback para o alvo mais próximo.
 moduleRegistry.register({
   id: 'interaction-prompt',
   enabledBy: 'ENABLE_INTERACTION_PROMPT',
   phase: 'lab',
-  dependencies: [],
+  dependencies: ['interaction'],
   commands: [],
   initialize: async () => {
     interactionPromptService.initInteractionPromptService();
@@ -622,8 +619,22 @@ moduleRegistry.register({
   commands: craftingService.commandDefs(),
   initialize: async () => {
     craftingService.registerInteractions();
-    craftingService.registerPhysicalAnchors();
+    await craftingService.registerPhysicalAnchors();
   }
+});
+
+// LAB: piso econômico sem profissão. Só sobe com um arquivo de rotas reais
+// (`public-work.<env>.json`); ausência ou FormDesc não resolvido falha fechado.
+moduleRegistry.register({
+  id: 'public-work',
+  enabledBy: 'ENABLE_PUBLIC_WORK_SERVICE',
+  phase: 'lab',
+  version: '0.1.0',
+  dependencies: ['interaction', 'interaction-prompt'],
+  commands: [],
+  initialize: async () => publicWorkService.initialize(),
+  shutdown: async () => publicWorkService.shutdown(),
+  healthCheck: () => publicWorkService.healthCheck()
 });
 
 // LAB: Trabalhos livres (bicos) — coleta de lenha/minério/peixe sem profissão
@@ -791,11 +802,9 @@ if (typeof mp !== "undefined") {
     updateNeighbor: ''
   });
 
-  // Prompt `[E]` (Tarefa 11): {targetId, targetType, label} ou {targetId:
-  // null}. Rótulo fixo no centro da tela — não precisa de projeção
-  // mundo→tela por quadro como a nametag, mas precisa registrar o listener
-  // de tecla (uma vez só) — daí o snippet próprio em vez do inline das
-  // outras quatro properties. Ver `interaction-prompt-service.js`.
+  // Prompt `[E]`: o event source compartilhado lê o FormID exato sob a mira;
+  // o servidor decide tipo/rótulo e esta property apenas transporta a decisão
+  // para a CEF. Proximidade valida alcance, mas nunca seleciona o alvo.
   mp.makeProperty(interactionPromptService.PROPERTY, {
     isVisibleByOwner: true,
     isVisibleByNeighbors: false,

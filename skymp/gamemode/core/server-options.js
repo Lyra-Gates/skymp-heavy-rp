@@ -70,7 +70,10 @@ const SPEC = {
 
   'crafting.xpPerCraft': { ...num(0, 1000), default: 2, usedBy: 'crafting-service.js (craftItem)' },
   'crafting.signatureMinRank': { ...num(0, 20), default: 2, usedBy: 'crafting-service.js (craftItem — gate de assinatura do artesao)' },
-  'crafting.maxDistance': { ...num(50, 1000), default: 211, usedBy: 'crafting-service.js (interações em estação física)' }
+  'crafting.maxDistance': { ...num(50, 1000), default: 211, usedBy: 'crafting-service.js (interações em estação física)' },
+
+  'publicWork.maxDistance': { ...num(50, 1000), default: 220, usedBy: 'public-work-service.js (quadro, origem e destino)' },
+  'publicWork.sweepIntervalSeconds': { ...num(10, 3600), default: 60, usedBy: 'public-work-service.js (expiração persistente)' }
 };
 
 /**
