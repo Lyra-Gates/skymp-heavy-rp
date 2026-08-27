@@ -1089,6 +1089,32 @@ describe('voip-service — comando /voz', () => {
     assert.doesNotThrow(() => voip.requestVoiceConnection(0xdeadbeef));
   });
 
+  it('a property voipTicket leva os dois tickets: listener e senderTicket', () => {
+    const ATOR = 0xff00f001;
+    commands.registerActiveCharacter(ATOR, { id: 901, first_name: 'Voz', last_name: 'Alta' }, 1, 1);
+    const sets = [];
+    global.mp = { set: (id, prop, value) => sets.push({ id, prop, value }) };
+    try {
+      voip.requestVoiceConnection(ATOR);
+    } finally {
+      delete global.mp;
+      commands.removeActiveCharacter(ATOR);
+    }
+
+    const t = sets.find(s => s.prop === 'voipTicket');
+    assert.ok(t, 'deveria ter feito mp.set(actorId, "voipTicket", ...)');
+    assert.strictEqual(t.value.actorId, ATOR);
+    assert.ok(t.value.ticket && t.value.ticket.length > 0, 'ticket de listener (ouvir)');
+    assert.ok(t.value.senderTicket && t.value.senderTicket.length > 0, 'senderTicket p/ o handoff (falar)');
+    assert.notStrictEqual(t.value.ticket, t.value.senderTicket, 'são tickets distintos, um por papel');
+
+    // O senderTicket tem que ser o pendente do papel 'sender' — o handoff o
+    // repassa pro --ticket do helper; o do listener nem serviria.
+    assert.strictEqual(
+      voip._pendingTickets.get(voip._ticketKey(ATOR, 'sender')).token, t.value.senderTicket
+    );
+  });
+
   it('commandDefs registra /voz e /voice', () => {
     const defs = voip.commandDefs();
     const def = defs.find(d => Array.isArray(d.name) && d.name.includes('/voz'));

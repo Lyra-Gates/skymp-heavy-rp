@@ -540,6 +540,60 @@ do SkyrimPlatform); qualquer coisa com jitter/perda de rede real fora de
 `127.0.0.1`. O FEC do Opus está ligado no encoder mas o lado do decode não pede
 recuperação em perda — é ganho de robustez parcial, não o esquema completo.
 
+### 8.7 Handoff automático do ticket — 27/08/2026
+
+Até aqui, subir o helper era copiar o ticket da linha de comando (§11). Agora o
+launcher faz sozinho.
+
+**A cadeia:**
+
+```
+/voz  →  voip-service                CEF (index.html)            launcher (loopback)
+         issueTicket('sender')       handleVoipTicket:           POST /voice-handoff
+         mp.set('voipTicket', {      fetch a 127.0.0.1:19848  →  valida ticket (hex, TTL
+           ticket,        (ouvir)      { actorId, ticket,          já e' de 30s + uso unico)
+           senderTicket,  (falar) ─────► host, port }              spawn voice-helper.exe
+           host, port })                                             --actor-id --ticket ...
+```
+
+**Decisões:**
+
+- **Por que a CEF no meio.** Os snippets da SkyrimPlatform rodam num sandbox sem
+  `fs` nem HTTP; a CEF é a única superfície do client que fala rede e já está
+  autenticada na cena de voz. O `senderTicket` fica na memória JS da CEF por
+  milissegundos antes de ir pro loopback — melhor que o arquivo em texto puro da
+  §11. Mesmo canal (a property) que o `ticket` de listener já usava.
+- **Porta fixa 19848**, ao lado da 19847 do callback do OAuth. A CEF é um
+  terceiro processo — não há como negociar porta.
+- **"Armado" só durante o jogo.** O servidor loopback do launcher recusa (409)
+  qualquer POST fora da janela entre um `launch-game` e o jogo fechar (um
+  watchdog de 4s em `isGameRunning` desarma). Reduz a chance de um processo local
+  qualquer disparar o helper quando não há jogo.
+- **Validação do corpo:** `actorId` inteiro > 0, `ticket` casando `/^[a-f0-9]{8,128}$/i`,
+  corpo ≤ 4 KB. O relay do servidor de voz continua usando a identidade
+  autenticada, nunca o `actorId` que veio no POST.
+- **Fail-open em toda junta:** sem `voice-helper.exe` no pacote → launcher nem
+  abre o listener; CEF sem `fetch` → loga e o jogador usa a §11; launcher antigo
+  → `fetch` falha em silêncio. Em nenhum caso o JOGAR trava, e **ouvir** nunca
+  depende disso.
+- **Ciclo de vida:** um helper por vez (novo `/voz` mata o anterior); morre com
+  o jogo (watchdog), com o launcher (`will-quit`), e `killGameProcesses` tem
+  `taskkill voice-helper.exe` como rede de segurança.
+
+**Verificado (27/08/2026):**
+
+| O quê | Como | Resultado |
+|---|---|---|
+| `/voz` põe `senderTicket` na property | teste novo em `voip-service.test.js` | listener e sender distintos; sender = pendente do papel `sender`. 50/50 |
+| CEF → loopback | `index.html` real no navegador do app + servidor stub na 19848 | `POST /voice-handoff` com `{actorId, ticket: senderTicket, host, port}` exatos; **uma vez** por ticket (dedupe) |
+| Servidor de handoff do launcher | `voice-handoff.test.mjs`, 12 casos | 409 desarmado, 200 armado c/ pid, 400 ticket não-hex / actorId ausente / JSON ruim, 413 corpo grande, 500 spawn falha |
+| Spawn do helper | stub de `spawn` em `voice-process.mjs` | resolve com pid; rejeita em erro |
+
+**NÃO verificado:** o `fetch` real da **CEF** do client (Chromium 108 embutido)
+de um `file://` pro loopback — testado no Chromium do navegador do app, mesma
+base. E a cadeia inteira com jogo real: `/voz` → helper sobe → alguém ouve.
+É o teste com 2–3 jogadores.
+
 ## 9. Próxima rodada — listado, não implementado
 
 Nada abaixo foi feito neste PR.
@@ -548,20 +602,18 @@ Nada abaixo foi feito neste PR.
 
 1. ~~**Um socket por `actorId` impede helper e UI de coexistirem.**~~
    **Resolvido em 07/08/2026 — ver §10.**
-2. **Handoff automático do ticket.** Hoje é copiar e colar na linha de comando.
-   ~~Pior: `issueTicket` sobrescreve o ticket pendente daquele ator, então um
-   `/voz` não serve para os dois lados.~~ A sobrescrita foi resolvida junto com
-   a §10 (o ticket agora é por papel, e um `/voz` emite os dois); o handoff
-   automático continua aberto e é Fase 3. O andaime temporário que destrava o
-   teste manual está na §11.
+2. ~~**Handoff automático do ticket.**~~ **Feito em 27/08/2026 — ver §8.7.**
+   O `/voz` manda o `senderTicket` na property `voipTicket`, a CEF repassa pro
+   launcher em loopback (porta 19848) e o launcher sobe o `voice-helper.exe`. O
+   andaime da §11 (`VOIP_DEBUG_EXPOSE_TICKET`) fica como fallback de bancada.
+   **Não verificado com jogadores:** o `fetch` da CEF pro loopback (testado no
+   Chromium do navegador do app, não no CEF do client).
 3. ~~**Empacotamento do executável e integração com o launcher.**~~
    **Feito em 27/08/2026.** O exe entra no instalador como
    `resources/vendor/voice-helper.exe` (via `scripts/stage-voice-helper.mjs`) e
    o fluxo JOGAR copia pra `Data/Platform/` (`ensure-voice-helper`), tudo
    fail-open porque a voz é opcional. O `electron-builder` já assina o exe. Ver
    [`LAUNCHER_DISTRIBUTION.md` §2 "voice-helper"](LAUNCHER_DISTRIBUTION.md).
-   **Falta:** o handoff automático do ticket (§11 / Fase 3) — hoje ainda é
-   linha de comando.
 
 **Qualidade**
 
@@ -693,17 +745,18 @@ duplicação não aparece). Um quinto teste passava pelo motivo errado: emitia
 ticket de `listener` e mandava `role: 'admin'`, então a recusa vinha da falta de
 ticket, não da validação de papel — passaria igual com a validação removida.
 
-## 11. Andaime temporário: exposição do ticket para teste manual
+## 11. Andaime: exposição do ticket para teste manual (fallback)
 
-> ⚠️ **Isto é temporário e deve ser removido.** A Fase 3 (handoff automático,
-> jogo → helper, sem intervenção manual — §9.2) substitui isto por completo. Ao
-> implementá-la, apague a flag, a função `_exposeDebugTicket`, a entrada no
-> `.gitignore` e esta seção.
+> O handoff automático (§8.7, 27/08/2026) tornou isto um **fallback**, não mais
+> o caminho principal. Continua útil pra: rodar o helper sem launcher (bancada),
+> e quando a CEF do client não conseguir fazer o `fetch` pro loopback. Pode ser
+> apagado — junto com `_exposeDebugTicket`, a flag, a entrada no `.gitignore` e
+> esta seção — quando o §8.7 estiver confirmado com jogadores.
 
-**O problema.** O ticket emitido por `/voz` ia só para a property `voipTicket`,
-lida pelo navegador do jogo. Não havia como um humano lê-lo — e sem lê-lo não há
-como passar `--ticket` para o `voice-helper.exe`. Um testador não conseguia
-sequer iniciar o teste.
+**O problema (que o §8.7 resolveu para o caso normal).** O ticket emitido por
+`/voz` ia só para a property `voipTicket`, lida pelo navegador do jogo. Não havia
+como um humano lê-lo — e sem lê-lo não há como passar `--ticket` para o
+`voice-helper.exe` à mão.
 
 **Escolhido:** `VOIP_DEBUG_EXPOSE_TICKET`, **padrão `false`**. Ligada, o `/voz`
 também grava o ticket de `sender` em `skymp/gamemode/.voip-debug-ticket.json`

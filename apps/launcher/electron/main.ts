@@ -12,6 +12,8 @@ import { syncUiBundle } from './ui-integrity.mjs';
 import { syncVoiceHelper } from './voice-helper.mjs';
 import { prepararConfiguracaoConexao } from './connection-settings.mjs';
 import { iniciarProcessoJogo } from './game-process.mjs';
+import { iniciarVoiceHelper, killVoiceHelper } from './voice-process.mjs';
+import { createVoiceHandoffServer, VOICE_HANDOFF_PORT } from './voice-handoff.mjs';
 
 // package.json tem "type": "module", entao o Vite empacota este arquivo como
 // ESM — __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
@@ -70,8 +72,79 @@ function ensureVoiceHelper(gamePath: string) {
   // Fica em Data/Platform/, junto do resto do que a SkyrimPlatform usa.
   return syncVoiceHelper({
     sourcePath: bundledVoiceHelperPath(),
-    targetPath: path.join(gamePath, 'Data', 'Platform', 'voice-helper.exe')
+    targetPath: deployedVoiceHelperPath(gamePath)
   });
+}
+
+function deployedVoiceHelperPath(gamePath: string) {
+  return path.join(gamePath, 'Data', 'Platform', 'voice-helper.exe');
+}
+
+// ─── Handoff do ticket de voz ───
+// O comando /voz no jogo emite um ticket de 'sender'; a CEF o repassa pra este
+// servidor loopback (porta 19848), que sobe o voice-helper.exe com --ticket.
+// Tudo opcional: sem exe, ou sem a CEF conseguindo fazer o fetch, falar nao
+// sobe e ouvir segue. Ver docs/technical/VOICE_NATIVE_HELPER.md §11.
+let voiceHandoff: ReturnType<typeof createVoiceHandoffServer> | null = null;
+let voiceWatchdog: NodeJS.Timeout | null = null;
+let voiceHandoffMissingLogged = false;
+
+function resolveVoiceHelperExe(gamePath: string): string | null {
+  const deployed = deployedVoiceHelperPath(gamePath);
+  if (fs.existsSync(deployed)) return deployed;
+  const bundled = bundledVoiceHelperPath();
+  return fs.existsSync(bundled) ? bundled : null;
+}
+
+async function armVoiceHandoff(gamePath: string) {
+  const exePath = resolveVoiceHelperExe(gamePath);
+  if (!exePath) {
+    if (!voiceHandoffMissingLogged) {
+      voiceHandoffMissingLogged = true;
+      console.info('[launcher] voice-helper.exe ausente; handoff de voz desativado nesta sessao.');
+    }
+    return;
+  }
+
+  if (!voiceHandoff) {
+    voiceHandoff = createVoiceHandoffServer({
+      async onHandoff({ actorId, ticket, host, port }) {
+        const args = [
+          '--actor-id', `0x${actorId.toString(16).toUpperCase()}`,
+          '--ticket', ticket,
+          '--host', host,
+          '--port', String(port)
+        ];
+        const r = await iniciarVoiceHelper(exePath, args, gamePath);
+        console.info(`[launcher] voice-helper iniciado (pid=${r.pid}) para actor 0x${actorId.toString(16)}`);
+        return r;
+      }
+    });
+    try {
+      await voiceHandoff.listen();
+    } catch (e: any) {
+      console.warn(`[launcher] handoff de voz nao pode escutar em ${VOICE_HANDOFF_PORT}: ${e?.message}`);
+      voiceHandoff = null;
+      return;
+    }
+  }
+
+  voiceHandoff.arm();
+
+  // Sem watcher de saida do jogo (o spawn e detached). Quando o jogo fecha,
+  // desarma o handoff e mata o helper — a voz nao faz sentido sem o jogo.
+  if (voiceWatchdog) clearInterval(voiceWatchdog);
+  let vimoJogoRodando = false;
+  voiceWatchdog = setInterval(async () => {
+    const running = await isGameRunning();
+    if (running) { vimoJogoRodando = true; return; }
+    if (!vimoJogoRodando) return; // ainda subindo
+    clearInterval(voiceWatchdog!);
+    voiceWatchdog = null;
+    voiceHandoff?.disarm();
+    killVoiceHelper();
+    console.info('[launcher] jogo encerrado; handoff de voz desarmado.');
+  }, 4000);
 }
 
 type LauncherConfig = {
@@ -181,6 +254,12 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  if (voiceWatchdog) clearInterval(voiceWatchdog);
+  killVoiceHelper();
+  voiceHandoff?.close().catch(() => {});
 });
 
 app.on('activate', () => {
@@ -652,10 +731,15 @@ function isGameRunning(): Promise<boolean> {
 }
 
 function killGameProcesses(): Promise<void> {
+  // O helper de voz e filho do launcher — mata pelo handle primeiro; o taskkill
+  // e rede de seguranca pra uma instancia orfa de sessao anterior.
+  voiceHandoff?.disarm();
+  killVoiceHelper();
   return new Promise((resolve) => {
     exec(
       'taskkill /F /T /IM SkyrimSE.exe & taskkill /F /T /IM skse64_loader.exe & ' +
-      'taskkill /F /IM "SkyrimPlatformCEF.exe.hidden" & taskkill /F /IM "SkyrimPlatformCEF.exe"',
+      'taskkill /F /IM "SkyrimPlatformCEF.exe.hidden" & taskkill /F /IM "SkyrimPlatformCEF.exe" & ' +
+      'taskkill /F /IM voice-helper.exe',
       { windowsHide: true },
       () => resolve()
     );
@@ -1440,6 +1524,12 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
     await killGameProcesses();
     const processResult = await iniciarProcessoJogo(exePath, folderPath);
     console.info(`[launcher] Skyrim iniciado com pid=${processResult.pid}`);
+
+    // Handoff de voz: liga o listener loopback pra quando o jogador rodar /voz.
+    // Nunca bloqueia o JOGAR — a voz e opcional.
+    armVoiceHandoff(folderPath).catch((e) =>
+      console.warn('[launcher] nao foi possivel armar o handoff de voz:', e?.message));
+
     return { ok: true, pid: processResult.pid };
   } catch (e: any) {
     const code = typeof e?.code === 'string' ? e.code : 'GAME_LAUNCH_FAILED';

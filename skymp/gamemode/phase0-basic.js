@@ -783,7 +783,9 @@ if (typeof mp !== "undefined") {
     updateNeighbor: ''
   });
   // Ticket de conexão de voz (emitido pelo comando /voz) — o cliente recebe
-  // {actorId, ticket, host, port} e só então abre o WebSocket de sinalização.
+  // {actorId, ticket, senderTicket, host, port}: `ticket` abre o WebSocket de
+  // sinalização (ouvir); `senderTicket` a CEF repassa pro launcher em loopback,
+  // que sobe o voice-helper.exe (falar). Ver voip-service.requestVoiceConnection.
   mp.makeProperty('voipTicket', {
     isVisibleByOwner: true,
     isVisibleByNeighbors: false,

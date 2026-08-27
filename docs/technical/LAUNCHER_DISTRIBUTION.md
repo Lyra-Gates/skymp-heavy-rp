@@ -78,8 +78,23 @@ junto com o resto quando há certificado (visto no log:
 precisa de passo próprio de `signtool`. Cai na mesma exigência de carimbo de
 tempo da §6.
 
-**Ainda não feito:** o *handoff* do ticket de voz para o helper (hoje é linha de
-comando, §11 do doc de voz) — o empacotamento só garante que o binário está lá.
+**Handoff do ticket (27/08/2026).** Ao rodar `/voz` no jogo, o servidor manda o
+`senderTicket` na property `voipTicket`; a CEF (`skymp/ui/index.html`) faz `POST`
+para `http://127.0.0.1:19848/voice-handoff` e o launcher sobe o
+`voice-helper.exe` com esse ticket. Detalhes e as decisões (por que passa pela
+CEF, porta fixa, servidor "armado" só durante o jogo, validação) em
+[`VOICE_NATIVE_HELPER.md` §8.7](VOICE_NATIVE_HELPER.md).
+
+No launcher isso é `electron/voice-handoff.mjs` (servidor loopback, gate
+armado/desarmado) + `electron/voice-process.mjs` (spawn, um helper por vez),
+ligados no `main.ts`: `armVoiceHandoff` no `launch-game`, um watchdog de 4s em
+`isGameRunning` que desarma e mata o helper quando o jogo fecha, e limpeza no
+`will-quit`. Tudo fail-open — sem exe, sem `fetch` na CEF, ou launcher antigo, a
+voz de **falar** só não sobe; **ouvir** e o JOGAR seguem.
+
+**Ainda não verificado com jogadores:** o `fetch` de um `file://` da CEF do
+client (Chromium 108 embutido) para o loopback — testado só no Chromium do
+navegador do app.
 
 ## 3. Paridade em tempo de conexão — **falta o servidor**
 

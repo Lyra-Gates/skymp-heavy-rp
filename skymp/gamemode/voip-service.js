@@ -673,6 +673,14 @@ function requestVoiceConnection(actorId) {
     mp.set(actorId, 'voipTicket', {
       actorId,
       ticket,
+      // Handoff do launcher: o `senderTicket` viaja junto pela property e a CEF
+      // (`index.html`) o repassa pro launcher em loopback, que sobe o
+      // `voice-helper.exe`. Sem launcher escutando (ou CEF sem `fetch`), o
+      // repasse falha em silêncio e falar precisa do helper à mão — ouvir segue.
+      // O canal é o mesmo da property que o `ticket` de listener já usa; o token
+      // fica na memória da CEF por milissegundos antes de ir pro loopback, o que
+      // é melhor do que o arquivo em texto puro do `_exposeDebugTicket`.
+      senderTicket,
       host: VOIP_PUBLIC_HOST,
       port: VOIP_PORT,
       sentAt: Date.now()
@@ -683,12 +691,16 @@ function requestVoiceConnection(actorId) {
 }
 
 /**
- * ⚠️ ANDAIME DE TESTE — TEMPORÁRIO. Remover junto com a Fase 3.
+ * ⚠️ ANDAIME DE TESTE — mantido como FALLBACK do handoff automático.
+ *
+ * O handoff pelo launcher (senderTicket na property → CEF → loopback →
+ * voice-helper.exe) é o caminho normal desde 27/08/2026. Isto continua aqui,
+ * desligado por padrão, pra dois casos: rodar o helper sem launcher (bancada), e
+ * quando a CEF do client não tem `fetch` pro loopback. Pode sumir quando o
+ * handoff estiver confirmado com jogadores reais.
  *
  * Escreve o ticket do `sender` num arquivo local e loga em `warn`, pra que uma
- * pessoa testando consiga copiá-lo pro `--ticket` do `voice-helper.exe`. Hoje o
- * ticket só existe dentro da property `voipTicket`, que é lida pelo navegador do
- * jogo — não há como um humano vê-lo.
+ * pessoa consiga copiá-lo pro `--ticket` do `voice-helper.exe`.
  *
  * Por que atrás de flag, desligada por padrão: isto grava em disco, em texto
  * puro, uma credencial que autentica como aquele jogador na cena de voz. Vale 30

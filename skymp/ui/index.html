@@ -1699,7 +1699,35 @@
     const msg = normalizePayload(payload);
     if (!msg || !msg.actorId || !msg.ticket) return;
     connectVoip(msg.actorId, msg.ticket, msg.host, msg.port);
+    if (msg.senderTicket) forwardVoiceHandoff(msg);
   };
+
+  // Handoff do voice-helper: o launcher escuta em loopback e sobe o
+  // voice-helper.exe com este ticket de 'sender'. Se ninguem responde (launcher
+  // antigo, jogo aberto sem launcher, ou CEF sem fetch), FALAR nao sobe — OUVIR
+  // segue funcionando pelo caminho acima. Fire-and-forget, uma vez por ticket.
+  const VOICE_HANDOFF_URL = 'http://127.0.0.1:19848/voice-handoff';
+  let voiceHandoffSent = null;
+  function forwardVoiceHandoff(msg) {
+    if (voiceHandoffSent === msg.senderTicket) return;
+    voiceHandoffSent = msg.senderTicket;
+    if (typeof fetch !== 'function') {
+      console.warn('[voip] sem fetch neste runtime; rode o voice-helper.exe a mao.');
+      return;
+    }
+    fetch(VOICE_HANDOFF_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        actorId: msg.actorId,
+        ticket: msg.senderTicket,
+        host: msg.host,
+        port: msg.port
+      })
+    })
+      .then((r) => console.log('[voip] handoff do helper:', r.status))
+      .catch((err) => console.warn('[voip] handoff do helper indisponivel:', err && err.message));
+  }
 
   // F2 (ver core/player-shortcuts-service.js SNIPPET_DO_CLIENTE): repassa pro
   // servidor pelo MESMO caminho que qualquer clique de UI já usa —
