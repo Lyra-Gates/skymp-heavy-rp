@@ -10,6 +10,7 @@ const api = {
   checkGamePath: (folderPath: string) => ipcRenderer.invoke('check-game-path', folderPath),
   ensureSkyrimIni: (opts?: any) => ipcRenderer.invoke('ensure-skyrim-ini', opts),
   ensureSkympUi: (folderPath: string) => ipcRenderer.invoke('ensure-skymp-ui', folderPath),
+  ensureVoiceHelper: (folderPath: string) => ipcRenderer.invoke('ensure-voice-helper', folderPath),
   getDisplaySettings: () => ipcRenderer.invoke('get-display-settings'),
   discordLogin: () => ipcRenderer.invoke('discord-login'),
   discordLogout: () => ipcRenderer.invoke('discord-logout'),

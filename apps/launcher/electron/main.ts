@@ -9,6 +9,7 @@ import { URL, fileURLToPath } from 'url';
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
 import { avaliarEspaco, ehDiscoCheio } from './disk.mjs';
 import { syncUiBundle } from './ui-integrity.mjs';
+import { syncVoiceHelper } from './voice-helper.mjs';
 import { prepararConfiguracaoConexao } from './connection-settings.mjs';
 import { iniciarProcessoJogo } from './game-process.mjs';
 
@@ -51,6 +52,25 @@ function ensureSkympUi(gamePath: string) {
   return syncUiBundle({
     sourceDir: bundledUiDir(),
     targetDir: path.join(gamePath, 'Data', 'Platform', 'UI')
+  });
+}
+
+// voice-helper.exe: captura de microfone fora do CEF pra voz por proximidade.
+// Empacotado como resources/vendor/ quando o build de C++ estava disponivel na
+// hora de gerar o instalador (scripts/stage-voice-helper.mjs). Pode nao existir:
+// a voz e opcional e o helper nao sai do `npm run build`.
+function bundledVoiceHelperPath() {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'vendor', 'voice-helper.exe')
+    : path.resolve(__dirname, '../../../voice-helper/build/Release/voice-helper.exe');
+}
+
+function ensureVoiceHelper(gamePath: string) {
+  if (!gamePath) return { ok: false, repaired: false, error: 'Caminho do jogo invalido.' };
+  // Fica em Data/Platform/, junto do resto do que a SkyrimPlatform usa.
+  return syncVoiceHelper({
+    sourcePath: bundledVoiceHelperPath(),
+    targetPath: path.join(gamePath, 'Data', 'Platform', 'voice-helper.exe')
   });
 }
 
@@ -374,6 +394,8 @@ ipcMain.handle('ensure-skyrim-ini', async (_event, opts) => {
 });
 
 ipcMain.handle('ensure-skymp-ui', async (_event, gamePath) => ensureSkympUi(gamePath));
+
+ipcMain.handle('ensure-voice-helper', async (_event, gamePath) => ensureVoiceHelper(gamePath));
 
 ipcMain.handle('get-display-settings', async () => {
   const result: { displays: Array<{ width: number; height: number }>; current: any } = { displays: [], current: null };

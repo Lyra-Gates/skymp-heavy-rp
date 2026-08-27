@@ -1,0 +1,6 @@
+# Staging de recursos nativos empacotados pelo electron-builder (resources/vendor/).
+#
+# voice-helper.exe entra aqui via scripts/stage-voice-helper.mjs (rodado pelo
+# `npm run build`) quando o binario existe em voice-helper/build/Release/.
+# O exe NAO e commitado — ver .gitignore. Este diretorio existe versionado
+# porque o electron-builder precisa que o `from` de extraResources exista.

@@ -41,26 +41,45 @@ Há três artefatos independentes: launcher, cliente SkyMP e modpack. A versão 
 
 Os sete arquivos de `skymp/ui/` entram no instalador como `resources/skymp-ui`. Antes da validação de versão e antes da fila, o launcher compara SHA-256 arquivo a arquivo com `Data/Platform/UI` e copia somente os ausentes ou divergentes. Arquivos extras são preservados. **Configurações → Reparar Interface** executa a mesma operação manualmente. Um bundle interno sem `index.html` falha fechado.
 
-### voice-helper — não empacotado ainda, mas já é um arquivo só
+### voice-helper — empacotado como recurso opcional (27/08/2026)
 
-O `voice-helper/` (captura de microfone fora do CEF, para a voz por proximidade —
-ver [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md)) **ainda não entra no
-instalador**. Quando entrar, é **um arquivo**: `voice-helper.exe` (~2,2 MB).
+O `voice-helper.exe` (captura de microfone fora do CEF, para a voz por
+proximidade — ver [`VOICE_NATIVE_HELPER.md`](VOICE_NATIVE_HELPER.md)) entra no
+instalador como **`resources/vendor/voice-helper.exe`** (~2,2 MB, um arquivo só),
+ao lado de `resources/skymp-ui`.
 
-O build padrão usa o triplet estático do vcpkg (`x64-windows-static`) — `opus`,
-`zlib` e a CRT entram no exe. O RNNoise também é estático (`FetchContent` + lib
-estática). Confirmado com `dumpbin /dependents`: o exe só depende de DLLs de
-sistema do Windows (`WS2_32`, `CRYPT32`, `KERNEL32`, `bcrypt`). Não há `opus.dll`
-nem `z.dll` pra carregar junto — quem montar o pacote copia só o exe.
+**Como chega lá.** O helper é C++/CMake/MSVC — não sai do `npm run build`. A
+ponte é `scripts/stage-voice-helper.mjs`, que roda no início do `build` e copia
+`voice-helper/build/Release/voice-helper.exe` para `apps/launcher/build-resources/`,
+de onde o `extraResources` do `electron-builder.json` o pega. O `build-resources/`
+é versionado (com `.gitkeep`) porque o `electron-builder` exige que o `from`
+exista; o exe **não** é versionado (`.gitignore`).
 
-> Com o triplet dinâmico (`x64-windows`) o build também passa, mas aí `opus.dll`
-> e `z.dll` ficam ao lado do exe e teriam que ir junto. Não use esse pra
-> empacotar.
+**Fail-open, dos dois lados:**
 
-Assinatura: o `voice-helper.exe` é executável distribuído, então cai na mesma
-exigência de Authenticode com carimbo de tempo da §6 — não é coberto pelo
-`electron-builder` (que só assina o instalador do launcher) e precisa de um passo
-próprio de `signtool` no workflow de release quando existir.
+- **Build sem o exe** (contribuidor sem toolchain C++): o script avisa e sai `0`,
+  o `electron-builder` empacota sem `resources/vendor/` e o instalador sai normal
+  — só sem a voz nativa. Mesma filosofia do `CSC_LINK` ausente na §6. Verificado.
+- **Runtime sem o exe**: no fluxo JOGAR, `ensure-voice-helper` (IPC) copia o exe
+  para `<jogo>/Data/Platform/voice-helper.exe` com verificação de hash, igual à
+  UI — mas se o binário não veio no pacote, `syncVoiceHelper` devolve
+  `{ ok: true, skipped: true }` e o JOGAR segue. A voz é opcional; a UI é
+  fail-closed, o helper não.
+
+**Triplet.** O `stage-voice-helper.mjs` **recusa** (exit 1) se achar `opus.dll`
+ou `z.dll` ao lado do exe — sinal de build dinâmico (`x64-windows`), que
+precisaria das DLLs junto. O build tem que ser `x64-windows-static` (opus, zlib
+e CRT dentro do exe; `dumpbin /dependents` só mostra DLLs de sistema:
+`WS2_32`, `CRYPT32`, `KERNEL32`, `bcrypt`). RNNoise já é estático.
+
+**Assinatura.** O `electron-builder` **já assina** o `resources/vendor/voice-helper.exe`
+junto com o resto quando há certificado (visto no log:
+`signing with signtool.exe path=...\resources\vendor\voice-helper.exe`) — não
+precisa de passo próprio de `signtool`. Cai na mesma exigência de carimbo de
+tempo da §6.
+
+**Ainda não feito:** o *handoff* do ticket de voz para o helper (hoje é linha de
+comando, §11 do doc de voz) — o empacotamento só garante que o binário está lá.
 
 ## 3. Paridade em tempo de conexão — **falta o servidor**
 

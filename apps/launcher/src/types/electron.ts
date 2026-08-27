@@ -23,6 +23,7 @@ export interface ElectronAPI {
   checkGamePath: (folderPath: string) => Promise<{ ok: boolean; reason: string }>;
   ensureSkyrimIni: (opts?: any) => Promise<any>;
   ensureSkympUi: (folderPath: string) => Promise<{ ok: boolean; repaired: string[]; files?: number; error?: string }>;
+  ensureVoiceHelper: (folderPath: string) => Promise<{ ok: boolean; repaired: boolean; skipped?: boolean; reason?: string; error?: string }>;
   getDisplaySettings: () => Promise<any>;
   discordLogin: () => Promise<AuthData | null>;
   discordLogout: () => Promise<boolean>;

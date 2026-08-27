@@ -188,6 +188,13 @@ export function Home({ auth, setAuth }: HomeProps) {
         return;
       }
 
+      // Voz por proximidade: opcional, nunca trava o JOGAR. Se o helper nao veio
+      // no pacote (skipped) ou a copia falhou, segue — a voz so nao funciona.
+      const voice = await window.electronAPI.ensureVoiceHelper(gamePath);
+      if (!voice.ok) {
+        console.warn('[launcher] voice-helper nao instalado:', voice.error);
+      }
+
       setStatus('Validando versao do cliente...');
       const clientUpdate = await window.electronAPI.checkClientUpdate(gamePath);
       if (clientUpdate.error) {

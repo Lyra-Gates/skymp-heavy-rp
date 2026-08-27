@@ -554,11 +554,14 @@ Nada abaixo foi feito neste PR.
    a §10 (o ticket agora é por papel, e um `/voz` emite os dois); o handoff
    automático continua aberto e é Fase 3. O andaime temporário que destrava o
    teste manual está na §11.
-3. **Empacotamento e assinatura do executável**, e integração com o launcher.
-   O exe já sai standalone (triplet `x64-windows-static`, sem DLLs próprias) —
-   falta a cópia pro instalador e a assinatura com carimbo de tempo (mesma
-   exigência da §6 do launcher). Ver
+3. ~~**Empacotamento do executável e integração com o launcher.**~~
+   **Feito em 27/08/2026.** O exe entra no instalador como
+   `resources/vendor/voice-helper.exe` (via `scripts/stage-voice-helper.mjs`) e
+   o fluxo JOGAR copia pra `Data/Platform/` (`ensure-voice-helper`), tudo
+   fail-open porque a voz é opcional. O `electron-builder` já assina o exe. Ver
    [`LAUNCHER_DISTRIBUTION.md` §2 "voice-helper"](LAUNCHER_DISTRIBUTION.md).
+   **Falta:** o handoff automático do ticket (§11 / Fase 3) — hoje ainda é
+   linha de comando.
 
 **Qualidade**
 

@@ -14,6 +14,10 @@ dist-electron
 release
 *.local
 
+# Binario nativo stajado pelo scripts/stage-voice-helper.mjs (nao versionado;
+# vem do build de voice-helper/). O diretorio fica, o exe nao.
+build-resources/voice-helper.exe
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
