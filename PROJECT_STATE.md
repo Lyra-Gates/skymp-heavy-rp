@@ -4,12 +4,14 @@
 > (Economia/Vault), PR #46 (Depot — recuperado de snapshot) e PR #45 (UX)
 > em `main`, antes do início do módulo de Justiça.
 >
-> **Snapshot operacional vigente (24/08/2026):** [PRODUCTION_READINESS_ACTION_PLAN.md](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md)
-> é a referência mais recente: **1.457 testes de produto**, incluindo **1.233
-> testes do gamemode**, migrations lineares até **v28**, **76 tabelas**,
-> `check-write-guards --all` sem ocorrências, typechecks do launcher e do
-> gamemode limpos e **14/14 checks de sistema**. O parecer de promoção permanece
-> **NO-GO**; ver [PRODUCTION_BLOCKERS_2026-08-24.md](docs/operations/PRODUCTION_BLOCKERS_2026-08-24.md).
+> **Snapshot local vigente (26/08/2026):** [PRODUCTION_READINESS_ACTION_PLAN.md](docs/roadmap/PRODUCTION_READINESS_ACTION_PLAN.md)
+> continua sendo a referência operacional. O gamemode possui **1.262 testes,
+> todos aprovados**, migrations lineares até **v29**, **80 tabelas
+> declaradas** e typecheck limpo. MariaDB e clientes reais não estavam
+> disponíveis para homologação. O total agregado de testes de produto e os
+> checks externos do snapshot de 24/08 não foram recalculados nesta revisão. O
+> parecer de promoção permanece **NO-GO**; ver
+> [PRODUCTION_BLOCKERS_2026-08-24.md](docs/operations/PRODUCTION_BLOCKERS_2026-08-24.md).
 
 ## O que o framework faz hoje
 
@@ -37,9 +39,19 @@
   — já estava em `main` antes desta unificação).
 - **UX / Interaction Hub** (Tarefa 11): prompt de interação `[E]`
   (`core/interaction-prompt-service.js`), ponte SELF → `/painel`
-  (`character-dashboard-bridge.js`), resolução por proximidade (não
-  raycast — fora do escopo sem fork do SkyMP).
+  (`character-dashboard-bridge.js`) e alvo exato por
+  `Game.getCurrentCrosshairRef()` + `mp.onActivate`; sem fallback de
+  proximidade. Continua sem homologação no cliente real.
+- **Public Work**: domínio e fluxo genérico quadro→origem→destino,
+  persistência/idempotência/cooldown/ledger e migration v29. O módulo está
+  desligado localmente, sem rotas com FormDesc reais e sem validação MariaDB.
 - **Voz**: SkyVoice, sinalização WebSocket, proximidade por célula.
+- **Launcher / bootstrap de conexão**: configuração fail-closed dos dois
+  contratos SkyMP, sessão opaca sem `profileId` declarado pelo cliente,
+  destino direto com `server-info-ignore:true` e criação do SKSE por `spawn`
+  confirmada por PID. Coberto por testes e build NSIS; homologação com dois
+  clientes reais ainda pendente. Ver
+  [ADR-012](docs/technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md).
 - **Crime & Proveniência** *(adicionado depois desta unificação — ver §
   "O que veio depois" abaixo)*: `item_instances`, item "quente", revista
   institucional, restituição por combat-log.
@@ -81,8 +93,8 @@ verificador passou a reportar **zero ocorrências**.
 No marco de 22/08, a validação era de **974 testes do gamemode**, 62 arquivos
 de teste registrados e 68 tabelas com migrations lineares até v20. Esses
 números preservam a evolução daquele merge; a baseline operacional vigente é
-a do cabeçalho deste documento: **1.457 testes de produto**, **1.233 do
-gamemode**, **76 tabelas** e migrations até **v28**.
+a do cabeçalho deste documento: **1.262 testes do gamemode, todos aprovados,
+80 tabelas** e migrations até **v29**.
 - Nenhum arquivo untracked/órfão fora do já esperado (`spikes/` já
   versionado; configs locais de `.claude/` fora deste merge).
 
@@ -149,8 +161,9 @@ vigente no cabeçalho.
 
   Estado da suíte naquele marco intermediário: **1107 testes, 264 suítes, 0
   falhas**; o typecheck ainda preservava 4 erros pré-existentes. No snapshot
-  vigente de 24/08, o gamemode possui **1.233 testes**, os typechecks do launcher
-  e do gamemode estão limpos e a baseline total é de **1.457 testes de produto**.
+  vigente de 26/08, o gamemode possui **1.262 testes, todos aprovados**,
+  e o typecheck do gamemode está limpo. O total agregado de produto não foi
+  recalculado nesta revisão.
 
 ## Housekeeping de documentação (23/08/2026)
 

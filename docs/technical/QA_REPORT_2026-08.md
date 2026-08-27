@@ -321,5 +321,5 @@ Nasceu do estudo de integração com a Chancelaria Real, que roda em produção 
 - **Comportamento em jogo.** Nenhum comando (`/painel`, `/socorrer`, `/iniciar`, `/permakill`, `/voz`) foi executado numa sessão real. Os testes usam `mp` mockado. O servidor **subiu** em 06/08/2026 e o gamemode carregou, mas ninguém conectou.
 - **O snippet de cliente do `_onHit`.** `mp.makeEventSource` foi confirmada por sonda e o boot registra o evento, mas o trecho que roda no Skyrim Platform só executa quando alguém conecta.
 - **Interação real com a API do Discord.** O bot e a nova rota de OAuth não foram exercitados contra bot/guild reais.
-- **Build empacotado do launcher.** A correção de `define` foi validada por typecheck, não por instalador gerado.
+- **Build empacotado do launcher — ressalva histórica superada em 26/08/2026.** Na data original deste relatório, a correção de `define` havia sido validada apenas por typecheck. Depois disso, o build NSIS foi executado ponta a ponta mais de uma vez; a revisão de 26/08 também empacotou o novo bootstrap fail-closed. Isso comprova o empacotamento, mas não substitui o teste de conexão com dois clientes reais. Ver [`ADR-012`](ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md).
 - **Carga.** Nenhuma medição com múltiplos jogadores, que é onde o polling de 2s do `death-service`/`player-panel`/`voip` tende a aparecer primeiro.

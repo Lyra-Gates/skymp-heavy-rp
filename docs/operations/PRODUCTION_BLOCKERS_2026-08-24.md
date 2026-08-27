@@ -1,5 +1,10 @@
 # Parecer de prontidão — 24/08/2026
 
+> **Revalidado localmente em 26/08/2026.** A decisão NO-GO permanece. O
+> gamemode agora possui 1.262 testes, todos aprovados,
+> migration v29 e 80 tabelas declaradas. MariaDB e clientes reais continuam
+> indisponíveis; portanto nenhum gate de promoção foi fechado.
+
 ## Decisão atual: NO-GO para produção/alfa pública
 
 O repositório tem uma base automatizada forte e os trabalhos possíveis sem
@@ -10,7 +15,7 @@ sistema. Esta decisão é baseada nos gates, não em percepção de acabamento.
 
 | Bloqueio | Evidência necessária para fechar |
 |---|---|
-| MariaDB/staging indisponível | migrations v28 aplicadas, schema drift limpo, concorrência e restart |
+| MariaDB/staging indisponível | migrations até v29 aplicadas, schema drift limpo, concorrência e restart |
 | clientes Skyrim reais | dois clientes por 30 min; CEF, `[E]`, Papyrus e reconexão |
 | conteúdo físico | FormDescs de nó/depot/estações e receita de Ferreiro confirmados |
 | distribuição | segunda instalação limpa, manifesto e launcher end-to-end |
@@ -28,13 +33,17 @@ Fundidor. O dono de produto precisa definir a regra e os atores autorizados.
 
 ## Evidência automatizada disponível
 
-- gamemode: 1.233 testes e typecheck limpo após crafting/depot físico;
-- migration dry-run: 26 arquivos, 157 instruções, até v28;
-- schema declarado: 76 tabelas;
+- gamemode: 1.262 testes, todos aprovados, e typecheck limpo;
+- migration dry-run: 27 arquivos, 162 instruções, até v29;
+- schema declarado: 80 tabelas;
 - registry: 76 testes listados, sem órfãos;
 - write guards: nenhuma armadilha conhecida;
 - runner de soak: testes unitários e relatório JSON, aguardando staging;
 - backup, restore, rollback, staging e auditor de configuração já versionados.
+- launcher: bootstrap fail-closed coberto por 15 testes novos, suíte 85/85,
+  typecheck/lint aprovados e instalador NSIS gerado; handshake com dois clientes
+  ainda pendente conforme
+  [`ADR-012`](../technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md).
 
 O documento vivo de execução continua sendo
 [`PRODUCTION_READINESS_ACTION_PLAN.md`](../roadmap/PRODUCTION_READINESS_ACTION_PLAN.md).

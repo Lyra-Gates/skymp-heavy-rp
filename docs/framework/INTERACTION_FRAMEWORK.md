@@ -1,6 +1,9 @@
 # Interaction Framework
 
-**Estado:** implementado, testado (96 testes) e **é o único caminho** — o legado foi removido em 13/08/2026. **Nunca rodou numa sessão real** — mesmo peso que *"ninguém ouviu ainda"* tem na voz nativa e que a projeção não executada tem na etiqueta de identidade.
+**Estado:** implementado em LAB; conferido em 26/08/2026 com **1.262 testes do
+gamemode, 1.261 aprovados e 1 falha conhecida em Safe Zones**. É o único
+pipeline genérico de interação; o caminho legado foi removido em 13/08/2026.
+**Nunca rodou numa sessão real.**
 
 Arquivos:
 
@@ -309,6 +312,9 @@ O resultado do `execute` vai por notificação, não por modal: o resultado de u
 | `stall.view` — Ver vitrine | market-stalls | `chat.localRange` | **TRACE** | não |
 | `stall.buy` — Comprar item | market-stalls | `chat.localRange` | ECONOMY | **sim** |
 | `identity.introduce` — Apresentar-se | identity | 450 | **TRACE** | não |
+| `mining.mine` — Minerar | mining | `mining.maxDistance` | ECONOMY | **sim** |
+| `crafting.recipes` / `crafting.craft` | crafting | `crafting.maxDistance` | TRACE/ECONOMY | craft: **sim** |
+| `public_work.accept_*` / `pickup` / `deliver` / `cancel` | public-work | `publicWork.maxDistance` | GAMEPLAY/ECONOMY | operações econômicas: **sim** |
 
 Cada `execute` chama a mesma função de domínio de sempre (`stopTarget`, `fineTarget`, `buyItem`, …), **e cada uma revalida permissão e alcance por conta própria**. A redundância é deliberada: se alguém chamar `fineTarget` por outro caminho, a checagem continua lá.
 
@@ -349,7 +355,53 @@ Duas mudanças de comportamento vieram junto:
   nada, e um menu de RP que oferece gestos vazios ensina o jogador a ignorá-lo.
 
 ## 14. O que NÃO está feito
-- **A CEF ainda não usa `interaction:*`.** `skymp/ui/index.html` continua no `governance:interaction:*` e mantém o próprio `ACTION_CONFIG`.
-- **`stall.manage` não tem lugar no menu** — depende de alvo `self`, que o framework não permite. O comando de chat continua sendo o caminho. Quando `object`/`container` ganhar resolvedor, a barraca vira alvo de verdade e a ação volta.
-- **Seis dos sete tipos de alvo não têm resolvedor.** Por escolha (§6).
-- **Nada disto rodou numa sessão real.** 96 testes verdes e zero jogadores.
+- **A aquisição de alvo físico exato está implementada em LAB, não homologada.**
+  O cliente usa `Game.getCurrentCrosshairRef()` + conversão de FormID e o
+  servidor determina o tipo. O caminho por proximidade foi removido da
+  autoridade do prompt.
+- **O Blocker D do Minerador foi corrigido em código.** Falta confirmar
+  `crosshairRefChanged`, conversões e comportamento do E nativo na nossa build
+  e no teste com três clientes; isso impede declarar a feature pronta.
+- **A leitura do core publicado definiu a rota adotada no LAB.** O Skyrim
+  Platform expõe `crosshairRefChanged`, e o SkyMP transporta E como
+  `activate(target, caster)`. O polling de mira e a segunda captura por
+  `buttonEvent` foram removidos; `core/activation-events.js` agora é o dono
+  único de `mp.onActivate`. O retorno síncrono ainda precisa ser homologado no
+  jogo. O estudo e as restrições do hook estão em
+  [SKYRIM_ROLEPLAY_SKYMP_CORE_STUDY_2026-08-25.md](../research/SKYRIM_ROLEPLAY_SKYMP_CORE_STUDY_2026-08-25.md).
+- **O gateway CEF→servidor foi corrigido em código, mas não homologado no
+  runtime real.** Não confundir a correção de transporte (Blocker C) com a
+  aquisição do alvo (Blocker D); são problemas independentes.
+- **`stall.manage` não tem lugar no menu de mundo** — ainda depende do alvo
+  `self`. O comando de chat continua até a barraca possuir uma referência
+  física própria registrada como `object`.
+- **Nada disto rodou numa sessão real.** Há cobertura automatizada, mas zero
+  jogadores e uma falha conhecida na suíte atual.
+- **A suíte não está verde neste snapshot.** Safe Zones ainda desconhece a
+  categoria `work`; 1 de 1.262 testes falha por essa divergência.
+- **Há dois gaps de aquisição conhecidos.** Minerador trata
+  `interaction-prompt` como dependência opcional apesar de não ter comando, e
+  o Depot registra provider sem atualizar o snapshot síncrono consultado pelo
+  E quando nenhum outro módulo de anchors está ativo.
+- **O Minerador ainda não filtra o tipo do Resource Node.** Até a correção,
+  TREE/HERB/CROP/FISHING também podem aparecer como `mining.mine` e conceder XP
+  de Minerador.
+
+### Contrato implementado em LAB para alvo de mundo
+
+1. cliente captura a referência exata sob a mira ao pressionar E;
+2. cliente converte o FormID para o formato do servidor;
+3. servidor resolve o objeto e lista ações permitidas;
+4. no execute, servidor resolve e valida novamente alvo, célula, distância,
+   estado e permissão;
+5. alvo vazio, alterado ou desconhecido falha fechado — sem fallback para o
+   objeto/jogador mais próximo.
+
+O evento nativo não encerra a validação. O core SkyMP confere o mesmo
+worldspace na ativação, mas não confere distância; por isso o passo 4 permanece
+obrigatório mesmo quando o alvo vem de `mp.onActivate`.
+
+Este contrato está implementado uma vez no framework e deve ser consumido por
+Minerador e [Public Work](../gameplay/PUBLIC_WORK_SYSTEM.md). O relatório de
+estado e a ordem de validação estão em
+[MINING_RUNTIME_VALIDATION_REPORT.md](../research/MINING_RUNTIME_VALIDATION_REPORT.md).

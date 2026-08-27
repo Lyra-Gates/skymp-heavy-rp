@@ -16,6 +16,12 @@ o registro.** Sem NPC, sem fila de staff, sem arbitragem automática.
 > nunca foi visto num servidor com gente dentro. Ligar de verdade é outra
 > decisão, depois da [Fase 0](../technical/FASE_0_ROTEIRO.md).
 
+> **Não confundir com Public Work.** Contrato nasce de uma promessa entre partes
+> nomeadas e usa escrow/confirmação. Trabalho público nasce de uma definição do
+> servidor, tem conclusão objetiva, recompensa baixa e cooldown compartilhado.
+> Os dois poderão aparecer no mesmo quadro, mas preservam APIs, tabelas e estados
+> diferentes. Ver [Sistema de Trabalhos Públicos](PUBLIC_WORK_SYSTEM.md).
+
 ---
 
 ## 1. Para o jogador

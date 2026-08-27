@@ -135,6 +135,35 @@ Escopo:
 
 Decisao: ADOTAR depois de chat + identidade + spawn.
 
+Estado em 25/08/2026: Minerador foi escolhido como primeiro consumidor e já
+possui pipeline de interação/nó/servidor em LAB. Lenhador continua pendente e
+deve seguir a mesma linguagem de alvo físico + E, sem reaproveitar o comando
+legado `/cortarlenha` como gameplay profissional.
+
+### 6. Trabalhos Publicos de Entrada
+
+Escopo aprovado:
+
+- Quadro ou capataz físico com interação E.
+- Entrega de fardos e transporte de lenha como primeiro MVP.
+- Uma execução persistente por personagem.
+- Recompensa baixa, cooldown compartilhado e nenhum XP profissional.
+- Trabalho move/entrega/ajuda; nunca produz minério, madeira ou outro recurso
+  primário reservado a profissão.
+- Proximidade pode mostrar o prompt, mas E consulta/executa somente o FormID
+  exato sob a mira, com nova validação no servidor e sem fallback para o alvo
+  mais próximo.
+
+Plano e critérios de aceite: [PUBLIC_WORK_SYSTEM.md](../gameplay/PUBLIC_WORK_SYSTEM.md).
+Pesquisa Keizaal e similares:
+[PUBLIC_WORK_REFERENCE_STUDY_2026-08-25.md](../research/PUBLIC_WORK_REFERENCE_STUDY_2026-08-25.md).
+
+Decisão atualizada em 26/08/2026: ADOTADO EM LAB. O adaptador compartilhado e o
+motor genérico de Public Work já estão em código; duas rotas com FormDesc reais,
+MariaDB e validação com três clientes continuam pendentes. Corrigir antes o
+filtro ORE/dependência do Minerador, o snapshot do Depot, Safe Zones e os
+replays terminais de Public Work. O MVP não depende de Employment ou Business.
+
 ## Pos-Alfa
 
 Sistemas importantes, mas nao agora:

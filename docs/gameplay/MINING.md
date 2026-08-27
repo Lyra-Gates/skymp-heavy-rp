@@ -5,8 +5,9 @@ suposição não validada em jogo.** Primeiro consumidor real do
 [Profession Core](PROFESSION_FRAMEWORK.md) e do
 [Resource Node Framework](RESOURCE_NODE_FRAMEWORK.md), e o primeiro módulo do
 projeto a registrar uma interação de alvo `object`. Com o prompt `[E]` ligado,
-o servidor publica os nós habilitados como âncoras físicas e escolhe o mais
-próximo; o cliente apenas devolve o FormId selecionado. O servidor mede
+o servidor publica os nós habilitados como âncoras físicas e o cliente sugere
+somente o FormId exato sob a mira. Não existe fallback para o nó mais próximo.
+O servidor confirma que a referência pertence ao snapshot de âncoras, mede
 distância, checa profissão e ferramenta, entrega o minério atomicamente e
 credita XP.
 
@@ -15,6 +16,8 @@ Arquivos: [`mining-service.js`](../../skymp/gamemode/mining-service.js),
 (resolvedor `object`, novo neste ciclo).
 Módulo: `mining`, `enabledBy: 'ENABLE_MINING_SERVICE'`, `phase: 'lab'`,
 depende de `profession` e `interaction` (ver `phase0-basic.js`).
+Embora o registry marque `interaction-prompt` como opcional, o módulo não possui
+comando de jogador: na prática o prompt é obrigatório para alcançar o fluxo.
 
 ---
 
@@ -33,7 +36,8 @@ pela certa:
 
 1. `core/interaction-targets.js` ganhou um resolvedor para `object`, enquanto
    `physical-anchor-registry` recebe os FormIds dos nós habilitados. O prompt
-   escolhe por proximidade no servidor; não depende de crosshair do cliente.
+   usa `Game.getCurrentCrosshairRef()` e `mp.onActivate`; o FormId vindo do
+   cliente é apenas uma sugestão, aceita somente se existir no snapshot físico.
 2. `rangeUtils.assertRange(fromActorId, targetId, maxRange)` já era genérico
    sobre o segundo id — nunca exigiu que fosse um ator. `target.assertRange`
    do resolvedor `object` reaproveita a função sem modificação nenhuma.
@@ -59,12 +63,12 @@ como assumido. **Validar manualmente contra um servidor real antes de tirar
 | Checagem | Como |
 |---|---|
 | Distância até o veio | `mining.mine` registrado com `target: 'object'` e `distance: mining.maxDistance` (default 200) no Interaction Framework — medida pelo core, não pelo módulo |
-| O alvo é de fato um veio | `canSee` consulta `resourceNodeService.getNode(formDesc)`; sem nó cadastrado ali, a ação nem aparece no menu |
-| Descoberta do alvo | `resourceNodeService.listEnabledNodes()` → `physical-anchor-registry` → prompt `[E]`; FormDesc inválido ou não resolvido é descartado |
+| O alvo existe no Resource Node Framework | `canSee` consulta `resourceNodeService.getNode(formDesc)`; sem nó cadastrado ali, a ação nem aparece no menu. **Defeito atual:** ainda não exige `type === ORE` |
+| Descoberta do alvo | `resourceNodeService.listEnabledNodes()` → `physical-anchor-registry` → prompt `[E]`; FormDesc inválido ou não resolvido é descartado. **Defeito atual:** a lista ainda inclui TREE/HERB/CROP/FISHING |
 | Profissão `miner` ativa, rank, nó habilitado/esgotado | 100% de `resourceNodeService.consume()` — única fonte de verdade, revalidada no `execute`, nunca duplicada em `mining-service.js` |
 | Ferramenta (picareta) | `Actor.GetItemCount` via Papyrus — client-trusted só para decidir se a ação **começa**, nunca o que o jogador recebe |
 | Anti-spam/replay | lock em voo por `characterId`, `requestId` idempotente no ledger e cooldown persistente por personagem/nó |
-| Entrega do minério | 100% `resource-node-service.consume()`: atômico com o decremento do nó, nenhum item nasce fora do banco |
+| Entrega do recurso | 100% `resource-node-service.consume()`: atômico com o decremento do nó, nenhum item nasce fora do banco. Até o filtro ORE ser corrigido, o recurso pode ser de outro tipo de nó |
 | XP de profissão | `professionService.addProfessionXp(...)`, valor de `server-options` (`mining.xpPerGather`, default 2) — só depois do `consume()` confirmar sucesso |
 | Auditoria | Nível `ECONOMY` no Interaction Framework — grava quem, alvo, resultado, se a distância foi verificada |
 
@@ -73,6 +77,11 @@ como assumido. **Validar manualmente contra um servidor real antes de tirar
 - Validação em jogo de `mp.get(formId, 'locationalData')` contra objeto
   comum (§1) — é o motivo de `ENABLE_MINING_SERVICE` continuar desligado por
   padrão mesmo com este ciclo fechado
+- Restrição a nós `ORE`: hoje qualquer `resource_node` habilitado pode aparecer,
+  ser consumido e conceder XP de Minerador; este é bloqueador econômico de alta
+  gravidade antes da homologação
+- Dependência operacional obrigatória de `interaction-prompt`: sem ela o módulo
+  sobe, mas o jogador não possui comando nem outro caminho normal de entrada
 - Comando de staff para criar/posicionar nó em jogo (nós continuam sendo
   criados via `resource-node-service.createNode()`, chamada de script/seed)
 - Qualquer outra profissão de coleta (Lenhador, Caçador, Pescador)
@@ -83,10 +92,10 @@ como assumido. **Validar manualmente contra um servidor real antes de tirar
 
 ## 4. Fluxo
 
-1. O prompt `[E]` encontra o nó habilitado mais próximo e envia
+1. O jogador mira a referência e aperta `[E]`; o prompt envia
    `interaction:query` com `targetType: 'object'`, `targetId: <FormId>`.
-2. `mining.mine` aparece na lista só se aquele FormId tiver um nó ativo em
-   `resource_nodes` (`canSee`).
+2. `mining.mine` aparece na lista se aquele FormId tiver um nó ativo em
+   `resource_nodes` (`canSee`); o filtro `ORE` ainda precisa ser implementado.
 3. Cliente escolhe "Minerar" → `interaction:execute` com `action: 'mining.mine'`,
    `targetId: <FormId>` e `requestId`.
 4. `core/interaction-service.js` revalida tudo do zero: resolve o alvo, mede

@@ -1,7 +1,7 @@
 # Plano de soak test
 
-Estado em 24/08/2026: **runner pronto; execução de 6–8 horas bloqueada por
-staging/MariaDB e 5–10 jogadores reais**.
+Estado revalidado em 26/08/2026: **runner pronto; execução de 6–8 horas
+bloqueada por staging/MariaDB, rotas físicas reais e 5–10 jogadores reais**.
 
 ## Objetivo e aceite
 
@@ -11,8 +11,8 @@ Ela só passa quando:
 - nenhum item ou ouro é perdido/duplicado;
 - nenhum processo reinicia sem explicação;
 - taxa de erro dos health checks fica em até 1%;
-- login, reconexão, chat, interação, trade, depot, mineração, crafting, crime e
-  socorro têm ao menos uma execução registrada;
+- login, reconexão, chat, interação, trade, depot, mineração, crafting, Public
+  Work (se habilitado na janela), crime e socorro têm ao menos uma execução registrada;
 - backup pré-teste existe e um responsável acompanha incidentes;
 - relatório JSON, telemetria do gamemode e logs dos serviços são preservados.
 
@@ -23,9 +23,10 @@ CEF, Papyrus, inventário ou concorrência InnoDB.
 
 1. Preencher responsáveis e janela no
    [`CLOSED_ALPHA_RUNBOOK.md`](CLOSED_ALPHA_RUNBOOK.md).
-2. Subir staging e aplicar migrations até v28 em banco vazio.
+2. Subir staging e aplicar migrations até v29 em banco vazio.
 3. Executar `check:schema` e criar backup com `Backup-Staging.ps1`.
-4. Confirmar manifesto, launcher, UI, FormDescs de nós/estações e duas contas.
+4. Confirmar manifesto, launcher, UI, FormDescs de nós/estações/rotas de Public
+   Work e duas contas.
 5. Abrir canal de incidentes e sincronizar relógio das máquinas.
 
 ## Coleta automatizada

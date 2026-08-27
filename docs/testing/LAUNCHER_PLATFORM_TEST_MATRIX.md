@@ -1,6 +1,8 @@
 # Matriz de teste — plataforma do launcher
 
-Data: **2026-08-13**. Cobre `apps/launcher`, `apps/game-api` e o caminho de `apps/web` que o launcher usa.
+Data original: **2026-08-13**. Bootstrap de conexão revisado em
+**2026-08-26**. Cobre `apps/launcher`, `apps/game-api` e o caminho de
+`apps/web` que o launcher usa.
 
 Deriva de [`PLATFORM_INFRASTRUCTURE_AUDIT.md`](../research/PLATFORM_INFRASTRUCTURE_AUDIT.md). Onde um cenário testa um achado, o ID (`PLAT-nn`) está na linha.
 
@@ -195,10 +197,26 @@ Cobertura atual: `queue.test.js`, 13 testes em 6 suítes, todos em memória. Ver
 | 9.14 | Sessão expirada (>12 h) | Master recusa | integração | ❌ |
 | 9.15 | **Mesma sessão resolvida de dois IPs** | Deveria ser detectável | integração | ❌ `PLAT-15` |
 | 9.16 | `release` revoga a sessão da conta | `revoked_at` preenchido | integração | ❌ `PLAT-14` |
+| 9.17 | Ticket vazio chega ao bootstrap | Recusa antes de criar/alterar configuração ou iniciar SKSE | unit | ✅ |
+| 9.18 | JSON legado válido | Preserva opções desconhecidas e remove `profileId`/`token`/`launcherTicket` | unit | ✅ |
+| 9.19 | JSON existente corrompido | Falha fechado sem sobrescrever silenciosamente o outro contrato | unit | ✅ |
+| 9.20 | Arquivos de configuração read-only | Atualiza e restaura o modo anterior | unit | ✅ |
+| 9.21 | Host/porta inválidos | Recusa com código estável antes do spawn | unit | ✅ |
+| 9.22 | Destino direto | Grava IP/porta e `server-info-ignore:true` nos settings | unit | ✅ |
+| 9.23 | Erro ao criar processo | UI recebe `{ok:false,code,error}`; não anuncia sucesso | unit | ✅ |
+| 9.24 | Processo sem PID ou sem confirmação | Falha por PID inválido/timeout e não chama `unref()` | unit | ✅ |
+| 9.25 | Ordem do bootstrap | Preparar/reler → encerrar processos antigos → spawn | unit/contrato | ✅ |
+| 9.26 | Dois clientes reais | Cada sessão resolve o `accountId` correto no servidor direto | manual | ❌ |
 
 9.8 é o teste que prova a propriedade central de segurança deste sistema — uso único sob concorrência — e é o único da seção que **não pode** ser substituído por leitura de código. Duas conexões, mesmo ticket, contar quantos passam. Exige banco.
 
 O bloco 9.5–9.11 é uma dívida única: **não há harness de integração com MySQL neste repositório.** Enquanto não houver, toda a coluna fica `❌`, e nenhum trabalho por linha resolve. Montá-lo (contêiner efêmero de MariaDB, migrations aplicadas, dados semeados) destrava 12 linhas desta matriz de uma vez, e é o item de maior alavancagem daqui.
+
+9.17–9.25 cobrem a fronteira local criada pelo
+[`ADR-012`](../technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md). Elas provam
+que o launcher prepara uma conexão coerente e não produz falso sucesso. Não
+provam o handshake completo: 9.26 continua obrigatório porque envolve o
+cliente SkyMP real, o processo do Windows, a Game API e o Master API.
 
 ---
 

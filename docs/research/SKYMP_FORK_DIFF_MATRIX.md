@@ -2,6 +2,50 @@
 
 Data: **2026-08-14**. Base de comparação: `skyrim-multiplayer/skymp@d85f18d8` (main, 06/08/2026).
 
+> **Atualização de 25/08/2026 — trabalhos e interação física.** Os números do
+> corpo deste documento permanecem como fotografia histórica de 14/08. Uma nova
+> consulta à API do GitHub produziu a fotografia abaixo; `ahead/behind` muda com
+> novos commits e nunca substitui leitura do diff.
+
+| Fork/branch padrão | Ahead | Behind | Leitura para o projeto |
+|---|---:|---:|---|
+| `skyrim-roleplay/skymp:main` | 0 | 4 | Espelho do core; não expõe o gamemode de trabalhos do Keizaal |
+| `NirnRP/skymp:Pospelove-patch-10` | 4 | 47 | Divergência pequena; não prova sistema público de empregos |
+| `SkyrimRoleplay/skyrp` | 234 | 11 | Fork material; exige pesquisa por feature antes de qualquer adaptação |
+| `theZebco/skymp` | 7 | 6 | Divergência pequena e recente |
+| `Vengeful-Realms/vgr-skymp:main` | 129 | 5 | Referência útil para alvo exato; o ZIP do patch expõe código server-side que exige auditoria crítica |
+
+### Achado aplicável: espelho `skyrim-roleplay/skymp`
+
+O espelho não possui gameplay Keizaal próprio, mas a auditoria transversal do
+core confirmou `crosshairRefChanged`, o transporte nativo de `activate` e uma
+lacuna de segurança relevante: a ativação base valida worldspace, não alcance.
+Também mostrou que a assinatura de event sources é pulada quando o cliente não
+recebe chaves públicas. Ver o
+[estudo dedicado](SKYRIM_ROLEPLAY_SKYMP_CORE_STUDY_2026-08-25.md).
+
+### Achado aplicável: Vengeful Realms
+
+O fork documenta um roteador de interação contextual no qual o cliente envia a
+referência sob a mira e o servidor valida o alvo exato. A documentação também
+exige teste com três clientes para provar que o sistema escolhe quem está sob a
+mira, não quem está mais perto. Isto é diretamente aplicável ao Blocker D do
+Minerador e ao desenho de Public Work.
+
+As UIs públicas de [mineração](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/vgr-frontend/js/ingame/mining.js)
+e [corte de madeira](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/vgr-frontend/js/ingame/woodcutting.js)
+usam progresso temporizado no cliente. O servidor também verifica tempo; isso
+foi confirmado no [ZIP público do patch](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/tools/VGR_Player_Interactions_Patch.zip).
+A leitura completa, porém, encontrou gaps de alvo, alcance, ferramenta, replay,
+concorrência e atomicidade. Ver o
+[estudo dedicado](VENGEFUL_REALMS_INTERACTION_STUDY_2026-08-25.md).
+
+**Classificação:** `ADAPT_WITH_HARDENING`. Adaptar o contrato de alvo exato
+descrito no [README de interações](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/docs/vgr_player_interactions/README.md)
+e nas [notas de segurança](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/docs/vgr_player_interactions/SECURITY_NOTES.md),
+com hardening local. O adaptador foi criado em LAB; falta homologá-lo na nossa
+build. Não importar o fork nem seu domínio econômico.
+
 Companheiro de [`SKYMP_ECOSYSTEM_MATRIX.md`](SKYMP_ECOSYSTEM_MATRIX.md) (licenças e profundidade de verificação) e [`SKYMP_ECOSYSTEM_DEEP_DIVE.md`](SKYMP_ECOSYSTEM_DEEP_DIVE.md) (leitura por projeto). **A diferença desta rodada é o método:** as anteriores leram árvores e READMEs; esta comparou commits pela API do GitHub e leu o fonte upstream em clone local.
 
 Isso mudou duas conclusões que estavam registradas como fato.

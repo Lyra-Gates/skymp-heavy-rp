@@ -3,7 +3,8 @@
 > **Documento operacional vivo.** Este é o quadro principal para acompanhar a promoção do SkyMP Heavy RP de código em laboratório até uma alfa fechada confiável.
 >
 > **Baseline inicial:** 24/08/2026, `main` em `90dfbc9`.
-> **Última atualização:** 24/08/2026.
+> **Última atualização:** 26/08/2026. Revisão local parcial: gamemode, migrations
+> e schema; totais dos demais produtos não foram reexecutados.
 > **Próxima revisão obrigatória:** ao concluir qualquer tarefa `P0`, ao mudar um gate de módulo ou ao terminar uma sessão com clientes reais.
 
 ---
@@ -98,18 +99,20 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 | F8 | Hardening | `PARCIAL` | Segurança, métricas, rollback, assinatura | F7 |
 | F9 | Alfa fechada | `BLOQUEADO — NO-GO` | 2 semanas sem perda de dados | F8 |
 
-### Baseline de verificação em 24/08/2026
+### Baseline de verificação em 26/08/2026
 
-- [x] Total atual: **1.457 testes de produto**, 0 falhas.
-- [x] Gamemode: **1.233 testes**, 0 falhas.
+- [ ] Total agregado de testes de produto: o número **1.457** pertence ao
+  snapshot de 24/08 e não foi recalculado nesta revisão.
+- [ ] Gamemode: **1.262 testes; 1.261 aprovados e 1 falha conhecida** (`work`
+  ausente da allowlist de Safe Zones).
 - [x] Painel web: **59 testes**, 0 falhas.
 - [x] Game API: **50 testes**, 0 falhas.
 - [x] Bot Discord: **45 testes**, 0 falhas.
 - [x] Launcher: **70 testes**, 0 falhas.
 - [x] Registro de patches: **46 testes**, 0 falhas.
 - [x] Checks de sistema: **14/14**.
-- [x] Registro do gamemode: **76 testes listados**, nenhum órfão.
-- [x] Schema declarado legível: **76 tabelas**.
+- [x] Schema declarado legível: **80 tabelas**, migrations até **v29**.
+- [x] Migration dry-run: **27 arquivos, 162 instruções**, sem conexão ao banco.
 - [x] Typecheck do launcher verde.
 - [x] Typecheck do gamemode verde — os 2 erros da baseline foram corrigidos em 24/08/2026.
 - [x] `check-write-guards --all` sem ocorrências — os 2 FormDesc e a cobertura de 13 migrations foram corrigidos em 24/08/2026.
@@ -157,7 +160,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - **Ações:** coletar logs do launcher, painel, Game API, SkyMP e SkyrimPlatform; seguir ticket → fila → sessão → Master API → `profileId`.
 - **Aceite:** login e reconexão mantêm o mesmo `accountId/profileId`; ticket consumido não é reutilizável; refresh da sessão do launcher emite ticket novo.
 - **Teste de regressão:** obrigatório para a causa encontrada.
-- **Evidência parcial (24/08/2026):** boot curto do SkyMP aprovou artefato/assets, carregou o gamemode e abriu TCP 3000/UDP 7777. A governança falhou porque MariaDB recusou 127.0.0.1:3306; o Master API recusou 127.0.0.1:3001. O usuário confirmou que MariaDB não está disponível e não pode ser instalada neste ambiente. Falta executar esta validação em outra máquina/ambiente com MariaDB, subir o painel/Master API e realizar o login pelo botão JOGAR do launcher.
+- **Evidência parcial (24–26/08/2026):** boot curto do SkyMP aprovou artefato/assets, carregou o gamemode e abriu TCP 3000/UDP 7777. A governança falhou porque MariaDB recusou 127.0.0.1:3306; o Master API recusou 127.0.0.1:3001. Em 26/08, o bootstrap do launcher passou a validar/reler os dois contratos, remover identidade legada, gravar `server-info-ignore:true` e só confirmar o SKSE após `spawn` + PID; 15 testes novos, launcher 85/85 e build NSIS aprovado ([ADR-012](../technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md)). Isso fecha a preparação local, não o aceite de F1-001. Falta executar em outra máquina/ambiente com MariaDB, subir o painel/Master API e realizar login/reconexão com dois clientes pelo botão JOGAR.
 
 ### F1-002 — Instalar e reparar automaticamente a UI CEF (`P0`)
 
@@ -195,7 +198,7 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - [x] **Status:** `CONCLUÍDO`
 - **Divergências conhecidas:** MD5 vs SHA-256; instruções que param em v9/v10; contagem antiga de opções ligadas; `version-check.js` descrito como ativo sem chamador.
 - **Aceite:** README, setup, modpack, operações e compatibilidade não contradizem o código atual.
-- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256, migrations disponíveis até v28, 17 opções ligadas e `version-check.js` sem chamador; o check de schema agora informa dinamicamente a última migration; inventário atual de 76 tabelas aprovado em 24/08/2026.
+- **Evidência:** guias operacionais e suas traduções reconciliados com SHA-256; migrations disponíveis até v29; o check de schema informa dinamicamente a última migration; inventário local atual de 80 tabelas conferido em 26/08/2026. A aplicação no banco continua pendente.
 
 ### F1-007 — Decidir e implementar a checagem de versão do cliente (`P1`)
 
@@ -225,11 +228,11 @@ A alfa está pronta quando 5–10 jogadores convidados conseguem, sem correção
 - **Aceite:** um procedimento versionado sobe a stack; health checks confirmam cada serviço; `offlineMode=false`.
 - **Evidência:** `deploy/staging/compose.yaml`, `Start-Staging.ps1`, `Stop-Staging.ps1` e README; Compose validado por `docker compose config`; painel, Game API, bot e MariaDB têm health checks. SkyMP/launcher ficam no host Windows. Docker CLI 29.6.2 presente, Engine indisponível em 24/08/2026, então o boot real segue pendente.
 
-### F2-002 — Migrar banco limpo até v28
+### F2-002 — Migrar banco limpo até v29
 
 - [ ] **Status:** `PARCIAL` (aplicador seguro e dry-run concluídos; execução real depende de MariaDB)
 - **Aceite:** instalação vazia aplica schema + migrations em ordem; `npm run check:schema` não encontra faltas.
-- **Evidência:** `npm run migrate:dry-run` encontra 26 arquivos/157 instruções em ordem até v28; 6 testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
+- **Evidência:** `npm run migrate:dry-run` encontra 27 arquivos/162 instruções em ordem até v29; os testes cobrem ordenação, banco não vazio, nome divergente, configuração por ambiente, execução sequencial e erro sem vazamento. Falta executar `migrate:clean` + `check:schema` em MariaDB real e registrar a versão.
 
 ### F2-003 — Backup e restore exercitados
 
@@ -553,6 +556,7 @@ Adicionar uma linha a cada mudança de status relevante.
 | 24/08/2026 | F6-001/002 | `TODO` → `PARCIAL/CONCLUÍDO NO CÓDIGO` | Resource Node Framework, mineração autoritativa, migration v27 e testes | Homologação física continua externa |
 | 24/08/2026 | F6-004 | `TODO` → `PARCIAL` | Estação física, migration v28, placeholder removido; 1.233 testes verdes | Conteúdo confirmado e jogo real pendentes |
 | 24/08/2026 | F8-005 | `TODO` → `PARCIAL` | Runner JSON, 3 testes e plano de 6–8h | Execução depende de staging e jogadores |
+| 26/08/2026 | F1-001 / bootstrap | `BLOQUEADO` → `BLOQUEADO COM PREPARAÇÃO LOCAL CONCLUÍDA` | 15 testes novos; launcher 85/85; typecheck/lint; build NSIS | Writer fail-closed e spawn confirmado implementados; MariaDB, Master API e dois clientes continuam externos |
 | 24/08/2026 | F9-001/002/003 | `TODO` → `PARCIAL/BLOQUEADO/NO-GO` | Runbook de alfa e parecer de bloqueios | Decisão atual é não promover |
 
 ---

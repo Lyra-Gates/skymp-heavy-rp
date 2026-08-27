@@ -1,5 +1,38 @@
 # Relatório de Homologação de Runtime — Minerador
 
+> **Atualização de 25/08/2026 — alvo exato e estado consolidado.** A pesquisa na
+> rede de forks encontrou uma implementação pública candidata para o
+> Blocker D: o Vengeful Realms usa `Game.getCurrentCrosshairRef()`, conversão de
+> FormID e validação server-side do alvo exato. Isso reduz a incerteza da API,
+> e o Blocker D foi posteriormente **corrigido em código local**: o cliente
+> envia o FormID sob a mira e o servidor determina `player` versus `object`.
+> A compatibilidade ainda precisa ser provada na nossa build. O Blocker C foi
+> corrigido anteriormente em código pelo
+> `ui-event-gateway`, conforme o segundo adendo abaixo, mas continua sem
+> homologação no SkyMP real. Portanto, o estado atual é: **C = corrigido em
+> código/não homologado; D = corrigido em código/não homologado**. O ZIP público
+> do fork mostra que o servidor verifica tempo, mas também confirma gaps de
+> alvo, distância, ferramenta, replay, concorrência e atomicidade que não foram
+> adotados aqui.
+>
+> **Estado da ordem segura:** (1) smoke test do gateway C em runtime — pendente;
+> (2) adaptador compartilhado de mira + conversão — feito em código; (3) query
+> no alvo exato — feito em código; (4) execute com nova resolução e validação —
+> já coberto pelo Interaction Framework; (5) idempotência — feita, sessão
+> temporal — pendente; (6) teste A/B/C com C sob a mira — pendente em runtime e
+> coberto por teste determinístico. Não usar nearest-target como fallback.
+>
+> **Revalidação de 26/08/2026:** o caminho de alvo exato continua sem
+> homologação in-game. A revisão estática encontrou dois bloqueadores de
+> código: `mining.mine` aceita qualquer tipo de Resource Node, não apenas ORE,
+> e o módulo pode subir sem `interaction-prompt` embora não registre comando.
+> A suíte atual possui 1.262 testes, com uma falha fora do Minerador na
+> allowlist de Safe Zones.
+>
+> Fontes: [API assumptions](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/docs/vgr_player_interactions/API_ASSUMPTIONS.md),
+> [security notes](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/docs/vgr_player_interactions/SECURITY_NOTES.md)
+> e [manual acceptance tests](https://github.com/Vengeful-Realms/vgr-skymp/blob/main/docs/vgr_player_interactions/MANUAL_ACCEPTANCE_TESTS.md).
+
 > **Atualização de 24/08/2026:** o código recuperado para `main` fechou o gap
 > de repetição descrito neste relatório: `mining.mine` agora é idempotente,
 > exige `requestId`, o ledger impede replay entre reinícios e o cooldown fica
@@ -8,13 +41,13 @@
 > controles não existem foram superadas por esta atualização. A detecção de
 > homologação no jogo continua pendente. A lacuna histórica de crosshair
 > também foi contornada: o serviço registra os nós habilitados no
-> `physical-anchor-registry`, e o prompt `[E]` escolhe o alvo por proximidade
-> no servidor. As conclusões negativas sobre “nenhum trigger object” abaixo
-> descrevem o estado de 20/08, não o código atual.
+> `physical-anchor-registry`, e o prompt usa a referência exata sob a mira,
+> sem fallback por proximidade. As conclusões negativas sobre “nenhum trigger
+> object” abaixo descrevem o estado de 20/08, não o código atual.
 
 **Data:** 20/08/2026 · **Fecha:** `WORK_ECOSYSTEM_DECISION_SUMMARY.md`/`JOBS_CRAFTING_CHARACTERIZATION_REPORT.md`, próxima etapa: validar em runtime real, não mais arquitetura · **Natureza:** investigação + instrumentação mínima, zero feature nova
 
-> **Segundo adendo (mesma sessão, depois do relatório abaixo).** **Blocker C (`mp.onUiEvent`/`BOUND-004`) foi corrigido** — `core/ui-event-gateway.js` agora usa `mp.makeEventSource('_onUiEvent', ...)` no lugar de `mpApi.onUiEvent = gateway`, e `ui/index.html` (`sendUiEvent`) passou a usar `window.skyrimPlatform.sendMessage(...)` no lugar de `window.mp.trigger`/`window.mp.send` (que também nunca foram confirmados como API real da CEF). Ver `docs/research/SKYMP_INTEGRATION_AUDIT.md` §5 para o registro formal da correção. **O corpo deste relatório abaixo NÃO foi reescrito** — ele documenta o estado no momento da investigação (Blocker C "aberto"), e isso continua sendo informação real sobre o que foi encontrado e por quê. Onde o texto abaixo diz "não corrigido"/"aberto" para Blocker C, leia como **corrigido depois, nesta mesma sessão** — `Blocker D` (nenhum trigger de cliente para `targetType:'object'`) **continua aberto**, não corrigido: a correção de C não implica D, são independentes como o relatório já explica. Sem servidor/SkyMP real disponível nesta sessão, a correção de C não pôde ser validada em runtime — só testada contra mock (`core/ui-event-gateway.test.js`), mesma ressalva de sempre.
+> **Segundo adendo (histórico).** **Blocker C (`mp.onUiEvent`/`BOUND-004`) foi corrigido em código** — `core/ui-event-gateway.js` passou a usar `mp.makeEventSource('_onUiEvent', ...)` e a CEF, `window.skyrimPlatform.sendMessage(...)`. O corpo abaixo preserva o estado anterior da investigação. Naquele momento o Blocker D ainda estava aberto; ele só foi corrigido em código na atualização de 25/08 registrada no topo. C e D continuam dependentes de homologação no SkyMP real.
 
 > **Adendo pós-Prompt-4 (mesma sessão).** Antes de pesquisar mais upstream, este relatório foi revisado contra `docs/research/SKYMP_INTEGRATION_AUDIT.md` (auditoria de 14/08/2026, já existente no projeto, base `skyrim-multiplayer/skymp@d85f18d8`) — por instrução explícita de não refazer pesquisa que o projeto já fez. Essa leitura mudou a conclusão central deste relatório: apareceu um bloqueador mais fundamental que os dois já registrados (`locationalData`, gap de cliente para `object`). Ver "Blocker C" abaixo. Também confirmado: `git fetch origin` + `git log --left-right origin/main...feat/skyvoice-core-etapa-2` mostra só divergência de topologia (merge commit `990f0c4` da PR #27 do lado de `main`) — `git diff --stat` entre as duas pontas está **vazio**. Nenhum conteúdo de `main` falta nesta branch; nada a mesclar antes de prosseguir.
 
@@ -193,11 +226,17 @@ A auditoria original tratou `locationalData` como a única incerteza séria do M
 const INTERACTION_TARGET_TYPE = 'player';
 ```
 
-Esse comentário está desatualizado desde que `mining-service.js` registrou o resolvedor `object` em `core/interaction-targets.js` — mas **o cliente nunca foi atualizado**. `openInteractionMenu()` (linha 1588) só popula `state.interaction.targetActorId`, e o único `sendUiEvent('interaction:query', ...)` do arquivo usa `INTERACTION_TARGET_TYPE` fixo. Busquei em todo `skymp/ui/` por `crosshair`/`GetCrosshairRef`/qualquer string `'object'` fora do JSON solto de `typeof msg.effects === 'object'` (não relacionado) — **nada existe**.
+**Registro histórico de 20/08, superado em código em 25/08.** Naquele snapshot,
+o cliente ainda não enviava alvo `object`: `openInteractionMenu()` só populava
+o ator e a query usava `INTERACTION_TARGET_TYPE` fixo. O código atual usa o
+event source de alvo exato e classifica o tipo no servidor.
 
-**Consequência prática, sem ambiguidade:** hoje, um jogador real, apontando para um veio de minério real, com `ENABLE_MINING_SERVICE=true`, **nunca vê o menu "Minerar"**, porque o cliente nunca pergunta ao servidor sobre um alvo `object` — a UI shipada não tem crosshair detection nem envia esse tipo de evento. E `mining-service.js` não registra nenhum comando de chat (`commands: []` em `phase0-basic.js`), então também não há atalho de texto. **O único caminho de disparo hoje é chamar `sendUiEvent` manualmente pelo DevTools da CEF** — que é exatamente o que o roteiro manual (`MINING_MANUAL_RUNTIME_TEST_PLAN.md`) instrui, para poder testar o resto da cadeia sem depender de uma feature de cliente que nunca foi construída.
+**Consequência naquele snapshot:** um jogador não via “Minerar” sem disparo
+manual pela CEF. Essa conclusão não descreve mais o código local; a aquisição
+por mira foi implementada, mas ainda precisa ser comprovada no runtime SkyMP.
 
-**Isto não é uma correção "pequena" no sentido do §33 desta tarefa** — construir detecção de crosshair no lado Skyrim Platform e ligá-la ao menu existente é trabalho de feature de cliente, não um ajuste de resolver server-side. Fica registrado como **FUTURE DESIGN GAP**, não implementado.
+Construir a aquisição foi tratado posteriormente como fundação compartilhada
+do Interaction Framework, e não como ajuste isolado do Minerador.
 
 ---
 
@@ -428,4 +467,7 @@ Nenhuma linha recebeu PASS sem teste correspondente citado acima.
 
 ---
 
-*Fim do relatório desta rodada. Nenhum Lenhador, Pescador, Fazendeiro, Caçador, Gather Session, Public Work, Specialization, Employment, Business ou expansão de crafting foi iniciado.*
+*Fim do registro da rodada de 20/08. Public Work e a fundação compartilhada de
+interação foram implementados depois; Lenhador, Pescador, Fazendeiro, Caçador,
+Gather Session, Specialization e Employment/Business continuam sem loop
+próprio implementado no snapshot de 26/08.*

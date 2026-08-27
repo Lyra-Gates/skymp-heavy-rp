@@ -2,7 +2,7 @@
 
 Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da primeira seção.
 
-> **Última conferência contra o código: 24/08/2026.** A fonte de verdade para estado operacional e backlog é o [PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md); o parecer de promoção é [PRODUCTION_BLOCKERS_2026-08-24.md](operations/PRODUCTION_BLOCKERS_2026-08-24.md), atualmente **NO-GO**. O snapshot vigente registra **1.457 testes de produto**, incluindo **1.233 do gamemode**, migrations até **v28**, **76 tabelas**, zero ocorrências em `check-write-guards --all`, typechecks do launcher e do gamemode limpos e **14/14 checks de sistema**. [PROJECT_STATE.md](../PROJECT_STATE.md) resume capacidades e preserva a evolução histórica, mas não substitui o quadro operacional. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
+> **Última conferência contra o código: 26/08/2026.** A fonte de verdade para estado operacional e backlog é o [PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md); o parecer de promoção continua **NO-GO**. O snapshot local verificável registra **1.262 testes do gamemode (1.261 aprovados e 1 falha conhecida)**, migrations até **v29**, **80 tabelas declaradas** e typecheck do gamemode limpo. MariaDB e homologação com clientes reais continuam pendentes. Totais agregados de “testes de produto” do snapshot de 24/08 não foram recalculados nesta revisão e não devem ser usados como número atual. [PROJECT_STATE.md](../PROJECT_STATE.md) resume capacidades e preserva a evolução histórica, mas não substitui o quadro operacional. Documentos de handoff e pesquisa são registros datados: quando superados, preservam o contexto histórico e recebem aviso explícito. Se você encontrar um documento afirmando algo que o código não faz, isso é um bug — [abra uma issue](https://github.com/vinicius3232/skymp-heavy-rp/issues) ou corrija no seu PR.
 
 ---
 
@@ -48,7 +48,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | Documento | Sobre |
 |---|---|
 | [framework/MODULE_SYSTEM.md](framework/MODULE_SYSTEM.md) | O `module-registry`: ciclo de vida de módulo, a diferença entre PARKED e desligado por flag, ordenação topológica. Lista o que é PARKED de verdade hoje. |
-| [framework/INTERACTION_FRAMEWORK.md](framework/INTERACTION_FRAMEWORK.md) | O único caminho de interação desde 13/08 (`ADR-002`), 96 testes. Ver [testing/INTERACTION_TEST_MATRIX.md](testing/INTERACTION_TEST_MATRIX.md) para o que ainda falta provar em sessão real. |
+| [framework/INTERACTION_FRAMEWORK.md](framework/INTERACTION_FRAMEWORK.md) | O único caminho de interação desde 13/08 (`ADR-002`). Integra a suíte atual do gamemode; ver [testing/INTERACTION_TEST_MATRIX.md](testing/INTERACTION_TEST_MATRIX.md) para o que ainda falta provar em sessão real. |
 | [framework/INVENTORY_FRAMEWORK.md](framework/INVENTORY_FRAMEWORK.md) | O caminho obrigatório para qualquer item que muda de dono. Ver [testing/INVENTORY_TRANSACTION_MATRIX.md](testing/INVENTORY_TRANSACTION_MATRIX.md). |
 | [framework/ECONOMY_FRAMEWORK.md](framework/ECONOMY_FRAMEWORK.md) | Como saber que seu módulo está mexendo em ouro do jeito errado. Ver [testing/ECONOMY_SECURITY_MATRIX.md](testing/ECONOMY_SECURITY_MATRIX.md). |
 
@@ -57,6 +57,8 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | Documento | Sobre |
 |---|---|
 | [LAUNCHER_DISTRIBUTION.md](technical/LAUNCHER_DISTRIBUTION.md) | Como cliente e modpack chegam ao jogador, como a paridade é verificada, e a assinatura do instalador (§6). |
+| [ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md](technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md) | Por que o bootstrap da conexão falha fechado, grava dois contratos, remove identidade legada, ignora o gateway público e só confirma sucesso depois do `spawn`. |
+| [research/LAUNCHER_COMPARATIVE_STUDY_2026-08-26.md](research/LAUNCHER_COMPARATIVE_STUDY_2026-08-26.md) | Estudo estático do launcher externo que revelou a dependência de `/serverinfo`; separa o que foi adaptado, rejeitado e ainda depende de teste real. |
 | [PUBLIC_BUILD_GUIDE.md](technical/PUBLIC_BUILD_GUIDE.md) | O que precisa estar verdadeiro antes de publicar a build pra comunidade. |
 | [LICENSE_AND_AFFILIATION_POLICY.md](technical/LICENSE_AND_AFFILIATION_POLICY.md) | Licenças do SkyMP por subprojeto, o que cada situação obriga, e não-afiliação. |
 | [SKYVOICE_LIVEKIT_AUDIT.md](technical/SKYVOICE_LIVEKIT_AUDIT.md) | **Comece por aqui para qualquer coisa de voz.** Auditoria do VOIP atual + validação do LiveKit. Corrige a versão da CEF (é a **108**, não "~70"), mostra por que `getUserMedia` falha de verdade, e traz o spike que provou o transporte A→SFU→B contra um `livekit-server` real. A §12 diz o que continua bloqueado: ninguém ouviu. |
@@ -78,8 +80,12 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 
 | Documento | Sobre |
 |---|---|
-| [gameplay/PROFESSION_FRAMEWORK.md](gameplay/PROFESSION_FRAMEWORK.md) | Profession Core implementado e testado, atrás de `ENABLE_PROFESSION_SERVICE`. Nenhuma das 13 profissões tem gameplay própria ainda — a plataforma existe, os consumidores não. |
+| [gameplay/PROFESSION_FRAMEWORK.md](gameplay/PROFESSION_FRAMEWORK.md) | Profession Core implementado e testado, atrás de `ENABLE_PROFESSION_SERVICE`. Minerador é o primeiro consumidor; as demais profissões ainda carecem de gameplay própria. |
+| [technical/ADR_007_WORK_ECOSYSTEM_TAXONOMY.md](technical/ADR_007_WORK_ECOSYSTEM_TAXONOMY.md) | Separa Profession, Employment, Business, Public Work, Contract e Governance para impedir sobreposição de domínio. |
 | [technical/ADR_008_PROFESSION_SPECIALIZATION_BOUNDARY.md](technical/ADR_008_PROFESSION_SPECIALIZATION_BOUNDARY.md) | A decisão sobre onde termina Profession e começa Specialization. |
+| [gameplay/WORK_AND_PROFESSION_ECOSYSTEM_VISION.md](gameplay/WORK_AND_PROFESSION_ECOSYSTEM_VISION.md) | Visão unificada para equipe e produto: trabalhos livres, profissões/classes profissionais, especializações, empregos, posições, negócios, contratos e governança. |
+| [technical/ADR_011_PUBLIC_WORK.md](technical/ADR_011_PUBLIC_WORK.md) | Trabalho público como piso econômico: sem profissão/XP, com interação física, estado persistente, carga, idempotência e cooldown. |
+| [technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md](technical/ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md) | Configuração e criação do processo do jogo são fail-closed; identidade fica no servidor e sucesso exige `spawn` confirmado. |
 | [technical/ECONOMY_VAULT_AUDIT.md](technical/ECONOMY_VAULT_AUDIT.md) | Os 3 gaps sobre a infraestrutura de economia já existente: anti-cheat de ouro físico e auditoria de transação grande. |
 | [technical/DEPOT_SERVICE_AUDIT.md](technical/DEPOT_SERVICE_AUDIT.md) | Armazenamento regional de itens por hold — recuperado de um commit de auto-save nunca finalizado e mesclado na unificação de 22/08. Sem reserva de ouro própria, sem checagem de combate. |
 | [technical/ENVIRONMENT_AUDIT.md](technical/ENVIRONMENT_AUDIT.md) | Time Sync: relógio autoritativo do servidor, heartbeat de correção de deriva, persistência entre restarts. |
@@ -102,6 +108,7 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | [gameplay/DEBT_SYSTEM.md](gameplay/DEBT_SYSTEM.md) | Registro de dívida selado quando um contrato não pode ser pago — nunca cobrança automática. Continua PARKED de verdade. |
 | [gameplay/TRADE_SYSTEM.md](gameplay/TRADE_SYSTEM.md) | Troca direta entre jogadores. Implementado e testado, sem UI CEF, nunca rodou numa sessão real. |
 | [gameplay/CRAFTING_SYSTEM.md](gameplay/CRAFTING_SYSTEM.md) | Receitas com gate de `required_profession`/`required_rank`. Reativado em 20/08; ganhou a Assinatura do Artesão em 22/08 — ver seção abaixo. |
+| [gameplay/PUBLIC_WORK_SYSTEM.md](gameplay/PUBLIC_WORK_SYSTEM.md) | **Contrato canônico de trabalhos públicos.** Domínio e fluxo genérico implementados em LAB; rotas reais, MariaDB e homologação por E ainda pendentes. |
 
 ### Crime & Proveniência e Assinatura do Artesão (21-22/08/2026)
 
@@ -123,12 +130,16 @@ Mapa dos documentos do projeto. Se você acabou de chegar, leia na ordem da prim
 | Documento | Fonte |
 |---|---|
 | [REFERENCE_STUDY_SKYMP_RED_HOUSE.md](technical/REFERENCE_STUDY_SKYMP_RED_HOUSE.md) | O único gamemode RP público que existe (GPL-3.0, parado em 2021). A §4.1 é leitura do código-fonte. |
+| [research/PUBLIC_WORK_REFERENCE_STUDY_2026-08-25.md](research/PUBLIC_WORK_REFERENCE_STUDY_2026-08-25.md) | Keizaal, Vengeful Realms, Mereth, Daedric Online, Nirn RP e sistemas adjacentes; separa comportamento anunciado, código auditável e hipótese. |
+| [research/VENGEFUL_REALMS_INTERACTION_STUDY_2026-08-25.md](research/VENGEFUL_REALMS_INTERACTION_STUDY_2026-08-25.md) | Auditoria completa do README, docs, frontend e ZIP público do patch; define o que adaptar e o que rejeitar em alvo, sessões, mineração e lenhador. |
+| [research/SKYRIM_ROLEPLAY_SKYMP_CORE_STUDY_2026-08-25.md](research/SKYRIM_ROLEPLAY_SKYMP_CORE_STUDY_2026-08-25.md) | Clone e diff integral do espelho ligado ao Keizaal; extrai contratos reais de crosshair, ativação, alcance, event sources, propriedades e limites do motor. |
 
 ### Planejamento
 
 | Documento | Sobre |
 |---|---|
 | [roadmap/PRODUCTION_READINESS_ACTION_PLAN.md](roadmap/PRODUCTION_READINESS_ACTION_PLAN.md) | Plano operacional vivo para promover o projeto de `LAB` até alfa fechada e produção: dashboard, bloqueadores P0, fases F0–F9, critérios de saída e registro de execução. |
+| [roadmap/WORK_ECOSYSTEM_IMPLEMENTATION_PLAN_2026-08-25.md](roadmap/WORK_ECOSYSTEM_IMPLEMENTATION_PLAN_2026-08-25.md) | Plano executável W0–W6 para interação por E, Minerador, crafting profissional, Public Work, retirada do jobs legado e promoção segura por ambiente. |
 | [HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md](technical/HEAVY_RP_GAMEPLAY_SYSTEMS_BACKLOG.md) | Backlog de sistemas de gameplay. |
 | [GUIA_SESSAO_DE_TESTE.md](technical/GUIA_SESSAO_DE_TESTE.md) | **Como chegar até o roteiro:** ligar os quatro serviços, conferir as portas, e o guia copiável para mandar aos testadores. A Parte 2 é escrita para quem nunca viu o repositório. |
 | [FASE_0_ROTEIRO.md](technical/FASE_0_ROTEIRO.md) | **O roteiro do teste in-game — o único bloqueio real do projeto.** Passo a passo, o que observar, o que significa falhar, e o registro pra preencher enquanto testa. Comece pelo guia acima. |

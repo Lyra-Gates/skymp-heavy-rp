@@ -4,6 +4,12 @@ Código: [`core/depot-service.js`](../../skymp/gamemode/core/depot-service.js),
 migration [`migration-v20-depot-service.sql`](../../skymp/packages/database/migration-v20-depot-service.sql),
 testes [`core/depot-service.test.js`](../../skymp/gamemode/core/depot-service.test.js).
 
+**Revalidado em 26/08/2026:** a lógica transacional permanece coberta, mas o
+caminho físico por E possui um bloqueador de integração: o Depot registra seu
+provider e não chama `physicalAnchorRegistry.refresh()`. Se nenhum outro módulo
+de âncoras fizer o refresh, o prompt pode resolver o terminal, porém
+`mp.onActivate` não o encontra no snapshot síncrono e a interação não abre.
+
 Como em `ENVIRONMENT_AUDIT.md`/`ECONOMY_VAULT_AUDIT.md`, os 15 pontos vivem
 neste documento, não no cabeçalho do código — precedente já estabelecido
 nesta sessão.
@@ -135,7 +141,8 @@ declara `dependencies: ['interaction']`, mesmo padrão de `trade`. Nasce
 de `depot_terminals` populada manualmente pela staff (associar um
 `MpObjectReference` físico a um `hold_id`) antes de qualquer jogador
 conseguir interagir — não há UI de staff para isso nesta fase, é um INSERT
-direto.
+direto. O uso pelo jogador também depende do `interaction-prompt` e do refresh
+do snapshot de âncoras; esse refresh ainda não é feito pelo próprio Depot.
 
 ## 12. UI-Depot-Bridge — usabilidade (Tarefa 10)
 

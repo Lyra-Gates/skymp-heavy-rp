@@ -4,6 +4,9 @@ Este documento transforma F9 em uma operação verificável. Campos entre `< >`
 precisam ser preenchidos por uma pessoa antes da janela; ausência de responsável
 é `NO-GO`, não um valor implícito.
 
+**Baseline revalidada em 26/08/2026:** migrations lineares até v29; Public Work
+continua LAB e só entra na janela depois de receber rotas/FormDescs reais.
+
 ## Ficha da janela
 
 | Campo | Valor |
@@ -21,11 +24,11 @@ precisam ser preenchidos por uma pessoa antes da janela; ausência de responsáv
 ## Gate antes de convidar jogadores
 
 - [ ] domínio/HTTPS, Discord OAuth e segredos de produção configurados;
-- [ ] MariaDB de staging saudável, migrations até v28 e schema drift limpo;
+- [ ] MariaDB de staging saudável, migrations até v29 e schema drift limpo;
 - [ ] backup restaurável criado e rollback ensaiado;
 - [ ] launcher assinado, timestamp válido e instalação Windows limpa aprovada;
 - [ ] dois clientes completam login, seleção, reconexão e UI CEF;
-- [ ] FormDescs físicos e receita de Ferreiro do modpack confirmados;
+- [ ] FormDescs físicos, rotas de Public Work e receita de Ferreiro do modpack confirmados;
 - [ ] observabilidade acessível e runner de soak iniciado;
 - [ ] responsáveis e canal acima preenchidos.
 

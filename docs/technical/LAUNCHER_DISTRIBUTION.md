@@ -94,11 +94,57 @@ Achado ajudando um fork externo, que reportava "token error" e "preciso reinicia
 
 ### O que acontece com o ticket depois
 
-O `launch-game` grava o ticket de sessão em `skymp_config.json` como `session`. Isso não é invenção nossa: é o campo que o servidor SkyMP lê quando `offlineMode: false`. Ele então resolve a sessão contra o master API — que passou a ser o nosso próprio painel (`ARCHITECTURE.md` 1.2.1) — e o `id` que voltar vira o `profileId` do gamemode.
+O `launch-game` prepara os dois contratos consumidos pelo cliente. Em
+`skymp_config.json`, grava `session` no formato `ticket:<ticket>` e o destino em
+`serverAddress`. Em `skymp5-client-settings.txt`, grava o ticket opaco em
+`gameData.session`, o host/porta diretos e `server-info-ignore:true`. Esse último
+campo impede o cliente de consultar o gateway público `/serverinfo` antes de
+usar o servidor configurado.
+
+O writer remove `profileId`, `token` e `launcherTicket` legados, trata arquivo
+read-only, publica via temporário e relê os dois JSONs. Ticket vazio, JSON
+corrompido ou divergência após a escrita abortam o fluxo: o SKSE não inicia com
+configuração antiga. Depois da validação, o launcher usa `spawn` direto, sem
+shell, e só informa sucesso quando o Windows confirma a criação do processo e
+fornece um PID.
+
+Isso não é invenção nossa: `gameData.session` é o campo que o servidor SkyMP lê
+quando `offlineMode: false`. Ele resolve a sessão contra o master API — que
+passou a ser o nosso próprio painel (`ARCHITECTURE.md` 1.2.1) — e o `id` que
+voltar vira o `profileId` do gamemode.
 
 É esse desvio que tira a identidade das mãos do cliente. Com `offlineMode: true`, o cliente declararia o próprio `profileId` no mesmo arquivo e o servidor acreditaria.
 
 Cadeia completa: **Discord** → painel (`launch_tickets`) → fila (`game_sessions`) → `skymp_config.json` → servidor SkyMP → master API → `profileId`.
+
+### Alterações de 26/08/2026 e seus motivos
+
+| Alteração | Motivo |
+|---|---|
+| Escrita extraída para `connection-settings.mjs` | Tornar filesystem e validação testáveis sem subir o Electron. |
+| Ticket, caminho, host, porta e JSON existente validados antes de escrever | Impedir que estado incompleto ou corrompido seja tratado como conexão válida. |
+| Remoção de `profileId`, `token` e `launcherTicket` legados | Preservar a autoridade do Master API; identidade online não pode ser declarada pelo cliente. |
+| `server-info-ignore:true` obrigatório no destino direto | Evitar a consulta anterior ao gateway público `/serverinfo`, que não faz parte da nossa infraestrutura. |
+| Temporário + flush + rename, com suporte a read-only | Reduzir o risco de publicar JSON truncado e suportar arquivos protegidos pelo modpack. |
+| Releitura dos dois contratos antes de continuar | Não iniciar o jogo com ticket ou destino antigo quando o disco divergir da intenção. |
+| `exec` substituído por `spawn` com `shell:false` | Evitar interpretação pelo shell e receber erro de criação do processo diretamente. |
+| Resultado IPC `{ok,pid?,code?,error?}` | A UI distingue solicitação de lançamento de processo realmente criado e informa a causa da falha. |
+| `try/finally` no polling da Home | Garantir que o botão não permaneça preso em “jogando” após exceção. |
+
+A decisão completa, inclusive alternativas rejeitadas e consequências, está no
+[`ADR-012`](ADR_012_LAUNCHER_CONNECTION_BOOTSTRAP.md). O estudo que originou a
+correção está em
+[`LAUNCHER_COMPARATIVE_STUDY_2026-08-26.md`](../research/LAUNCHER_COMPARATIVE_STUDY_2026-08-26.md).
+
+### Estado da validação
+
+Em 26/08/2026, os 15 testes novos de configuração, processo e contrato foram
+incorporados à suíte do launcher: **85/85 testes**, typecheck e lint aprovados.
+Os contratos de autenticação relacionados passaram **12/12**, e o build
+completo gerou renderer, main, preload e instalador NSIS. Isso prova o contrato
+local e o empacotamento; ainda não prova a conexão ponta a ponta. O gate
+operacional restante é executar dois clientes reais e observar a resolução das
+duas sessões pelo Master API sem dependência do gateway público.
 
 ---
 
