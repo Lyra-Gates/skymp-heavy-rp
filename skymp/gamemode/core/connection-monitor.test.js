@@ -141,4 +141,35 @@ describe('connection-monitor', () => {
     assert.ok(Number.isFinite(snapshot.totals.maxTickMs));
     assert.ok(snapshot.totals.maxTickMs >= 0);
   });
+
+  it('DOCUMENTA (não corrige) um risco: mp.isConnected() piscando false por um tick derruba um jogador que nunca desconectou', async () => {
+    // Achado em revisão de código de 27/08/2026, não confirmado em runtime real
+    // — ver docs/operations/ALPHA_0_RUNTIME_VALIDATION.md. tick() não distingue
+    // "desconectou de verdade" de "a engine relatou false por um poll só" (lag,
+    // jitter de rede). Se isso acontecer de verdade, o jogador é limpo
+    // (removeActiveCharacter + playerPanel.cleanup) e, no tick seguinte, entra
+    // como conexão NOVA — reverificação de whitelist do zero, sessão/painel
+    // resetados, ainda que ele nunca tenha saído do jogo.
+    const state = setup({ checkWhitelist: () => true });
+    state.setConnected(true);
+    state.setActorId(0xff000001);
+    state.monitor.tick();
+    await flush();
+    assert.deepEqual(state.cleanupCalls, [], 'conectado e aprovado: nenhuma limpeza ainda');
+
+    // Um poll só reportando false já é suficiente para derrubar a sessão —
+    // não há debounce nem confirmação em ticks consecutivos.
+    state.setConnected(false);
+    state.monitor.tick();
+    assert.deepEqual(state.cleanupCalls, [['character', 0xff000001], ['panel', 0xff000001]],
+      'um unico tick com isConnected=false já dispara limpeza completa, sem confirmar de novo');
+
+    // Se a engine "voltar a mentir a verdade" no tick seguinte, o jogador nunca
+    // percebeu nada — mas foi tratado como reconexão do zero.
+    state.setConnected(true);
+    state.monitor.tick();
+    await flush();
+    assert.equal(state.monitor.snapshot().totals.connections, 2,
+      'oscilação de 1 tick conta como duas conexões e uma desconexão pra um jogador que nunca saiu');
+  });
 });

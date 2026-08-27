@@ -181,6 +181,38 @@ atual (`v2`...`v29`, 27 arquivos), o que seria o cenário realmente perigoso
 (ordem de aplicação ambígua). Organização cosmeticamente inconsistente,
 funcionalmente sã.
 
+### Achado importante, NÃO corrigido — `connection-monitor.js` pode derrubar quem nunca desconectou
+
+`core/connection-monitor.js:tick()` decide desconexão com um único poll de
+`mp.isConnected(userId)` a cada 2s (default), sem debounce nem confirmação
+em ticks consecutivos. Se a engine reportar `false` por um poll só — lag,
+jitter de rede, qualquer instabilidade transitória — o jogador é limpo
+por completo (`removeActiveCharacter` + `playerPanel.cleanup`) e, no
+próximo tick, tratado como conexão nova: reverificação de whitelist do
+zero, sessão/painel resetados, ainda que ele nunca tenha saído do jogo.
+
+**Não corrigi isso.** Não sei se `mp.isConnected()` realmente oscila na
+prática — seria especulação adicionar debounce sem evidência de que o
+problema acontece de verdade (mesma disciplina que o resto do projeto já
+segue: não mexer sem prova de runtime). Em vez disso, escrevi um teste de
+caracterização (`core/connection-monitor.test.js`, novo, "DOCUMENTA (não
+corrige) um risco") que prova o comportamento atual exatamente como é —
+serve de gatilho caso alguém decida mudar o design depois, e torna o risco
+visível pra quem for rodar o teste real.
+
+**Peço explicitamente pra observar isto no Milestone A/B do sábado**: durante
+o teste com dois clientes reais, gerar uma instabilidade de rede breve
+(throttling, Wi-Fi cortado por 1-2s) num cliente conectado e ver se ele é
+kickado/resetado sem ter saído do jogo de verdade.
+
+Achado secundário, menor, também não corrigido: no mesmo arquivo, uma
+resposta de whitelist que chega depois que a sessão já foi trocada (desconexão
++ reconexão rápida no mesmo `userId`) é corretamente ignorada pro *estado*
+(já testado em `connection-monitor.test.js`, "invalida uma resposta de
+whitelist antiga..."), mas a aprovação que ela representava nunca incrementa
+`metrics.approved` — métrica subestima aprovações reais numa janela bem
+estreita. Cosmético, não fixei.
+
 ## Bloqueadores reais
 
 1. **MariaDB/Docker ausentes nesta máquina** — impede montar staging
