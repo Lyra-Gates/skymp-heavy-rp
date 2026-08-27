@@ -35,6 +35,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <rnnoise.h>
+
 namespace {
 
 // Formato do fio — tem que bater com AUDIO_* em skymp/gamemode/voip-service.js
@@ -44,6 +46,13 @@ constexpr ma_uint32 kSampleRate = 48000;
 constexpr ma_uint32 kChannels = 1;
 constexpr ma_uint32 kFrameMs = 20;
 constexpr ma_uint32 kSamplesPerFrame = kSampleRate / 1000 * kFrameMs;  // 960
+
+// RNNoise processa quadros de 480 amostras (10ms @ 48kHz) — o valor fixo que
+// `rnnoise_get_frame_size()` devolve. Nosso quadro de fio (20ms) tem que ser um
+// múltiplo exato dele, senão sobraria um pedaço sem denoise por quadro.
+constexpr ma_uint32 kDenoiseFrame = 480;
+static_assert(kSamplesPerFrame % kDenoiseFrame == 0,
+              "quadro de fio precisa ser multiplo do quadro do RNNoise");
 
 // Teto da fila entre a thread de áudio e a de rede, em quadros (~1s).
 //
@@ -84,6 +93,51 @@ std::string Base64Encode(const uint8_t* data, size_t len) {
   }
   return out;
 }
+
+// ── supressão de ruído (RNNoise) ─────────────────────────────────────────
+// Roda no laço de envio, não no callback de áudio: mantém o callback de tempo
+// real fazendo só o mínimo, e o custo do RNNoise (poucos µs por quadro de 10ms)
+// cabe folgado no orçamento de 20ms do laço de rede.
+//
+// O estado é mantido entre chamadas e os quadros têm que chegar em ordem. Se a
+// rede engasgar e a FrameQueue descartar um quadro antigo (§ kMaxQueuedFrames),
+// o RNNoise vê uma descontinuidade — um clique curto, não uma falha. É o mesmo
+// trade-off que já existe pro áudio cru.
+//
+// As amostras que o RNNoise espera são float na MESMA escala do int16
+// (-32768..32767), não normalizadas pra [-1,1].
+class Denoiser {
+ public:
+  Denoiser() : state_(rnnoise_create(nullptr)) {}
+  ~Denoiser() {
+    if (state_ != nullptr) rnnoise_destroy(state_);
+  }
+  Denoiser(const Denoiser&) = delete;
+  Denoiser& operator=(const Denoiser&) = delete;
+
+  bool ok() const { return state_ != nullptr; }
+
+  // Filtra o quadro no lugar. frame.size() tem que ser múltiplo de kDenoiseFrame.
+  void Process(std::vector<int16_t>& frame) {
+    if (state_ == nullptr) return;
+    float buf[kDenoiseFrame];
+    for (size_t off = 0; off + kDenoiseFrame <= frame.size(); off += kDenoiseFrame) {
+      for (ma_uint32 i = 0; i < kDenoiseFrame; ++i) {
+        buf[i] = static_cast<float>(frame[off + i]);
+      }
+      rnnoise_process_frame(state_, buf, buf);
+      for (ma_uint32 i = 0; i < kDenoiseFrame; ++i) {
+        float s = buf[i];
+        if (s > 32767.0f) s = 32767.0f;
+        else if (s < -32768.0f) s = -32768.0f;
+        frame[off + i] = static_cast<int16_t>(s < 0.0f ? s - 0.5f : s + 0.5f);
+      }
+    }
+  }
+
+ private:
+  DenoiseState* state_;
+};
 
 // ── fila entre a thread de áudio e a de rede ──────────────────────────────
 class FrameQueue {
@@ -156,6 +210,7 @@ struct Options {
   std::string ticket;
   std::string host = "127.0.0.1";
   uint16_t port = 7778;
+  bool denoise = true;
   bool valid = false;
 };
 
@@ -168,8 +223,9 @@ void PrintUsage(const char* argv0) {
     "\n"
     "  --actor-id  formID do ator, decimal ou 0x-hex (ex.: 0xFF000A12)\n"
     "  --ticket    token de uso unico emitido pelo servidor (comando /voz)\n"
-    "  --host      host do voip-service (padrao: 127.0.0.1)\n"
-    "  --port      porta do voip-service (padrao: 7778)\n"
+    "  --host       host do voip-service (padrao: 127.0.0.1)\n"
+    "  --port       porta do voip-service (padrao: 7778)\n"
+    "  --no-denoise desliga a supressao de ruido (RNNoise); ligada por padrao\n"
     "\n"
     "O ticket vale 30 segundos e so pode ser usado uma vez. Na Fase 1 ele e\n"
     "passado a mao — nao existe handoff automatico entre o jogo e o helper.\n"
@@ -197,6 +253,8 @@ Options ParseArgs(int argc, char** argv) {
       opt.host = argv[++i];
     } else if (arg == "--port" && has_next) {
       opt.port = static_cast<uint16_t>(std::stoul(argv[++i]));
+    } else if (arg == "--no-denoise") {
+      opt.denoise = false;
     } else if (arg == "--help" || arg == "-h") {
       return opt;
     } else {
@@ -221,6 +279,19 @@ int main(int argc, char** argv) {
   std::signal(SIGTERM, OnSignal);
 
   ix::initNetSystem();
+
+  // ── supressão de ruído ─────────────────────────────────────────────────
+  // Criada antes do microfone: se o RNNoise não inicializar, o helper segue
+  // enviando áudio cru em vez de abortar — perder o denoise é degradação, não
+  // falha. `--no-denoise` pula isso de propósito (útil pra comparar A/B e pra
+  // isolar defeito, na linha do que a §3 do doc já faz com PCM vs Opus).
+  Denoiser denoiser;
+  bool denoise = opt.denoise && denoiser.ok();
+  if (opt.denoise && !denoiser.ok()) {
+    std::fprintf(stderr,
+      "[helper] RNNoise nao inicializou; seguindo com audio cru.\n");
+  }
+  std::printf("[helper] Supressao de ruido: %s\n", denoise ? "ligada" : "desligada");
 
   FrameQueue queue;
   CaptureState capture_state;
@@ -332,6 +403,8 @@ int main(int argc, char** argv) {
     // ignoraria de qualquer forma, e guardá-los só adicionaria atraso à
     // primeira sílaba que alguém de fato ouvir.
     if (!authed) { frame.clear(); continue; }
+
+    if (denoise) denoiser.Process(frame);
 
     const std::string data = Base64Encode(
         reinterpret_cast<const uint8_t*>(frame.data()),

@@ -449,6 +449,44 @@ que seriam código nosso para manter sem ganho nenhum sobre o que a biblioteca j
 faz. Escolha do `ixwebsocket`: API pequena e síncrona o bastante para caber num
 executável de terminal, sem arrastar Boost.
 
+### 8.5 Supressão de ruído — RNNoise, 27/08/2026
+
+O pessoal do teste reclamou de teclado e ruído de ambiente altos. O helper
+mandava PCM cru — o que entrava no microfone saía inteiro. Agora passa por
+**RNNoise** (Xiph, rede recorrente treinada pra separar voz de ruído; é o que o
+Discord usou antes do Krisp) antes do relay.
+
+**Onde roda:** no laço de envio, não no callback de áudio de tempo real. O
+callback continua só acumulando e empurrando pra fila; o custo do RNNoise
+(poucos µs por quadro de 10ms) cabe folgado no orçamento de 20ms do laço de
+rede. O RNNoise processa quadros de 480 amostras e mantém estado entre eles —
+nosso quadro de fio (960) vira exatamente dois. Se a `FrameQueue` descartar um
+quadro sob congestão, o RNNoise vê uma descontinuidade: um clique curto, não uma
+falha. Mesmo trade-off que o áudio cru já tinha.
+
+**`--no-denoise`** desliga, pra comparar A/B e pra isolar defeito (mesma lógica
+da §3 com PCM vs Opus). Se o `rnnoise_create` falhar, o helper loga e segue com
+áudio cru em vez de abortar — perder o denoise é degradação, não parada.
+
+**Build.** A port `rnnoise` do vcpkg é `!windows` (usa autotools, quebra no
+MSVC — visto ao tentar). Em vez de `--allow-unsupported`, o `CMakeLists.txt`
+puxa o fonte por `FetchContent` na tag **v0.1.1** do Xiph — a última antes de os
+pesos da rede virarem download separado (vêm em `src/rnn_data.c`, no repo). São
+~7 arquivos C sem dependência, compilados como lib estática. O v0.1.1 usa VLAs
+(C99) que o compilador C do MSVC recusa; um patch de configure
+(`cmake/patch-rnnoise-msvc.cmake`) troca as 5 por `_alloca` — mesma semântica de
+pilha, sem trocar de versão nem de biblioteca.
+
+**Verificado (27/08/2026):** compilou (MSVC 19.44), e a rodada ponta a ponta da
+§8.4 refeita com o denoise ligado — microfone real → helper → `voip-service`
+(harness) → ouvinte instrumentado. `auth_ok`, ~50 quadros/s, quadros de 1920
+bytes (960 amostras, enquadramento exato), **0 descartes**, ~360 quadros em 8s
+sem erro. O RNNoise rodou no caminho e não quebrou timing nem enquadramento.
+
+**NÃO verificado:** que a voz sai inteligível e que o ruído de fato caiu no
+ouvido — vale integralmente a §8.2 (é julgamento, precisa de uma pessoa). É o
+que o teste com 2–3 jogadores do thithi vai dizer.
+
 ## 9. Próxima rodada — listado, não implementado
 
 Nada abaixo foi feito neste PR.
@@ -470,8 +508,9 @@ Nada abaixo foi feito neste PR.
 **Qualidade**
 
 4. **Opus** no lugar do PCM cru (§3). ~30x menos banda.
-5. **Cancelamento de eco e supressão de ruído.** Sem AEC, quem usa caixa de som
-   em vez de fone realimenta a própria voz na cena.
+5. ~~**Supressão de ruído.**~~ **Feita em 27/08/2026 — RNNoise, ver §8.5.**
+   **Cancelamento de eco continua aberto.** RNNoise só suprime ruído; sem AEC,
+   quem usa caixa de som em vez de fone realimenta a própria voz na cena.
 6. **Primeiros ~2s de fala são perdidos** enquanto o tick não monta a audiência
    do locutor recém-conectado (medido: 45 de 195 quadros no primeiro teste).
    Montar a audiência no `auth` ou reduzir o intervalo do tick resolve.

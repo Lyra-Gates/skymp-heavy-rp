@@ -31,7 +31,12 @@ depois. A arquitetura e o porquê estão em
   manda `role: "sender"` sozinho — não há nada a fazer na linha de comando. Ver
   VOICE_NATIVE_HELPER.md §10.
 - **Sem UI, sem bandeja, sem serviço.** É um processo de terminal; sai com Ctrl+C.
-- **Sem cancelamento de eco.** Use fone, ou sua voz volta pra cena.
+- **Supressão de ruído: RNNoise, ligada por padrão.** Roda no laço de envio,
+  quadro a quadro, e tira teclado/ventilador/chiado de ambiente antes do relay.
+  `--no-denoise` desliga (pra comparar A/B). Se o RNNoise não inicializar o
+  helper segue com áudio cru em vez de abortar.
+- **Sem cancelamento de eco.** RNNoise só faz supressão de ruído, não AEC — quem
+  usa caixa de som em vez de fone ainda realimenta a própria voz na cena.
 - **PCM cru** (~1 Mbit/s de subida). Opus fica pra Fase 2.
 
 ## Compilar
