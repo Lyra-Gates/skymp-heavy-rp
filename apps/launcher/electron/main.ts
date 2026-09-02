@@ -33,6 +33,7 @@ const SERVER_IP = process.env.VITE_SERVER_IP || '127.0.0.1';
 // O default anterior era 7757, que nao existia em lugar nenhum do lado servidor.
 const SERVER_PORT = parseInt(process.env.VITE_SERVER_PORT || '7777', 10);
 const API_PORT = parseInt(process.env.VITE_API_PORT || '7758', 10);
+const GAME_API_URL = (process.env.VITE_GAME_API_URL || `http://${SERVER_IP}:${API_PORT}`).replace(/\/+$/, '');
 const DIST_REPO = process.env.VITE_GITHUB_DIST_REPO || '';
 const PANEL_URL = (process.env.VITE_PANEL_URL || 'http://127.0.0.1:3001').replace(/\/+$/, '');
 const AUTH_FILE = path.join(app.getPath('userData'), 'auth.json');
@@ -1067,8 +1068,10 @@ function rememberQueueTicket(response: any) {
 // (usado só por operação manual); isto é o primeiro consumidor real dele.
 ipcMain.handle('check-server-status', async () => {
   const online = await new Promise<boolean>((resolve) => {
-    const req = http.get(
-      `http://${SERVER_IP}:${API_PORT}/health`,
+    const healthUrl = `${GAME_API_URL}/health`;
+    const transport = healthUrl.startsWith('https:') ? https : http;
+    const req = transport.get(
+      healthUrl,
       { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } },
       (res) => {
         res.resume(); // não precisa do corpo, só confirmar que respondeu
@@ -1092,7 +1095,7 @@ ipcMain.handle('join-queue', async () => {
   if (!ticket) return { status: 'error', message: 'not_authenticated' };
 
   const response = await postJsonToUrl(
-    `http://${SERVER_IP}:${API_PORT}/api/queue/join`,
+    `${GAME_API_URL}/api/queue/join`,
     { ticket }
   );
 
@@ -1110,7 +1113,7 @@ ipcMain.handle('poll-queue', async () => {
   if (!ticket) return { status: 'error', message: 'not_authenticated' };
 
   const response = await postJsonToUrl(
-    `http://${SERVER_IP}:${API_PORT}/api/queue/status`,
+    `${GAME_API_URL}/api/queue/status`,
     { ticket }
   );
 
@@ -1177,14 +1180,7 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
     const dataPath = path.join(folderPath, 'Data');
     if (!fs.existsSync(dataPath)) return { success: false, error: "Pasta Data não encontrada." };
 
-    const modsJson: any = await new Promise((resolve) => {
-      http.get(`http://${SERVER_IP}:${API_PORT}/mods.json`, (res) => {
-        if (res.statusCode !== 200) { resolve(null); return; }
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve(null); } });
-      }).on('error', () => resolve(null));
-    });
+    const modsJson: any = await httpGetJson(`${GAME_API_URL}/mods.json`);
 
     if (!modsJson || !modsJson.mods) {
       return { success: false, error: "Falha ao baixar mods.json do servidor. Servidor pode estar offline." };
