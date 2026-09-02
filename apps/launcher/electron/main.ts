@@ -1074,8 +1074,16 @@ ipcMain.handle('check-server-status', async () => {
       healthUrl,
       { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } },
       (res) => {
-        res.resume(); // não precisa do corpo, só confirmar que respondeu
-        resolve(res.statusCode === 200);
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            const health = JSON.parse(data);
+            resolve(res.statusCode === 200 && health?.ok === true);
+          } catch {
+            resolve(false);
+          }
+        });
       }
     );
     req.on('error', () => resolve(false));
