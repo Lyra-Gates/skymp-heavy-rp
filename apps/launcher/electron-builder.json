@@ -1,6 +1,6 @@
 {
-  "appId": "com.skymprp.launcher",
-  "productName": "Skyrim Heavy RP Launcher",
+  "appId": "fr.primetoile.alpha.launcher",
+  "productName": "Primétoile Alpha Launcher",
   "directories": {
     "output": "dist-electron"
   },
@@ -37,6 +37,6 @@
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
-    "shortcutName": "Skyrim Heavy RP"
+    "shortcutName": "Primétoile Alpha"
   }
 }
