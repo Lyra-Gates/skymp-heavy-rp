@@ -184,8 +184,10 @@ export function prepararConfiguracaoConexao(input) {
   }
 
   const pluginsDirectory = path.join(gamePath, 'Data', 'Platform', 'Plugins');
+  const authDirectory = path.join(gamePath, 'Data', 'Platform', 'PluginsNoLoad');
   const configPath = path.join(pluginsDirectory, 'skymp_config.json');
   const clientSettingsPath = path.join(pluginsDirectory, 'skymp5-client-settings.txt');
+  const authDataPath = path.join(authDirectory, 'auth-data-no-load.js');
 
   // Leia ambos antes de alterar qualquer um: JSON legado corrompido falha sem
   // deixar metade da configuração atualizada.
@@ -209,15 +211,35 @@ export function prepararConfiguracaoConexao(input) {
   clientSettings['server-port'] = serverPort;
   clientSettings.master = '';
 
+  const remoteAuthData = {
+    session: ticket,
+    masterApiId: 0,
+    discordUsername: null,
+    discordDiscriminator: null,
+    discordAvatar: null
+  };
+
   try {
     atomicWriteFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
     atomicWriteFile(clientSettingsPath, `${JSON.stringify(clientSettings, null, 2)}\n`);
+    atomicWriteFile(authDataPath, `//${JSON.stringify(remoteAuthData)}\n`);
   } catch (cause) {
     throw new ConnectionSettingsError('WRITE_FAILED', 'Falha ao gravar a configuração de conexão.', cause);
   }
 
   const writtenConfig = readWrittenObject(configPath);
   const writtenSettings = readWrittenObject(clientSettingsPath);
+  let writtenAuthData;
+  try {
+    const source = fs.readFileSync(authDataPath, 'utf8');
+    writtenAuthData = source.startsWith('//') ? JSON.parse(source.slice(2)) : null;
+  } catch (cause) {
+    throw new ConnectionSettingsError(
+      'VERIFY_FAILED',
+      'Nao foi possivel reler os dados de autenticacao gravados.',
+      cause
+    );
+  }
   const writtenGameData = isRecord(writtenSettings.gameData) ? writtenSettings.gameData : null;
   const valid =
     writtenConfig.session === `ticket:${ticket}` &&
@@ -230,7 +252,13 @@ export function prepararConfiguracaoConexao(input) {
     writtenGameData !== null &&
     writtenGameData.session === ticket &&
     !hasForbiddenCredential(writtenSettings) &&
-    !hasForbiddenCredential(writtenGameData);
+    !hasForbiddenCredential(writtenGameData) &&
+    isRecord(writtenAuthData) &&
+    writtenAuthData.session === ticket &&
+    writtenAuthData.masterApiId === 0 &&
+    writtenAuthData.discordUsername === null &&
+    writtenAuthData.discordDiscriminator === null &&
+    writtenAuthData.discordAvatar === null;
 
   if (!valid) {
     throw new ConnectionSettingsError('VERIFY_FAILED', 'A configuração relida não corresponde à conexão solicitada.');

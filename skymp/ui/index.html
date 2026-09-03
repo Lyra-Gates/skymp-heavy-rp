@@ -681,7 +681,9 @@
         jaTentouAuth = true;
         clearInterval(tentativas);
         window.skyrimPlatform.sendMessage('front-loaded');
-        window.skyrimPlatform.sendMessage('authAttemptEvent');
+        setTimeout(() => {
+          window.skyrimPlatform.sendMessage('authAttemptEvent');
+        }, 1000);
       }
     }, 200);
     // Não fica tentando pra sempre se o bridge nunca aparecer.

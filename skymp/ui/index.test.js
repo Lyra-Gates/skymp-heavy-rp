@@ -24,6 +24,7 @@ test('index.html manda front-loaded antes de authAttemptEvent, dentro do jogo', 
 
   const frontLoadedIdx = html.indexOf("sendMessage('front-loaded')");
   const authAttemptIdx = html.indexOf("sendMessage('authAttemptEvent')");
+  const delayedIdx = html.indexOf('setTimeout(() => {', frontLoadedIdx);
 
   assert.notStrictEqual(frontLoadedIdx, -1,
     "front-loaded precisa ser mandado -- e o primeiro sinal que o AuthService " +
@@ -32,6 +33,8 @@ test('index.html manda front-loaded antes de authAttemptEvent, dentro do jogo', 
     'authAttemptEvent continua sendo mandado por precaucao.');
   assert.ok(frontLoadedIdx < authAttemptIdx,
     'front-loaded precisa vir ANTES de authAttemptEvent, nunca depois.');
+  assert.ok(delayedIdx > frontLoadedIdx && delayedIdx < authAttemptIdx,
+    'authAttemptEvent precisa esperar o AuthService carregar o ticket.');
 });
 
 test('index.html so dispara isso dentro do jogo (RODANDO_FORA_DO_JOGO=false), nunca no mock', () => {

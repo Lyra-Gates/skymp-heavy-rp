@@ -16,7 +16,8 @@ function fixture() {
     gamePath,
     directory,
     configPath: path.join(directory, 'skymp_config.json'),
-    settingsPath: path.join(directory, 'skymp5-client-settings.txt')
+    settingsPath: path.join(directory, 'skymp5-client-settings.txt'),
+    authDataPath: path.join(gamePath, 'Data', 'Platform', 'PluginsNoLoad', 'auth-data-no-load.js')
   };
 }
 
@@ -61,6 +62,16 @@ test('grava os dois contratos, preserva legado compatível e remove credenciais 
     assert.deepEqual(result.clientSettings.gameData, { difficulty: 'hard', session: 'opaque-ticket' });
     assert.equal(Object.hasOwn(result.clientSettings, 'launcherTicket'), false);
     assert.match(fs.readFileSync(f.configPath, 'utf8'), /\n$/);
+
+    const authSource = fs.readFileSync(f.authDataPath, 'utf8');
+    assert.ok(authSource.startsWith('//'));
+    assert.deepEqual(JSON.parse(authSource.slice(2)), {
+      session: 'opaque-ticket',
+      masterApiId: 0,
+      discordUsername: null,
+      discordDiscriminator: null,
+      discordAvatar: null
+    });
   } finally { cleanup(f.gamePath); }
 });
 
@@ -75,6 +86,7 @@ test('recusa ticket vazio antes de criar arquivos', () => {
     }), 'EMPTY_TICKET');
     assert.equal(fs.existsSync(f.configPath), false);
     assert.equal(fs.existsSync(f.settingsPath), false);
+    assert.equal(fs.existsSync(f.authDataPath), false);
   } finally { cleanup(f.gamePath); }
 });
 
