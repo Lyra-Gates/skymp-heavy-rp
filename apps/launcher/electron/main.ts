@@ -1223,9 +1223,10 @@ ipcMain.handle('analyze-plugins', async (_event, folderPath, serverLoadOrder) =>
     // que e a direcao segura.
     const localAppData = process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local');
     const pluginsTxtPath = path.join(localAppData, 'Skyrim Special Edition', 'plugins.txt');
-    const enabledPlugins = fs.existsSync(pluginsTxtPath)
-      ? parsePluginsTxt(fs.readFileSync(pluginsTxtPath, 'utf8')).filter(p => p.enabled).map(p => p.name)
-      : undefined;
+    const pluginsTxtEntries = fs.existsSync(pluginsTxtPath)
+      ? parsePluginsTxt(fs.readFileSync(pluginsTxtPath, 'utf8'))
+      : [];
+    const enabledPlugins = pluginsTxtEntries.filter(p => p.enabled).map(p => p.name);
 
     const localPlugins = listDataPlugins(folderPath);
 
@@ -1236,17 +1237,14 @@ ipcMain.handle('analyze-plugins', async (_event, folderPath, serverLoadOrder) =>
       readHeader: (nome: string) => readPluginHeader(path.join(dataPath, nome))
     });
 
-    // Creation Club nao passa pelo plugins.txt: o Skyrim AE le o Skyrim.ccc e
-    // carrega sozinho o que estiver listado e presente em Data/. Sao plugins
-    // que ocupam indice de load order e que a checagem acima nao enxerga.
-    //
-    // O arquivo fica na raiz do jogo, ao lado do executavel — nao em Data/. E
-    // o conteudo dele varia conforme o que a conta Steam possui, entao dois
-    // testadores podem carregar listas diferentes sem ter escolhido nada.
+    // Instalacoes antigas usam Skyrim.ccc. Skyrim 1.6.1170 pode omiti-lo e
+    // listar o Creation Club auto-carregado em plugins.txt sem prefixo '*'.
     const cccPath = path.join(folderPath, 'Skyrim.ccc');
     const cccEntries = fs.existsSync(cccPath)
       ? parseCccTxt(fs.readFileSync(cccPath, 'utf8'))
-      : [];
+      : pluginsTxtEntries
+          .map(p => p.name)
+          .filter(name => /^cc[a-z0-9]/i.test(name));
 
     const cc = analyzeCreationClub({ cccEntries, localPlugins, serverLoadOrder });
 
