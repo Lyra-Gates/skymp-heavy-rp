@@ -335,8 +335,27 @@ ipcMain.handle('save-game-path', async (_event, folderPath) => {
     'Skyrim Special Edition - Primetoile'
   );
 
+  try {
+    // Crée le dossier Primétoile s'il n'existe pas encore.
+    // recursive:true permet aussi de ne pas provoquer d'erreur
+    // si le dossier existe déjà.
+    fs.mkdirSync(config.isolatedGamePath, { recursive: true });
+  } catch (error: any) {
+    console.error(
+      '[launcher] Impossible de créer le dossier Primétoile:',
+      error
+    );
+
+    return {
+      ok: false,
+      reason: 'isolated-install-create-failed',
+      error: error?.message || String(error)
+    };
+  }
+
   // Compatibilité temporaire avec la V7.
-  // Les autres fonctions utilisent encore gamePath pour le moment.
+  // Le launcher utilise encore l'installation originale
+  // tant que la copie isolée n'est pas prête.
   config.gamePath = folderPath;
 
   writeLauncherConfig(config);
