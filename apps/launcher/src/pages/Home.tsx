@@ -188,19 +188,77 @@ export function Home({ auth, setAuth }: HomeProps) {
     setStatus('Vérification du dossier du jeu...');
     try {
       const config = await window.electronAPI.getLauncherConfig();
-      const gamePath = config.gamePath;
-      if (!gamePath) {
-        setStatus('Configurez le dossier de Skyrim avant de jouer.');
-        navigate('/settings');
-        return;
-      }
 
-      const pathOk = await window.electronAPI.checkGamePath(gamePath);
-      if (!pathOk.ok) {
-        setStatus(`Dossier du jeu invalide : ${gamePathReason(pathOk.reason)}`);
-        navigate('/settings');
-        return;
-      }
+const sourceGamePath = config.sourceGamePath || config.gamePath;
+
+if (!sourceGamePath) {
+  setStatus('Configurez le dossier de Skyrim avant de jouer.');
+  navigate('/settings');
+  return;
+}
+
+// Vérifie si l'installation indépendante Primétoile existe déjà.
+setStatus("Vérification de l'installation Primétoile...");
+
+const isolatedCheck = await window.electronAPI.checkIsolatedGame();
+
+let gamePath: string;
+
+if (!isolatedCheck.ok) {
+  setStatus(
+    "Première installation de Primétoile en cours... Cela peut prendre plusieurs minutes."
+  );
+
+  const installResult = await window.electronAPI.installIsolatedGame();
+
+  if (!installResult.ok) {
+    if (
+      installResult.reason === 'missing-source-files' &&
+      installResult.missing?.length
+    ) {
+      setStatus(
+        `Installation Skyrim source incomplète : ${installResult.missing[0]}`
+      );
+    } else {
+      setStatus(
+        `Impossible de créer l'installation Primétoile : ${
+          installResult.error || installResult.reason || 'erreur inconnue'
+        }`
+      );
+    }
+
+    return;
+  }
+
+  // installIsolatedGame vient de basculer gamePath sur
+  // l'installation indépendante Primétoile.
+  const updatedConfig = await window.electronAPI.getLauncherConfig();
+
+  if (!updatedConfig.gamePath) {
+    setStatus("Impossible de récupérer le dossier Primétoile après l'installation.");
+    return;
+  }
+
+  gamePath = updatedConfig.gamePath;
+} else {
+  if (!isolatedCheck.gamePath) {
+    setStatus("Impossible de récupérer le dossier d'installation Primétoile.");
+    return;
+  }
+
+  gamePath = isolatedCheck.gamePath;
+}
+
+// À partir d'ici, gamePath doit toujours désigner
+// Skyrim Special Edition - Primetoile.
+const pathOk = await window.electronAPI.checkGamePath(gamePath);
+
+if (!pathOk.ok) {
+  setStatus(
+    `Installation Primétoile invalide : ${gamePathReason(pathOk.reason)}`
+  );
+  return;
+}
 
       setStatus("Vérification de l'interface du jeu...");
       const ui = await window.electronAPI.ensureSkympUi(gamePath);
