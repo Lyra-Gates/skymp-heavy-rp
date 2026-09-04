@@ -7,6 +7,7 @@ const api = {
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   saveGamePath: (folderPath: string) => ipcRenderer.invoke('save-game-path', folderPath),
   installIsolatedGame: () => ipcRenderer.invoke('install-isolated-game'),
+  checkIsolatedGame: () => ipcRenderer.invoke('check-isolated-game'),
   selectGamePath: () => ipcRenderer.invoke('select-game-path'),
   checkGamePath: (folderPath: string) => ipcRenderer.invoke('check-game-path', folderPath),
   ensureSkyrimIni: (opts?: any) => ipcRenderer.invoke('ensure-skyrim-ini', opts),
