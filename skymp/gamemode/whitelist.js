@@ -220,9 +220,9 @@ async function checkWhitelist(userId, profileId, actorId) {
       };
       
       try {
-        mp.set(actorId, 'locationalData', locData);
+        // Position restored by native SkyMP storage.
         mp.set(actorId, 'browserVisible', true);
-        console.log(`[whitelist] Spawn locData applied successfully for ${character.first_name} ${character.last_name}`);
+        console.log(`[whitelist] Player session initialized successfully for ${character.first_name} ${character.last_name}`);
         
         // Sincroniza o Inventário do Banco de Dados para o Cliente (com reconciliação)
         await inventoryService.syncInventoryToClient(actorId, character.id);

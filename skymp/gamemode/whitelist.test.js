@@ -69,3 +69,8 @@ test('local auto-whitelist persists the canonical spawn FormDesc', () => {
   assert.match(source, /pos_x: 22659/);
   assert.doesNotMatch(source, /cell_id: '(?:0x)?162e2/);
 });
+
+test('reconnect keeps the native SkyMP location', () => {
+  const source = fs.readFileSync(require.resolve('./whitelist'), 'utf8');
+  assert.doesNotMatch(source, /mp\.set\(actorId,\s*['"]locationalData['"]/);
+});
