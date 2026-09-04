@@ -46,6 +46,7 @@ checkIsolatedGame: () => Promise<{
   ok: boolean;
   reason?: string;
   missing?: string[];
+  gamePath?: string;
 }>;
   selectGamePath: () => Promise<string | null>;
   checkGamePath: (folderPath: string) => Promise<{ ok: boolean; reason: string }>;

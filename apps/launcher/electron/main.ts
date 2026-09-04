@@ -427,9 +427,17 @@ ipcMain.handle('check-isolated-game', async () => {
     };
   }
 
+  // L'installation Primétoile est complète :
+  // elle devient désormais l'installation utilisée par le launcher.
+  if (config.gamePath !== config.isolatedGamePath) {
+    config.gamePath = config.isolatedGamePath;
+    writeLauncherConfig(config);
+  }
+
   return {
     ok: true,
-    reason: 'ok'
+    reason: 'ok',
+    gamePath: config.isolatedGamePath
   };
 });
 
