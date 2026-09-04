@@ -1,3 +1,4 @@
+import { copyPrimetoileBase } from './isolated-install.js';
 import { app, BrowserWindow, ipcMain, dialog, screen } from 'electron';
 import path from 'path';
 import { exec, spawn } from 'child_process';
@@ -352,6 +353,37 @@ ipcMain.handle('save-game-path', async (_event, folderPath) => {
       error: error?.message || String(error)
     };
   }
+
+ipcMain.handle('install-isolated-game', async (event) => {
+  const config = readLauncherConfig();
+
+  const sourceGamePath = config.sourceGamePath;
+  const isolatedGamePath = config.isolatedGamePath;
+
+  if (!sourceGamePath || !isolatedGamePath) {
+    return {
+      ok: false,
+      reason: 'paths-not-configured'
+    };
+  }
+
+  const result = await copyPrimetoileBase(
+    sourceGamePath,
+    isolatedGamePath,
+    (progress) => {
+      event.sender.send('isolated-install-progress', progress);
+    }
+  );
+
+  if (result.ok) {
+    // À partir de maintenant, les fonctions existantes du launcher
+    // travailleront sur l'installation Primétoile.
+    config.gamePath = isolatedGamePath;
+    writeLauncherConfig(config);
+  }
+
+  return result;
+});
 
   // Compatibilité temporaire avec la V7.
   // Le launcher utilise encore l'installation originale
