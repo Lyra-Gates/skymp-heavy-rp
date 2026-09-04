@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS `characters` (
   `pos_y` FLOAT NOT NULL DEFAULT -165.0,
   `pos_z` FLOAT NOT NULL DEFAULT -189.0,
   `angle_z` FLOAT NOT NULL DEFAULT 180.0,
-  `cell_id` VARCHAR(64) NOT NULL DEFAULT '0x162e2',
+  `cell_id` VARCHAR(64) NOT NULL DEFAULT '162e2:Skyrim.esm',
   `gold` INT NOT NULL DEFAULT 0 COMMENT 'Economia in-game (Septims)',
   `status` VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending, approved, rejected, retired (soft-delete, ver admin-service.retireCharacter)',
   `racemenu_presets` TEXT DEFAULT NULL COMMENT 'JSON string contendo presets de aparencia',
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS `prison_records` (
   `sentence_minutes` INT NOT NULL DEFAULT 10 COMMENT 'Tempo de pena em minutos in-game',
   `time_served_minutes` INT NOT NULL DEFAULT 0,
   `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT 'active, released, escaped',
-  `cell_id` VARCHAR(64) NOT NULL DEFAULT '0x162e2' COMMENT 'Celula da prisao',
+  `cell_id` VARCHAR(64) NOT NULL DEFAULT '162e2:Skyrim.esm' COMMENT 'Celula da prisao',
   `arrested_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `released_at` TIMESTAMP NULL DEFAULT NULL,
   CONSTRAINT `fk_prison_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE CASCADE
