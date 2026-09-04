@@ -174,3 +174,51 @@ export async function copyPrimetoileBase(
     };
   }
 }
+export type PrimetoileBaseCheck =
+  | {
+      ok: true;
+    }
+  | {
+      ok: false;
+      missing: string[];
+    };
+
+export function checkPrimetoileBase(
+  isolatedGamePath: string
+): PrimetoileBaseCheck {
+  const destination = path.resolve(isolatedGamePath);
+
+  const requiredFiles = [
+    ...PRIMETOILE_ROOT_FILES.map((name) => ({
+      path: path.join(destination, name),
+      displayName: name
+    })),
+
+    ...PRIMETOILE_DATA_FILES.map((name) => ({
+      path: path.join(destination, 'Data', name),
+      displayName: `Data/${name}`
+    }))
+  ];
+
+  const missing = requiredFiles
+    .filter((file) => !fs.existsSync(file.path))
+    .map((file) => file.displayName);
+
+  // Il faut également au moins une archive de voix Skyrim.
+  const voiceArchives = findSkyrimVoiceArchives(destination);
+
+  if (voiceArchives.length === 0) {
+    missing.push('Data/Skyrim - Voices_*.bsa');
+  }
+
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      missing
+    };
+  }
+
+  return {
+    ok: true
+  };
+}
