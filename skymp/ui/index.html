@@ -674,18 +674,53 @@
   // depois, sem confirmação de que o modo online (`offlineMode: false`, o
   // nosso) precisa dele -- mantido por precaução, não custa nada mandar.
   if (!RODANDO_FORA_DO_JOGO) {
-    let jaTentouAuth = false;
+    let bootstrapConcluido = false;
+    let authAttemptEnviado = false;
+
     const tentativas = setInterval(() => {
-      if (jaTentouAuth) { clearInterval(tentativas); return; }
-      if (window.skyrimPlatform && typeof window.skyrimPlatform.sendMessage === 'function') {
-        jaTentouAuth = true;
-        clearInterval(tentativas);
-        window.skyrimPlatform.sendMessage('front-loaded');
-        setTimeout(() => {
-          window.skyrimPlatform.sendMessage('authAttemptEvent');
-        }, 1000);
+      if (bootstrapConcluido) { clearInterval(tentativas); return; }
+
+      const bridge = window.skyrimPlatform;
+      if (!bridge || typeof bridge.sendMessage !== 'function') return;
+
+      // O frontend oficial cria este contrato antes de mandar front-loaded.
+      // O AuthService chama widgets.set somente depois de carregar o ticket.
+      if (!bridge.widgets) {
+        let widgetsAtuais = [];
+        let listeners = [];
+        bridge.widgets = {
+          get: () => widgetsAtuais,
+          set: widgets => {
+            widgetsAtuais = widgets || [];
+            listeners.forEach(listener => listener(widgetsAtuais));
+          },
+          addListener: listener => {
+            listeners.push(listener);
+          },
+          removeListener: listener => {
+            listeners = listeners.filter(item => item !== listener);
+          }
+        };
       }
+
+      const widgetsSetOriginal = bridge.widgets.set.bind(bridge.widgets);
+      bridge.widgets.set = widgets => {
+        widgetsSetOriginal(widgets);
+
+        const authPronta = Array.isArray(widgets) &&
+          widgets.some(widget => widget && widget.type === 'form' && widget.id === 1);
+
+        if (authPronta && !authAttemptEnviado) {
+          authAttemptEnviado = true;
+          setTimeout(() => bridge.sendMessage('authAttemptEvent'), 0);
+        }
+      };
+
+      bootstrapConcluido = true;
+      clearInterval(tentativas);
+      bridge.sendMessage('front-loaded');
     }, 200);
+
     // Não fica tentando pra sempre se o bridge nunca aparecer.
     setTimeout(() => clearInterval(tentativas), 30000);
   }

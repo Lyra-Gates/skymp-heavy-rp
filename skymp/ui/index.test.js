@@ -1,17 +1,5 @@
 'use strict';
 
-/**
- * Caracterização estática de `index.html` — não roda dentro do CEF (não há
- * runner pra isso neste projeto), só confirma que o arquivo continua com a
- * sequência de bootstrap de auth que a evidência de 27/08/2026 exige: ver o
- * comentário acima do bloco em `index.html` pra fonte (bundle oficial do
- * skymp5-client + `skymp5-client.log` real, ambos fora deste repositório).
- *
- * Se este teste quebrar porque alguém removeu ou reordenou o `sendMessage`,
- * é sinal de que a regressão do AUTH bloqueador (connections.total: 0)
- * provavelmente volta.
- */
-
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -19,32 +7,53 @@ const { test } = require('node:test');
 
 const HTML_PATH = path.join(__dirname, 'index.html');
 
-test('index.html manda front-loaded antes de authAttemptEvent, dentro do jogo', () => {
-  const html = fs.readFileSync(HTML_PATH, 'utf8');
+function readHtml() {
+  return fs.readFileSync(HTML_PATH, 'utf8');
+}
 
-  const frontLoadedIdx = html.indexOf("sendMessage('front-loaded')");
-  const authAttemptIdx = html.indexOf("sendMessage('authAttemptEvent')");
-  const delayedIdx = html.indexOf('setTimeout(() => {', frontLoadedIdx);
+test('index.html cria o contrato widgets antes de front-loaded', () => {
+  const html = readHtml();
+  const widgetsIdx = html.indexOf('bridge.widgets = {');
+  const wrapperIdx = html.indexOf('bridge.widgets.set = widgets => {');
+  const frontLoadedIdx = html.indexOf("bridge.sendMessage('front-loaded')");
 
-  assert.notStrictEqual(frontLoadedIdx, -1,
-    "front-loaded precisa ser mandado -- e o primeiro sinal que o AuthService " +
-    "nativo espera antes de sequer considerar authNeeded (ver comentario).");
-  assert.notStrictEqual(authAttemptIdx, -1,
-    'authAttemptEvent continua sendo mandado por precaucao.');
-  assert.ok(frontLoadedIdx < authAttemptIdx,
-    'front-loaded precisa vir ANTES de authAttemptEvent, nunca depois.');
-  assert.ok(delayedIdx > frontLoadedIdx && delayedIdx < authAttemptIdx,
-    'authAttemptEvent precisa esperar o AuthService carregar o ticket.');
+  assert.notStrictEqual(widgetsIdx, -1, 'o contrato widgets precisa existir.');
+  assert.notStrictEqual(wrapperIdx, -1, 'widgets.set precisa ser observado.');
+  assert.notStrictEqual(frontLoadedIdx, -1, 'front-loaded precisa ser enviado.');
+  assert.ok(widgetsIdx < wrapperIdx && wrapperIdx < frontLoadedIdx,
+    'widgets precisa estar pronto antes de front-loaded.');
+
+  const contract = html.slice(widgetsIdx, wrapperIdx);
+  for (const method of ['get:', 'set:', 'addListener:', 'removeListener:']) {
+    assert.ok(contract.includes(method), `metodo oficial ausente: ${method}`);
+  }
 });
 
-test('index.html so dispara isso dentro do jogo (RODANDO_FORA_DO_JOGO=false), nunca no mock', () => {
-  const html = fs.readFileSync(HTML_PATH, 'utf8');
+test('authAttemptEvent espera o formulario oficial e dispara uma vez', () => {
+  const html = readHtml();
+  const readyIdx = html.indexOf("widget.type === 'form' && widget.id === 1");
+  const onceIdx = html.indexOf('if (authPronta && !authAttemptEnviado)');
+  const markedIdx = html.indexOf('authAttemptEnviado = true;', onceIdx);
+  const sendIdx = html.indexOf("bridge.sendMessage('authAttemptEvent')", onceIdx);
 
+  assert.notStrictEqual(readyIdx, -1, 'o loginWidget oficial precisa ser reconhecido.');
+  assert.ok(readyIdx < onceIdx && onceIdx < markedIdx && markedIdx < sendIdx,
+    'authAttemptEvent deve esperar o loginWidget e ser marcado como enviado.');
+  assert.ok(
+    html.includes("setTimeout(() => bridge.sendMessage('authAttemptEvent'), 0);"),
+    'o envio precisa ocorrer depois que widgets.set terminar.'
+  );
+  assert.ok(!html.includes('}, 1000);'),
+    'o antigo atraso arbitrario de um segundo nao deve continuar.');
+});
+
+test('bootstrap de autenticacao fica restrito ao jogo', () => {
+  const html = readHtml();
   const guardIdx = html.indexOf('if (!RODANDO_FORA_DO_JOGO) {');
-  const frontLoadedIdx = html.indexOf("sendMessage('front-loaded')");
+  const widgetsIdx = html.indexOf('bridge.widgets = {');
+  const frontLoadedIdx = html.indexOf("bridge.sendMessage('front-loaded')");
 
-  assert.notStrictEqual(guardIdx, -1, 'guarda RODANDO_FORA_DO_JOGO precisa existir.');
-  assert.ok(guardIdx !== -1 && frontLoadedIdx > guardIdx,
-    'o disparo de front-loaded precisa estar dentro do bloco !RODANDO_FORA_DO_JOGO, ' +
-    'senão o mock de fora do jogo tambem dispara (mesma classe de bug corrigida em 23/08).');
+  assert.notStrictEqual(guardIdx, -1, 'a protecao RODANDO_FORA_DO_JOGO precisa existir.');
+  assert.ok(guardIdx < widgetsIdx && guardIdx < frontLoadedIdx,
+    'o bootstrap nao pode executar no mock usado fora do jogo.');
 });
