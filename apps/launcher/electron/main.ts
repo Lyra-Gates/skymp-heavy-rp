@@ -1,4 +1,7 @@
-import { copyPrimetoileBase } from './isolated-install.js';
+import {
+  copyPrimetoileBase,
+  checkPrimetoileBase
+} from './isolated-install.js';
 import { app, BrowserWindow, ipcMain, dialog, screen } from 'electron';
 import path from 'path';
 import { exec, spawn } from 'child_process';
@@ -383,6 +386,32 @@ ipcMain.handle('install-isolated-game', async (event) => {
   }
 
   return result;
+});
+ipcMain.handle('check-isolated-game', async () => {
+  const config = readLauncherConfig();
+
+  if (!config.isolatedGamePath) {
+    return {
+      ok: false,
+      reason: 'isolated-path-not-configured',
+      missing: []
+    };
+  }
+
+  const result = checkPrimetoileBase(config.isolatedGamePath);
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason: 'incomplete',
+      missing: result.missing
+    };
+  }
+
+  return {
+    ok: true,
+    reason: 'ok'
+  };
 });
 
   // Compatibilité temporaire avec la V7.
