@@ -3,6 +3,8 @@ export const CONNECTION_SETTINGS_ERROR_CODES: Readonly<{
   EMPTY_TICKET: 'EMPTY_TICKET';
   INVALID_SERVER_HOST: 'INVALID_SERVER_HOST';
   INVALID_SERVER_PORT: 'INVALID_SERVER_PORT';
+  INVALID_MASTER_URL: 'INVALID_MASTER_URL';
+  INVALID_MASTER_KEY: 'INVALID_MASTER_KEY';
   INVALID_EXISTING_JSON: 'INVALID_EXISTING_JSON';
   INVALID_EXISTING_SHAPE: 'INVALID_EXISTING_SHAPE';
   WRITE_FAILED: 'WRITE_FAILED';
@@ -27,6 +29,8 @@ export interface PrepareConnectionSettingsInput {
   serverIp: string;
   serverPort: number | string;
   discordId?: string;
+  masterUrl?: string;
+  serverMasterKey?: string;
 }
 
 export interface PreparedConnectionSettings {

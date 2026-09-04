@@ -159,7 +159,7 @@ function hasForbiddenCredential(record) {
  * Lança `ConnectionSettingsError` em qualquer inconsistência; o chamador não
  * deve iniciar o jogo nesse caso.
  *
- * @param {{gamePath:string, ticket:string, serverIp:string, serverPort:number|string, discordId?:string}} input
+ * @param {{gamePath:string, ticket:string, serverIp:string, serverPort:number|string, discordId?:string, masterUrl?:string, serverMasterKey?:string}} input
  * @returns {{configPath:string, clientSettingsPath:string, config:Record<string, unknown>, clientSettings:Record<string, unknown>}}
  */
 export function prepararConfiguracaoConexao(input) {
