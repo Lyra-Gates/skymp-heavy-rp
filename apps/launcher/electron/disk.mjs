@@ -79,10 +79,10 @@ export function avaliarEspaco(destinos, reserva = RESERVA_BYTES) {
       return {
         ok: false,
         error:
-          `Espaco insuficiente em ${rotulo}: ha ${formatarBytes(livreBytes)} livres e ` +
-          `sao necessarios ${formatarBytes(exigido)} ` +
-          `(${formatarBytes(necessarioBytes)} do download mais ${formatarBytes(reserva)} de folga). ` +
-          `Libere ${formatarBytes(faltam)} e tente de novo.`
+          `Espace insuffisant sur ${rotulo} : ${formatarBytes(livreBytes)} sont disponibles, mais ` +
+          `${formatarBytes(exigido)} sont nécessaires ` +
+          `(${formatarBytes(necessarioBytes)} pour le téléchargement et ${formatarBytes(reserva)} de marge). ` +
+          `Libérez ${formatarBytes(faltam)} puis réessayez.`
       };
     }
   }

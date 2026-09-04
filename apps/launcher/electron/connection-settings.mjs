@@ -63,14 +63,14 @@ function readExistingJson(filePath) {
   } catch (cause) {
     throw new ConnectionSettingsError(
       'INVALID_EXISTING_JSON',
-      `O arquivo de conexão existente não contém JSON válido: ${path.basename(filePath)}`,
+      `Le fichier de connexion existant ne contient pas de JSON valide : ${path.basename(filePath)}`,
       cause
     );
   }
   if (!isRecord(parsed)) {
     throw new ConnectionSettingsError(
       'INVALID_EXISTING_SHAPE',
-      `O arquivo de conexão existente precisa conter um objeto JSON: ${path.basename(filePath)}`
+      `Le fichier de connexion existant doit contenir un objet JSON : ${path.basename(filePath)}`
     );
   }
   return parsed;
@@ -143,7 +143,7 @@ function readWrittenObject(filePath) {
   } catch (cause) {
     throw new ConnectionSettingsError(
       'VERIFY_FAILED',
-      `Não foi possível reler a configuração gravada: ${path.basename(filePath)}`,
+      `Impossible de relire la configuration enregistrée : ${path.basename(filePath)}`,
       cause
     );
   }
@@ -165,24 +165,24 @@ function hasForbiddenCredential(record) {
 export function prepararConfiguracaoConexao(input) {
   const gamePath = typeof input?.gamePath === 'string' ? input.gamePath.trim() : '';
   if (!gamePath || gamePath.includes('\0')) {
-    throw new ConnectionSettingsError('INVALID_GAME_PATH', 'O caminho do jogo é inválido.');
+    throw new ConnectionSettingsError('INVALID_GAME_PATH', 'Le chemin du jeu est invalide.');
   }
 
   const ticket = typeof input?.ticket === 'string' ? input.ticket : '';
   if (!ticket.trim() || ticket.includes('\0')) {
-    throw new ConnectionSettingsError('EMPTY_TICKET', 'O ticket de inicialização está vazio ou inválido.');
+    throw new ConnectionSettingsError('EMPTY_TICKET', 'Le ticket de lancement est vide ou invalide.');
   }
 
   const serverIp = typeof input?.serverIp === 'string' ? input.serverIp.trim() : '';
   if (!isValidHost(serverIp)) {
-    throw new ConnectionSettingsError('INVALID_SERVER_HOST', 'O host do servidor é inválido.');
+    throw new ConnectionSettingsError('INVALID_SERVER_HOST', "L'adresse du serveur est invalide.");
   }
 
   const serverPort = typeof input?.serverPort === 'string' && /^\d+$/.test(input.serverPort)
     ? Number(input.serverPort)
     : input?.serverPort;
   if (!Number.isInteger(serverPort) || serverPort < 1 || serverPort > 65535) {
-    throw new ConnectionSettingsError('INVALID_SERVER_PORT', 'A porta do servidor deve estar entre 1 e 65535.');
+    throw new ConnectionSettingsError('INVALID_SERVER_PORT', 'Le port du serveur doit être compris entre 1 et 65535.');
   }
 
   const masterUrlInput = typeof input?.masterUrl === 'string'
@@ -198,7 +198,7 @@ export function prepararConfiguracaoConexao(input) {
     } catch {
       throw new ConnectionSettingsError(
         'INVALID_MASTER_URL',
-        'A URL da API principal e invalida.'
+        "L'URL de l'API principale est invalide."
       );
     }
 
@@ -214,7 +214,7 @@ export function prepararConfiguracaoConexao(input) {
     if (!validProtocol || hasForbiddenParts) {
       throw new ConnectionSettingsError(
         'INVALID_MASTER_URL',
-        'A URL da API principal deve usar HTTP ou HTTPS, sem credenciais.'
+        "L'URL de l'API principale doit utiliser HTTP ou HTTPS, sans identifiants."
       );
     }
 
@@ -226,7 +226,7 @@ export function prepararConfiguracaoConexao(input) {
     if (!/^[a-z0-9._-]{1,80}$/i.test(serverMasterKey)) {
       throw new ConnectionSettingsError(
         'INVALID_MASTER_KEY',
-        'A chave publica do servidor e invalida.'
+        'La clé publique du serveur est invalide.'
       );
     }
   }
@@ -273,7 +273,7 @@ export function prepararConfiguracaoConexao(input) {
     atomicWriteFile(clientSettingsPath, `${JSON.stringify(clientSettings, null, 2)}\n`);
     atomicWriteFile(authDataPath, `//${JSON.stringify(remoteAuthData)}\n`);
   } catch (cause) {
-    throw new ConnectionSettingsError('WRITE_FAILED', 'Falha ao gravar a configuração de conexão.', cause);
+    throw new ConnectionSettingsError('WRITE_FAILED', "Échec de l'enregistrement de la configuration de connexion.", cause);
   }
 
   const writtenConfig = readWrittenObject(configPath);
@@ -285,7 +285,7 @@ export function prepararConfiguracaoConexao(input) {
   } catch (cause) {
     throw new ConnectionSettingsError(
       'VERIFY_FAILED',
-      'Nao foi possivel reler os dados de autenticacao gravados.',
+      "Impossible de relire les données d'authentification enregistrées.",
       cause
     );
   }
@@ -316,7 +316,7 @@ export function prepararConfiguracaoConexao(input) {
     writtenAuthData.discordAvatar === null;
 
   if (!valid) {
-    throw new ConnectionSettingsError('VERIFY_FAILED', 'A configuração relida não corresponde à conexão solicitada.');
+    throw new ConnectionSettingsError('VERIFY_FAILED', 'La configuration relue ne correspond pas à la connexion demandée.');
   }
 
   return { configPath, clientSettingsPath, config: writtenConfig, clientSettings: writtenSettings };

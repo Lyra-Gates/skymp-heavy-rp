@@ -51,7 +51,7 @@ function bundledUiDir() {
 }
 
 function ensureSkympUi(gamePath: string) {
-  if (!gamePath) return { ok: false, repaired: [], error: 'Caminho do jogo invalido.' };
+  if (!gamePath) return { ok: false, repaired: [], error: 'Le dossier du jeu est invalide.' };
   return syncUiBundle({
     sourceDir: bundledUiDir(),
     targetDir: path.join(gamePath, 'Data', 'Platform', 'UI')
@@ -69,7 +69,7 @@ function bundledVoiceHelperPath() {
 }
 
 function ensureVoiceHelper(gamePath: string) {
-  if (!gamePath) return { ok: false, repaired: false, error: 'Caminho do jogo invalido.' };
+  if (!gamePath) return { ok: false, repaired: false, error: 'Le dossier du jeu est invalide.' };
   // Fica em Data/Platform/, junto do resto do que a SkyrimPlatform usa.
   return syncVoiceHelper({
     sourcePath: bundledVoiceHelperPath(),
@@ -175,7 +175,7 @@ function createWindow() {
     height: 680,
     minWidth: 1024,
     minHeight: 640,
-    title: "Skyrim Heavy RP Launcher",
+    title: "Primétoile Alpha Launcher",
     icon: path.join(__dirname, '../public/logo.png'),
     resizable: true,
     frame: false,
@@ -298,7 +298,7 @@ function readLauncherConfig(): LauncherConfig {
       return JSON.parse(fs.readFileSync(LAUNCHER_CONFIG_FILE, 'utf8'));
     }
   } catch (e) {
-    console.error('Error reading launcher config:', e);
+    console.error('Impossible de lire la configuration du launcher :', e);
   }
   return {};
 }
@@ -339,7 +339,7 @@ ipcMain.handle('select-game-path', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
-    title: 'Selecione a pasta do Skyrim (onde está o SkyrimSE.exe)'
+    title: 'Sélectionnez le dossier de Skyrim (celui qui contient SkyrimSE.exe)'
   });
   if (result.canceled) return null;
   return result.filePaths[0];
@@ -520,7 +520,7 @@ function readAuthFile() {
       return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
     }
   } catch (e) {
-    console.error('Error reading auth file:', e);
+    console.error("Impossible de lire le fichier d’authentification :", e);
   }
   return null;
 }
@@ -529,7 +529,7 @@ function writeAuthFile(data: any) {
   try {
     fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2));
   } catch (e) {
-    console.error('Error writing auth file:', e);
+    console.error("Impossible d’écrire le fichier d’authentification :", e);
   }
 }
 
@@ -631,27 +631,27 @@ function espacoLivreBytes(caminho: string): number | null {
  */
 function checarEspacoParaBaixar(tmpPath: string, destinoPath: string, sizeBytes: number) {
   return avaliarEspaco([
-    { rotulo: `disco temporario (${path.parse(tmpPath).root})`, livreBytes: espacoLivreBytes(path.dirname(tmpPath)), necessarioBytes: sizeBytes },
-    { rotulo: `pasta do jogo (${path.parse(destinoPath).root})`, livreBytes: espacoLivreBytes(destinoPath), necessarioBytes: sizeBytes }
+    { rotulo: `disque temporaire (${path.parse(tmpPath).root})`, livreBytes: espacoLivreBytes(path.dirname(tmpPath)), necessarioBytes: sizeBytes },
+    { rotulo: `dossier du jeu (${path.parse(destinoPath).root})`, livreBytes: espacoLivreBytes(destinoPath), necessarioBytes: sizeBytes }
   ]);
 }
 
 function downloadToFile(url: string, destPath: string, onProgress?: (percent: number) => void, redirectsLeft = 5): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!url.startsWith('https:')) {
-      reject(new Error(`Download bloqueado: esquema de URL nao seguro (${url})`));
+      reject(new Error(`Téléchargement bloqué : protocole d’URL non sécurisé (${url})`));
       return;
     }
     const req = https.get(url, { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } }, (res) => {
       if (res.statusCode && [301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
         res.resume();
         if (redirectsLeft <= 0) {
-          reject(new Error('Muitos redirecionamentos'));
+          reject(new Error('Trop de redirections'));
           return;
         }
         const nextUrl = new URL(res.headers.location, url).toString();
         if (!nextUrl.startsWith('https:')) {
-          reject(new Error(`Download bloqueado: redirecionamento para esquema inseguro (${nextUrl})`));
+          reject(new Error(`Téléchargement bloqué : redirection vers un protocole non sécurisé (${nextUrl})`));
           return;
         }
         downloadToFile(nextUrl, destPath, onProgress, redirectsLeft - 1).then(resolve, reject);
@@ -659,7 +659,7 @@ function downloadToFile(url: string, destPath: string, onProgress?: (percent: nu
       }
       if (res.statusCode !== 200) {
         res.resume();
-        reject(new Error(`HTTP ${res.statusCode} ao baixar arquivo`));
+        reject(new Error(`Erreur HTTP ${res.statusCode} pendant le téléchargement`));
         return;
       }
       const total = parseInt(String(res.headers['content-length'] || '0'), 10);
@@ -675,7 +675,7 @@ function downloadToFile(url: string, destPath: string, onProgress?: (percent: nu
       res.on('error', reject);
     });
     req.on('error', reject);
-    req.setTimeout(60000, () => req.destroy(new Error('Timeout no download')));
+    req.setTimeout(60000, () => req.destroy(new Error('Le téléchargement a expiré')));
   });
 }
 
@@ -717,9 +717,9 @@ function extractZip(zipPath: string, destDir: string): Promise<void> {
       let psErr = '';
       ps.stderr.on('data', data => psErr += data.toString());
       ps.on('error', reject);
-      ps.on('close', code => code === 0 ? resolve() : reject(new Error(psErr || `Expand-Archive saiu com codigo ${code}`)));
+      ps.on('close', code => code === 0 ? resolve() : reject(new Error(psErr || `Expand-Archive s’est terminé avec le code ${code}`)));
     });
-    tar.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || `tar saiu com codigo ${code}`)));
+    tar.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || `tar s’est terminé avec le code ${code}`)));
   });
 }
 
@@ -846,7 +846,7 @@ ipcMain.handle('discord-login', async () => {
 
         if (!state || state !== oauthState) {
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erro: parâmetro state inválido ou ausente.</h1>');
+          res.end('<h1>Erreur : le paramètre state est absent ou invalide.</h1>');
           callbackServer.close();
           finish(null);
           return;
@@ -854,7 +854,7 @@ ipcMain.handle('discord-login', async () => {
 
         if (!code) {
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erro: código de autorização não recebido.</h1>');
+          res.end('<h1>Erreur : le code d’autorisation n’a pas été reçu.</h1>');
           callbackServer.close();
           finish(null);
           return;
@@ -871,7 +871,7 @@ ipcMain.handle('discord-login', async () => {
 
         if (exchange.status !== 200 || !exchange.data || !exchange.data.discordId) {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erro ao concluir o login. Verifique se o painel do servidor está acessível.</h1>');
+          res.end('<h1>Impossible de terminer la connexion. Vérifiez que le panel du serveur est accessible.</h1>');
           callbackServer.close();
           finish(null);
           return;
@@ -902,8 +902,8 @@ ipcMain.handle('discord-login', async () => {
           <html>
             <body style="background:#0a0a0a;color:#c9a227;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
               <div style="text-align:center;">
-                <h1>✅ Login realizado com sucesso!</h1>
-                <p style="color:#d6d3d1;">Bem-vindo, ${escapeHtml(authData.globalName)}! Pode fechar esta janela.</p>
+                <h1>✅ Connexion réussie !</h1>
+                <p style="color:#d6d3d1;">Bienvenue, ${escapeHtml(authData.globalName)} ! Vous pouvez fermer cette fenêtre.</p>
               </div>
             </body>
           </html>
@@ -915,9 +915,9 @@ ipcMain.handle('discord-login', async () => {
         }
         finish(authData);
       } catch (err) {
-        console.error('OAuth2 callback error:', err);
+        console.error('Erreur du retour OAuth2 :', err);
         res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end('<h1>Erro interno.</h1>');
+        res.end('<h1>Erreur interne.</h1>');
         callbackServer.close();
         finish(null);
       }
@@ -929,7 +929,7 @@ ipcMain.handle('discord-login', async () => {
     // Node pra 'error' sem handler e' lancar e derrubar o processo inteiro,
     // exigindo reiniciar o launcher pra tentar de novo.
     callbackServer.on('error', (err) => {
-      console.error('OAuth2 callback server error:', err);
+      console.error('Erreur du serveur de retour OAuth2 :', err);
       if (authWindow && !authWindow.isDestroyed()) {
         authWindow.close();
       }
@@ -937,7 +937,7 @@ ipcMain.handle('discord-login', async () => {
     });
 
     callbackServer.listen(19847, '127.0.0.1', () => {
-      console.log('OAuth2 callback server listening on 127.0.0.1:19847');
+      console.log('Le serveur de retour OAuth2 écoute sur 127.0.0.1:19847');
     });
 
     const authUrl = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&scope=identify&state=${oauthState}`;
@@ -947,7 +947,7 @@ ipcMain.handle('discord-login', async () => {
       height: 750,
       parent: mainWindow || undefined,
       modal: !!mainWindow,
-      title: 'Entrar com Discord',
+      title: 'Se connecter avec Discord',
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -988,7 +988,7 @@ ipcMain.handle('discord-logout', async () => {
       await postJsonToUrl(`${PANEL_URL}/api/launcher/session/revoke`, { sessionToken: auth.sessionToken });
     }
   } catch (e) {
-    console.error('Error revoking launcher session:', e);
+    console.error('Impossible de révoquer la session du launcher :', e);
   }
   currentQueueTicket = null;
   clearAuthFile();
@@ -1183,15 +1183,15 @@ ipcMain.handle('get-local-plugins', async (_event, folderPath) => {
 });
 
 ipcMain.handle('verify-mods', async (_event, folderPath) => {
-  if (!folderPath) return { success: false, error: "Caminho do jogo inválido." };
+  if (!folderPath) return { success: false, error: "Le dossier du jeu est invalide." };
   try {
     const dataPath = path.join(folderPath, 'Data');
-    if (!fs.existsSync(dataPath)) return { success: false, error: "Pasta Data não encontrada." };
+    if (!fs.existsSync(dataPath)) return { success: false, error: "Le dossier Data est introuvable." };
 
     const modsJson: any = await httpGetJson(`${GAME_API_URL}/mods.json`);
 
     if (!modsJson || !modsJson.mods) {
-      return { success: false, error: "Falha ao baixar mods.json do servidor. Servidor pode estar offline." };
+      return { success: false, error: "Impossible de télécharger mods.json. Le serveur est peut-être hors ligne." };
     }
 
     const allFiles = fs.readdirSync(dataPath);
@@ -1212,10 +1212,10 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
 });
 
 ipcMain.handle('analyze-plugins', async (_event, folderPath, serverLoadOrder) => {
-  if (!folderPath) return { ok: false, problems: ['Caminho do jogo invalido.'], plugins: [] };
+  if (!folderPath) return { ok: false, problems: ['Le dossier du jeu est invalide.'], plugins: [] };
   try {
     const dataPath = path.join(folderPath, 'Data');
-    if (!fs.existsSync(dataPath)) return { ok: false, problems: ['Pasta Data nao encontrada.'], plugins: [] };
+    if (!fs.existsSync(dataPath)) return { ok: false, problems: ['Le dossier Data est introuvable.'], plugins: [] };
 
     // A load order real vem do plugins.txt, nao dos arquivos presentes em
     // Data/: um plugin no disco e desativado nao ocupa indice e nao desloca
@@ -1269,8 +1269,8 @@ ipcMain.handle('sync-loadorder', async (_event, folderPath, serverLoadOrder) => 
     const diskPlugins = allFiles.filter(f => f.toLowerCase().endsWith('.esp') || f.toLowerCase().endsWith('.esl') || f.toLowerCase().endsWith('.esm'));
 
     const resultLines = [
-      '# This file is managed by Skyrim Heavy RP Launcher.',
-      '# Do not modify manually.'
+      '# Ce fichier est géré par le launcher Skyrim Heavy RP.',
+      '# Ne le modifiez pas manuellement.'
     ];
 
     for (const plugin of serverLoadOrder) {
@@ -1305,7 +1305,7 @@ ipcMain.handle('check-client-update', async (_event, gamePath) => {
   // aí sim alguém decidiu depender do gate e ele está quebrado.
   if (!DIST_REPO) return { updateAvailable: false };
   const manifest = await httpGetJson(clientManifestUrl());
-  if (!manifest || !manifest.clientVersion) return { updateAvailable: false, error: 'Manifesto de cliente indisponivel.' };
+  if (!manifest || !manifest.clientVersion) return { updateAvailable: false, error: 'Le manifeste du client est indisponible.' };
   const installedVersion = gamePath ? readStamp(gamePath, CLIENT_VERSION_FILENAME) : null;
   return {
     updateAvailable: installedVersion !== manifest.clientVersion,
@@ -1317,9 +1317,9 @@ ipcMain.handle('check-client-update', async (_event, gamePath) => {
 });
 
 ipcMain.handle('install-client-update', async (_event, gamePath) => {
-  if (!gamePath) return { success: false, error: 'Caminho do jogo invalido.' };
-  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'O jogo esta aberto. Feche antes de atualizar.' };
-  if (!DIST_REPO) return { success: false, error: 'VITE_GITHUB_DIST_REPO nao configurado.' };
+  if (!gamePath) return { success: false, error: 'Le dossier du jeu est invalide.' };
+  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'Le jeu est ouvert. Fermez-le avant la mise à jour.' };
+  if (!DIST_REPO) return { success: false, error: 'La source des mises à jour (VITE_GITHUB_DIST_REPO) n’est pas configurée.' };
 
   const send = (phase: string, percent: number) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-progress', { phase, percent });
@@ -1327,7 +1327,7 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
   const tmpZip = path.join(app.getPath('temp'), 'skymp_client_update.zip');
   try {
     const manifest = await httpGetJson(clientManifestUrl());
-    if (!manifest || !manifest.downloadUrl) return { success: false, error: 'Manifesto de cliente invalido.' };
+    if (!manifest || !manifest.downloadUrl) return { success: false, error: 'Le manifeste du client est invalide.' };
 
     const espaco = checarEspacoParaBaixar(tmpZip, gamePath, manifest.sizeBytes);
     if (!espaco.ok) return { success: false, error: espaco.error };
@@ -1336,13 +1336,13 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
     await downloadToFile(manifest.downloadUrl, tmpZip, percent => send('download', percent));
     if (!manifest.sha256) {
       try { fs.unlinkSync(tmpZip); } catch {}
-      return { success: false, error: 'Manifesto de cliente sem SHA256: verificacao de integridade obrigatoria ausente.' };
+      return { success: false, error: 'Le manifeste du client ne contient pas de SHA256 : la vérification d’intégrité obligatoire est impossible.' };
     }
     send('verify', 0);
     const actual = await sha256File(tmpZip);
     if (actual.toLowerCase() !== String(manifest.sha256).toLowerCase()) {
       try { fs.unlinkSync(tmpZip); } catch {}
-      return { success: false, error: 'SHA256 do cliente nao confere.' };
+      return { success: false, error: 'Le SHA256 du client ne correspond pas.' };
     }
     send('verify', 100);
     await killGameProcesses();
@@ -1360,16 +1360,16 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
     // internet. A checagem previa nao pega tudo: o disco pode encher DURANTE
     // o download, ou a extracao pode precisar de mais que o .zip.
     if (ehDiscoCheio(e)) {
-      return { success: false, error: 'O disco encheu durante a operacao. Libere espaco e tente de novo.' };
+      return { success: false, error: 'Le disque s’est rempli pendant l’opération. Libérez de l’espace puis réessayez.' };
     }
     return { success: false, error: e.message };
   }
 });
 
 ipcMain.handle('check-mods-update', async (_event, gamePath) => {
-  if (!DIST_REPO) return { updateAvailable: false, error: 'VITE_GITHUB_DIST_REPO nao configurado.' };
+  if (!DIST_REPO) return { updateAvailable: false, error: 'La source des mises à jour (VITE_GITHUB_DIST_REPO) n’est pas configurée.' };
   const manifest = await httpGetJson(modsManifestUrl());
-  if (!manifest || !manifest.modsVersion) return { updateAvailable: false, error: 'Manifesto de mods indisponivel.' };
+  if (!manifest || !manifest.modsVersion) return { updateAvailable: false, error: 'Le manifeste des mods est indisponible.' };
   const installedVersion = gamePath ? readStamp(gamePath, MODS_VERSION_FILENAME) : null;
   return {
     updateAvailable: installedVersion !== manifest.modsVersion,
@@ -1382,9 +1382,9 @@ ipcMain.handle('check-mods-update', async (_event, gamePath) => {
 });
 
 ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
-  if (!gamePath) return { success: false, error: 'Caminho do jogo invalido.' };
-  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'O jogo esta aberto. Feche antes de atualizar mods.' };
-  if (!DIST_REPO) return { success: false, error: 'VITE_GITHUB_DIST_REPO nao configurado.' };
+  if (!gamePath) return { success: false, error: 'Le dossier du jeu est invalide.' };
+  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'Le jeu est ouvert. Fermez-le avant de mettre les mods à jour.' };
+  if (!DIST_REPO) return { success: false, error: 'La source des mises à jour (VITE_GITHUB_DIST_REPO) n’est pas configurée.' };
 
   const send = (phase: string, percent: number) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mods-update-progress', { phase, percent });
@@ -1392,7 +1392,7 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
   const tmpZip = path.join(app.getPath('temp'), 'skymp_mods_update.zip');
   try {
     const manifest = await httpGetJson(modsManifestUrl());
-    if (!manifest || (!manifest.downloadUrl && !Array.isArray(manifest.parts))) return { success: false, error: 'Manifesto de mods invalido.' };
+    if (!manifest || (!manifest.downloadUrl && !Array.isArray(manifest.parts))) return { success: false, error: 'Le manifeste des mods est invalide.' };
     const installedVersion = readStamp(gamePath, MODS_VERSION_FILENAME);
     if (!force && installedVersion === manifest.modsVersion) {
       return { success: true, version: manifest.modsVersion, alreadyCurrent: true };
@@ -1433,13 +1433,13 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
       await downloadToFile(part.url, tmpZip, percent => send('download', Math.min(100, base + Math.round(percent * span / 100))));
       if (!part.sha256) {
         try { fs.unlinkSync(tmpZip); } catch {}
-        return { success: false, error: `Parte ${index + 1} sem SHA256: verificacao de integridade obrigatoria ausente.` };
+        return { success: false, error: `La partie ${index + 1} ne contient pas de SHA256 : la vérification d’intégrité obligatoire est impossible.` };
       }
       send('verify', base);
       const actual = await sha256File(tmpZip);
       if (actual.toLowerCase() !== String(part.sha256).toLowerCase()) {
         try { fs.unlinkSync(tmpZip); } catch {}
-        return { success: false, error: `SHA256 dos mods nao confere na parte ${index + 1}.` };
+        return { success: false, error: `Le SHA256 des mods ne correspond pas pour la partie ${index + 1}.` };
       }
       send('extract', base);
       await extractZip(tmpZip, gamePath);
@@ -1457,7 +1457,7 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
     // internet. A checagem previa nao pega tudo: o disco pode encher DURANTE
     // o download, ou a extracao pode precisar de mais que o .zip.
     if (ehDiscoCheio(e)) {
-      return { success: false, error: 'O disco encheu durante a operacao. Libere espaco e tente de novo.' };
+      return { success: false, error: 'Le disque s’est rempli pendant l’opération. Libérez de l’espace puis réessayez.' };
     }
     return { success: false, error: e.message };
   }
@@ -1486,7 +1486,7 @@ ipcMain.handle('report-recent-crashes', async () => {
       const raw = fs.readFileSync(file.fullPath);
       const maxBytes = 60 * 1024;
       const content = raw.length > maxBytes
-        ? Buffer.concat([raw.subarray(0, maxBytes), Buffer.from('\n...[truncado pelo launcher]')]).toString('utf8')
+        ? Buffer.concat([raw.subarray(0, maxBytes), Buffer.from('\n...[tronqué par le launcher]')]).toString('utf8')
         : raw.toString('utf8');
       return { filename: file.name, mtime: file.mtime, content };
     })
@@ -1498,17 +1498,17 @@ ipcMain.handle('report-recent-crashes', async () => {
 
 ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
   if (!folderPath) {
-    return { ok: false, code: 'GAME_PATH_REQUIRED', error: 'Caminho do jogo nao configurado.' };
+    return { ok: false, code: 'GAME_PATH_REQUIRED', error: 'Le dossier du jeu n’est pas configuré.' };
   }
   const exePath = path.join(folderPath, 'skse64_loader.exe');
   if (!fs.existsSync(exePath)) {
-    return { ok: false, code: 'SKSE_MISSING', error: 'skse64_loader.exe nao encontrado na pasta do jogo.' };
+    return { ok: false, code: 'SKSE_MISSING', error: 'skse64_loader.exe est introuvable dans le dossier du jeu.' };
   }
 
   try {
     const auth = readAuthFile();
     if (!auth || !auth.discordId) {
-      return { ok: false, code: 'NOT_AUTHENTICATED', error: 'Faca login novamente antes de iniciar o jogo.' };
+      return { ok: false, code: 'NOT_AUTHENTICATED', error: 'Reconnectez-vous avant de lancer le jeu.' };
     }
 
     // AUTH-01 + CONNECT-P0: o arquivo realmente consumido pelo cliente recebe
@@ -1532,15 +1532,15 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
     // Handoff de voz: liga o listener loopback pra quando o jogador rodar /voz.
     // Nunca bloqueia o JOGAR — a voz e opcional.
     armVoiceHandoff(folderPath).catch((e) =>
-      console.warn('[launcher] nao foi possivel armar o handoff de voz:', e?.message));
+      console.warn('[launcher] impossible d’activer le relais vocal :', e?.message));
 
     return { ok: true, pid: processResult.pid };
   } catch (e: any) {
     const code = typeof e?.code === 'string' ? e.code : 'GAME_LAUNCH_FAILED';
     const message = typeof e?.message === 'string' && e.message
       ? e.message
-      : 'Nao foi possivel preparar ou iniciar o jogo.';
-    console.error(`[launcher] Falha no bootstrap do jogo (${code}):`, e);
+      : 'Impossible de préparer ou de lancer le jeu.';
+    console.error(`[launcher] Échec de l’initialisation du jeu (${code}) :`, e);
     return { ok: false, code, error: message };
   }
 });

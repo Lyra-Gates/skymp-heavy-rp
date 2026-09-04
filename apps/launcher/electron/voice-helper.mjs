@@ -19,7 +19,7 @@ export function syncVoiceHelper({ sourcePath, targetPath }) {
   try {
     if (!sourcePath || !fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
       // Não é erro: só significa que este pacote foi montado sem o helper.
-      return { ok: true, repaired: false, skipped: true, reason: 'binario nao empacotado' };
+      return { ok: true, repaired: false, skipped: true, reason: 'binaire non inclus dans le paquet' };
     }
 
     const targetValid = fs.existsSync(targetPath)

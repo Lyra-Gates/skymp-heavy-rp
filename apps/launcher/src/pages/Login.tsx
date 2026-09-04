@@ -19,10 +19,10 @@ export function Login({ setAuth }: LoginProps) {
       if (authData) {
         setAuth(authData);
       } else {
-        setError("Login cancelado ou falhou.");
+        setError('Connexion annulée ou échouée.');
       }
     } catch (e: any) {
-      setError(e.message || "Erro desconhecido ao logar.");
+      setError(e.message || 'Erreur inconnue lors de la connexion.');
     } finally {
       setIsLoggingIn(false);
     }
@@ -35,7 +35,7 @@ export function Login({ setAuth }: LoginProps) {
 
         <div style={{ textAlign: 'center' }}>
           <h1 className="brand-title" style={{ fontSize: '34px', marginBottom: '10px' }}>Skyrim Heavy RP</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Autenticação necessária para jogar</p>
+          <p style={{ color: 'var(--text-muted)' }}>Authentification requise pour jouer</p>
         </div>
 
         <div className="brand-flourish">
@@ -49,7 +49,7 @@ export function Login({ setAuth }: LoginProps) {
           disabled={isLoggingIn}
         >
           <LogIn size={20} />
-          {isLoggingIn ? "Autenticando..." : "Entrar com Discord"}
+          {isLoggingIn ? 'Connexion en cours...' : 'Se connecter avec Discord'}
         </button>
 
         {error && <p style={{ color: 'var(--error)' }}>{error}</p>}

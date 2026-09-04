@@ -31,7 +31,7 @@ export function syncUiBundle({ sourceDir, targetDir }) {
   try {
     const sourceEntry = path.join(sourceDir, REQUIRED_ENTRYPOINT);
     if (!fs.existsSync(sourceEntry) || !fs.statSync(sourceEntry).isFile()) {
-      return { ok: false, repaired: [], error: `Bundle da UI sem ${REQUIRED_ENTRYPOINT}.` };
+      return { ok: false, repaired: [], error: `Le bundle de l’interface ne contient pas ${REQUIRED_ENTRYPOINT}.` };
     }
 
     const files = listFiles(sourceDir);

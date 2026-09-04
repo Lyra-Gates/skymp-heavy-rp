@@ -55,10 +55,10 @@ export function parsePluginHeader(buffer) {
   const vazio = { masters: [], isMaster: false, isLight: false };
 
   if (!buffer || buffer.length < 24) {
-    return { ...vazio, error: 'Arquivo menor que o cabecalho TES4' };
+    return { ...vazio, error: "Fichier trop petit pour contenir un en-tête TES4" };
   }
   if (buffer.toString('latin1', 0, 4) !== 'TES4') {
-    return { ...vazio, error: 'Cabecalho TES4 invalido' };
+    return { ...vazio, error: 'En-tête TES4 invalide' };
   }
 
   const dataSize = buffer.readUInt32LE(4);
@@ -122,7 +122,7 @@ export const HASH_ALGORITHM = 'sha256';
 
 export async function compareMods({ serverMods, localFiles, hashOf, hashAlgorithm, concurrency = 4 }) {
   if (!Array.isArray(serverMods)) {
-    return { success: false, error: 'Manifesto invalido do servidor.' };
+    return { success: false, error: 'Manifeste du serveur invalide.' };
   }
 
   // O manifesto declara com que algoritmo foi gerado. Sem esta checagem, um
@@ -133,8 +133,8 @@ export async function compareMods({ serverMods, localFiles, hashOf, hashAlgorith
   if (hashAlgorithm !== HASH_ALGORITHM) {
     return {
       success: false,
-      error: `Manifesto gerado com '${hashAlgorithm || 'algoritmo nao declarado'}', mas este `
-        + `launcher exige ${HASH_ALGORITHM}. Peca ao servidor para regerar o mods.json.`
+      error: `Le manifeste utilise « ${hashAlgorithm || 'algorithme non indiqué'} », mais ce `
+        + `launcher exige ${HASH_ALGORITHM}. Demandez à l’équipe du serveur de régénérer mods.json.`
     };
   }
 
@@ -148,7 +148,7 @@ export async function compareMods({ serverMods, localFiles, hashOf, hashAlgorith
   for (const mod of serverMods) {
     const local = porNomeMinusculo.get(String(mod.filename).toLowerCase());
     if (!local) {
-      return { success: false, error: `Mod faltando: ${mod.filename}` };
+      return { success: false, error: `Mod manquant : ${mod.filename}` };
     }
     resolvidos.push({ mod, local });
   }
@@ -171,7 +171,7 @@ export async function compareMods({ serverMods, localFiles, hashOf, hashAlgorith
   await Promise.all(Array.from({ length: trabalhadores }, worker));
 
   if (divergencia) {
-    return { success: false, error: `O mod ${divergencia.filename} esta modificado ou corrompido!` };
+    return { success: false, error: `Le mod ${divergencia.filename} a été modifié ou est corrompu.` };
   }
 
   return { success: true };
@@ -219,7 +219,7 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
   if (!Array.isArray(serverLoadOrder) || serverLoadOrder.length === 0) {
     return {
       ok: false,
-      problems: ['Servidor nao informou load order: impossivel verificar paridade.'],
+      problems: ["Le serveur n'a fourni aucun ordre de chargement : vérification impossible."],
       plugins: []
     };
   }
@@ -233,7 +233,7 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
   for (const plugin of declarados) {
     const nomeLocal = locaisPorMinusculo.get(plugin.toLowerCase());
     if (!nomeLocal) {
-      problems.push(`Plugin ausente: ${plugin}`);
+      problems.push(`Plugin manquant : ${plugin}`);
       continue;
     }
     const header = readHeader(nomeLocal);
@@ -260,7 +260,7 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
 
     for (const master of header.masters || []) {
       if (!locaisPorMinusculo.has(master.toLowerCase())) {
-        problems.push(`${nomeLocal}: master ausente ${master}`);
+        problems.push(`${nomeLocal} : master manquant ${master}`);
         continue;
       }
       // Master presente no disco mas fora da ordem do servidor e um ESM base:
@@ -269,7 +269,7 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
       const iMaster = posEfetiva.get(master.toLowerCase());
       const iPlugin = posEfetiva.get(plugin.toLowerCase());
       if (iMaster !== undefined && iPlugin !== undefined && iMaster > iPlugin) {
-        problems.push(`${nomeLocal}: master ${master} carrega depois do plugin`);
+        problems.push(`${nomeLocal} : le master ${master} est chargé après le plugin`);
       }
     }
   }
@@ -282,8 +282,8 @@ export function analyzePlugins({ localPlugins, serverLoadOrder, enabledPlugins, 
   for (const local of candidatos) {
     if (!indiceDeclarado.has(String(local).toLowerCase())) {
       problems.push(
-        `Plugin extra na load order: ${local}. Ele desloca os FormIDs de todos ` +
-        `os plugins seguintes, entao os itens do servidor apareceriam trocados.`
+        `Plugin supplémentaire dans l'ordre de chargement : ${local}. Il décale les FormID de tous ` +
+        `les plugins suivants ; les objets du serveur seraient alors remplacés par d'autres.`
       );
     }
   }
@@ -356,7 +356,7 @@ export function analyzeCreationClub({ cccEntries, localPlugins, serverLoadOrder 
   if (!Array.isArray(serverLoadOrder) || serverLoadOrder.length === 0) {
     return {
       ok: false,
-      problems: ['Servidor nao informou load order: impossivel verificar paridade de Creation Club.'],
+      problems: ["Le serveur n'a fourni aucun ordre de chargement : vérification du Creation Club impossible."],
       effective: []
     };
   }
@@ -373,9 +373,9 @@ export function analyzeCreationClub({ cccEntries, localPlugins, serverLoadOrder 
   for (const cc of effective) {
     if (!naOrdem.has(String(cc).toLowerCase())) {
       problems.push(
-        `Creation Club ativo fora da load order do servidor: ${cc}. O jogo carrega ` +
-        `este plugin sozinho, pelo Skyrim.ccc, mesmo sem estar no plugins.txt — ` +
-        `e ele desloca os FormIDs de todos os plugins seguintes.`
+        `Contenu Creation Club actif mais absent de l'ordre de chargement du serveur : ${cc}. ` +
+        `Skyrim charge automatiquement ce plugin via Skyrim.ccc, même s'il n'apparaît pas dans ` +
+        `plugins.txt ; il décale alors les FormID de tous les plugins suivants.`
       );
     }
   }
@@ -387,8 +387,8 @@ export function analyzeCreationClub({ cccEntries, localPlugins, serverLoadOrder 
     if (!/^cc[a-z0-9]/i.test(nome)) continue; // só conteúdo Creation Club
     if (!efetivosMinusculo.has(nome.toLowerCase())) {
       problems.push(
-        `Creation Club exigido pelo servidor e ausente: ${nome}. Ou a conta Steam ` +
-        `nao possui este conteudo, ou ele nao esta listado no Skyrim.ccc.`
+        `Contenu Creation Club exigé par le serveur mais absent : ${nome}. Le compte Steam ` +
+        `ne possède peut-être pas ce contenu, ou celui-ci n'est pas indiqué dans Skyrim.ccc.`
       );
     }
   }

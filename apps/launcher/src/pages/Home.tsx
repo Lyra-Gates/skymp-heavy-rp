@@ -19,11 +19,32 @@ type AppInfo = {
 const QUEUE_POLL_INTERVAL_MS = 4000;
 const SERVER_STATUS_POLL_INTERVAL_MS = 15000;
 
+const gamePathReason = (reason?: string) => {
+  const reasons: Record<string, string> = {
+    empty: 'aucun dossier sélectionné',
+    'no-skyrim': 'SkyrimSE.exe est introuvable',
+    gog: "la version GOG de Skyrim n'est pas prise en charge",
+  };
+  return reasons[reason || ''] || reason || 'raison inconnue';
+};
+
+const queueErrorMessage = (message: unknown) => {
+  const messages: Record<string, string> = {
+    connection_failed: 'impossible de joindre le serveur',
+    invalid_response: 'réponse invalide du serveur',
+    invalid_ticket: 'ticket de connexion invalide',
+    not_authenticated: 'authentification requise',
+    rate_limited: 'trop de tentatives, veuillez patienter',
+  };
+  const value = typeof message === 'string' ? message : '';
+  return messages[value] || value || "file d'attente indisponible";
+};
+
 const launchFailureMessage = (result: LaunchGameResult) => {
   const detail = result.error?.trim() || result.code?.trim();
   return detail
-    ? `Falha ao iniciar Skyrim: ${detail}`
-    : 'Falha ao iniciar Skyrim. Verifique a instalacao e tente novamente.';
+    ? `Échec du lancement de Skyrim : ${detail}`
+    : "Échec du lancement de Skyrim. Vérifiez l'installation et réessayez.";
 };
 
 export function Home({ auth, setAuth }: HomeProps) {
@@ -87,7 +108,7 @@ export function Home({ auth, setAuth }: HomeProps) {
   const handleSessionExpired = async () => {
     stopQueuePolling();
     setIsPlaying(false);
-    setStatus('Sessao expirada. Faca login novamente...');
+    setStatus('Session expirée. Veuillez vous reconnecter...');
     await window.electronAPI.discordLogout();
     setTimeout(() => setAuth(null), 1500);
   };
@@ -98,16 +119,16 @@ export function Home({ auth, setAuth }: HomeProps) {
       try {
         const pollRes = await window.electronAPI.pollQueue();
         if (pollRes.status === 'queued') {
-          setStatus(`Na fila (posicao: ${pollRes.position})`);
+          setStatus(`Dans la file d'attente (position : ${pollRes.position})`);
           return;
         }
         stopQueuePolling();
         if (pollRes.status === 'success') {
-          setStatus('Iniciando Skyrim...');
+          setStatus('Démarrage de Skyrim...');
           setIsPlaying(true);
           try {
             const launchResult = await window.electronAPI.launchGame(gamePath, pollRes.ticket);
-            setStatus(launchResult.ok ? 'Skyrim iniciado.' : launchFailureMessage(launchResult));
+            setStatus(launchResult.ok ? 'Skyrim est démarré.' : launchFailureMessage(launchResult));
           } finally {
             setIsPlaying(false);
           }
@@ -117,10 +138,10 @@ export function Home({ auth, setAuth }: HomeProps) {
           await handleSessionExpired();
           return;
         }
-        setStatus(`Erro: ${pollRes.message || 'fila indisponivel'}`);
+        setStatus(`Erreur : ${queueErrorMessage(pollRes.message)}`);
       } catch (e: any) {
         stopQueuePolling();
-        setStatus(`Erro: ${e.message}`);
+        setStatus(`Erreur : ${e.message}`);
       }
     }, QUEUE_POLL_INTERVAL_MS);
   };
@@ -152,11 +173,11 @@ export function Home({ auth, setAuth }: HomeProps) {
       const client = await window.electronAPI.checkClientUpdate(appInfo.gamePath);
       const mods = await window.electronAPI.checkModsUpdate(appInfo.gamePath);
       const parts: string[] = [];
-      if (client.updateAvailable) parts.push(`cliente ${client.version}`);
+      if (client.updateAvailable) parts.push(`client ${client.version}`);
       if (mods.updateAvailable) parts.push(`mods ${mods.version}`);
-      setUpdateResult(parts.length > 0 ? `Atualização disponível: ${parts.join(', ')}.` : 'Tudo atualizado.');
+      setUpdateResult(parts.length > 0 ? `Mise à jour disponible : ${parts.join(', ')}.` : 'Tout est à jour.');
     } catch (e: any) {
-      setUpdateResult(`Erro: ${e.message}`);
+      setUpdateResult(`Erreur : ${e.message}`);
     } finally {
       setCheckingUpdates(false);
     }
@@ -164,27 +185,27 @@ export function Home({ auth, setAuth }: HomeProps) {
 
   const handlePlay = async () => {
     setIsPlaying(true);
-    setStatus('Verificando pasta do jogo...');
+    setStatus('Vérification du dossier du jeu...');
     try {
       const config = await window.electronAPI.getLauncherConfig();
       const gamePath = config.gamePath;
       if (!gamePath) {
-        setStatus('Configure a pasta do Skyrim antes de jogar.');
+        setStatus('Configurez le dossier de Skyrim avant de jouer.');
         navigate('/settings');
         return;
       }
 
       const pathOk = await window.electronAPI.checkGamePath(gamePath);
       if (!pathOk.ok) {
-        setStatus(`Pasta do jogo invalida: ${pathOk.reason}`);
+        setStatus(`Dossier du jeu invalide : ${gamePathReason(pathOk.reason)}`);
         navigate('/settings');
         return;
       }
 
-      setStatus('Verificando interface do jogo...');
+      setStatus("Vérification de l'interface du jeu...");
       const ui = await window.electronAPI.ensureSkympUi(gamePath);
       if (!ui.ok) {
-        setStatus(`Falha ao instalar a interface: ${ui.error || 'bundle indisponivel'}`);
+        setStatus(`Échec de l'installation de l'interface : ${ui.error || 'fichiers indisponibles'}`);
         return;
       }
 
@@ -192,27 +213,27 @@ export function Home({ auth, setAuth }: HomeProps) {
       // no pacote (skipped) ou a copia falhou, segue — a voz so nao funciona.
       const voice = await window.electronAPI.ensureVoiceHelper(gamePath);
       if (!voice.ok) {
-        console.warn('[launcher] voice-helper nao instalado:', voice.error);
+        console.warn('[launcher] voice-helper n’a pas été installé :', voice.error);
       }
 
-      setStatus('Validando versao do cliente...');
+      setStatus('Validation de la version du client...');
       const clientUpdate = await window.electronAPI.checkClientUpdate(gamePath);
       if (clientUpdate.error) {
-        setStatus(`Nao foi possivel validar a versao do cliente: ${clientUpdate.error}`);
+        setStatus(`Impossible de valider la version du client : ${clientUpdate.error}`);
         return;
       }
       if (clientUpdate.updateAvailable) {
-        setStatus(`Atualizacao obrigatoria do cliente: ${clientUpdate.version}. Instale em Configuracoes.`);
+        setStatus(`Mise à jour obligatoire du client : ${clientUpdate.version}. Installez-la dans les paramètres.`);
         navigate('/settings');
         return;
       }
 
       await window.electronAPI.ensureSkyrimIni({ repairOnly: true });
 
-      setStatus('Validando mods com o servidor...');
+      setStatus('Validation des mods avec le serveur...');
       const verify = await window.electronAPI.verifyMods(gamePath);
       if (!verify.success) {
-        setStatus(`Mods invalidos: ${verify.error || 'verificacao falhou'}`);
+        setStatus(`Mods invalides : ${verify.error || 'échec de la vérification'}`);
         return;
       }
 
@@ -220,38 +241,38 @@ export function Home({ auth, setAuth }: HomeProps) {
         await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
         const analysis = await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);
         if (!analysis.ok) {
-          setStatus(`Problema no load order: ${analysis.problems[0]}`);
+          setStatus(`Problème dans l'ordre de chargement : ${analysis.problems[0]}`);
           return;
         }
       }
 
-      setStatus('Entrando na fila...');
+      setStatus("Entrée dans la file d'attente...");
       const queueRes = await window.electronAPI.joinQueue();
       if (queueRes.status === 'queued') {
-        setStatus(`Na fila (posicao: ${queueRes.position})`);
+        setStatus(`Dans la file d'attente (position : ${queueRes.position})`);
         startQueuePolling(gamePath);
         return;
       }
       if (queueRes.status === 'success') {
-        setStatus('Iniciando Skyrim...');
+        setStatus('Démarrage de Skyrim...');
         const launchResult = await window.electronAPI.launchGame(gamePath, queueRes.ticket);
-        setStatus(launchResult.ok ? 'Skyrim iniciado.' : launchFailureMessage(launchResult));
+        setStatus(launchResult.ok ? 'Skyrim est démarré.' : launchFailureMessage(launchResult));
         return;
       }
       if (isSessionExpiredMessage(queueRes.message)) {
         await handleSessionExpired();
         return;
       }
-      setStatus(`Erro: ${queueRes.message || 'fila indisponivel'}`);
+      setStatus(`Erreur : ${queueErrorMessage(queueRes.message)}`);
     } catch (e: any) {
-      setStatus(`Erro: ${e.message}`);
+      setStatus(`Erreur : ${e.message}`);
     } finally {
       setIsPlaying(false);
     }
   };
 
   const statusDotClass = serverOnline === null ? 'checking' : serverOnline ? 'online' : 'offline';
-  const statusLabel = serverOnline === null ? 'Verificando' : serverOnline ? 'Online' : 'Offline';
+  const statusLabel = serverOnline === null ? 'Vérification' : serverOnline ? 'En ligne' : 'Hors ligne';
 
   return (
     <div className="hero-shell has-image" style={{ ['--hero-image' as any]: `url(${heroBg})` }}>
@@ -262,9 +283,9 @@ export function Home({ auth, setAuth }: HomeProps) {
         </div>
 
         <div className="nav-tabs">
-          <button className="nav-tab active">Início</button>
+          <button className="nav-tab active">Accueil</button>
           <button className="nav-tab" onClick={() => navigate('/settings')}>
-            <SettingsIcon size={14} /> Configurações
+            <SettingsIcon size={14} /> Paramètres
           </button>
         </div>
 
@@ -281,7 +302,7 @@ export function Home({ auth, setAuth }: HomeProps) {
             )}
             <span>{auth.globalName}</span>
           </div>
-          <button className="icon-btn" onClick={handleLogout} title="Sair">
+          <button className="icon-btn" onClick={handleLogout} title="Se déconnecter">
             <LogOut size={16} />
           </button>
         </div>
@@ -290,13 +311,13 @@ export function Home({ auth, setAuth }: HomeProps) {
       <div className="dashboard-body">
         <aside className="info-sidebar hud-panel">
           <div>
-            <div className="info-section-title">Informações</div>
+            <div className="info-section-title">Informations</div>
             <div className="info-row">
               <span className="info-row-label">Launcher</span>
               <span className="info-row-value">v{appInfo?.launcherVersion ?? '—'}</span>
             </div>
             <div className="info-row">
-              <span className="info-row-label">Cliente</span>
+              <span className="info-row-label">Client</span>
               <span className="info-row-value">{appInfo?.clientVersion ?? '—'}</span>
             </div>
             <div className="info-row">
@@ -306,23 +327,23 @@ export function Home({ auth, setAuth }: HomeProps) {
           </div>
 
           <div>
-            <div className="info-section-title">Diretório do Jogo</div>
-            <div className="info-path">{appInfo?.gamePath || 'Não configurado'}</div>
+            <div className="info-section-title">Dossier du jeu</div>
+            <div className="info-path">{appInfo?.gamePath || 'Non configuré'}</div>
             <div className="maintenance-list">
               <button className="maintenance-btn" onClick={handleChangePath}>
-                <FolderOpen size={14} /> Trocar Pasta
+                <FolderOpen size={14} /> Changer de dossier
               </button>
             </div>
           </div>
 
           <div>
-            <div className="info-section-title">Manutenção</div>
+            <div className="info-section-title">Maintenance</div>
             <div className="maintenance-list">
               <button className="maintenance-btn" onClick={handleCheckUpdates} disabled={checkingUpdates}>
-                <RefreshCw size={14} /> {checkingUpdates ? 'Verificando...' : 'Verificar Atualizações'}
+                <RefreshCw size={14} /> {checkingUpdates ? 'Vérification...' : 'Rechercher les mises à jour'}
               </button>
               <button className="maintenance-btn" onClick={() => navigate('/settings')}>
-                <SettingsIcon size={14} /> Configurações Avançadas
+                <SettingsIcon size={14} /> Paramètres avancés
               </button>
             </div>
             {updateResult && (
@@ -339,12 +360,12 @@ export function Home({ auth, setAuth }: HomeProps) {
           </div>
 
           <div className="status-card hud-panel">
-            <div className="status-card-label">Status do Servidor</div>
+            <div className="status-card-label">État du serveur</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
               <span className={`status-dot ${statusDotClass}`} style={{ width: '10px', height: '10px' }} />
               <span style={{ fontSize: '20px', fontWeight: 600 }}>{statusLabel}</span>
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Mods validados automaticamente</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Mods vérifiés automatiquement</p>
           </div>
 
           <button
@@ -354,7 +375,7 @@ export function Home({ auth, setAuth }: HomeProps) {
             disabled={isPlaying || serverOnline === false}
           >
             <Play size={24} />
-            {isPlaying ? 'AGUARDE' : 'JOGAR'}
+            {isPlaying ? 'VEUILLEZ PATIENTER' : 'JOUER'}
           </button>
 
           {status && <p style={{ color: 'var(--accent-gold)', textAlign: 'center', maxWidth: '620px' }}>{status}</p>}

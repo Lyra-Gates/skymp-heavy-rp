@@ -31,7 +31,7 @@ describe('avaliação de espaço', () => {
     ]);
     assert.equal(r.ok, false);
     assert.match(r.error, /C:\Temp/, 'precisa dizer ONDE falta');
-    assert.match(r.error, /Libere/, 'precisa dizer quanto liberar');
+    assert.match(r.error, /Libérez/, 'precisa dizer quanto liberar');
   });
 
   it('exige a reserva além do download', () => {

@@ -47,7 +47,7 @@ export async function iniciarProcessoJogo(exePath, cwd, options = {}) {
   } catch (cause) {
     throw new ProcessoJogoError(
       'GAME_SPAWN_FAILED',
-      `Nao foi possivel iniciar o jogo: ${mensagemDoErro(cause)}`,
+      `Impossible de démarrer le jeu : ${mensagemDoErro(cause)}`,
       { cause }
     );
   }
@@ -68,7 +68,7 @@ export async function iniciarProcessoJogo(exePath, cwd, options = {}) {
       if (!Number.isInteger(child.pid) || child.pid <= 0) {
         reject(new ProcessoJogoError(
           'GAME_SPAWN_NO_PID',
-          'O processo do jogo foi iniciado sem fornecer um PID valido.'
+          "Le processus du jeu a démarré sans fournir d'identifiant valide."
         ));
         return;
       }
@@ -81,13 +81,13 @@ export async function iniciarProcessoJogo(exePath, cwd, options = {}) {
 
     const aoFalhar = (cause) => concluir(() => reject(new ProcessoJogoError(
       'GAME_SPAWN_FAILED',
-      `Nao foi possivel iniciar o jogo: ${mensagemDoErro(cause)}`,
+      `Impossible de démarrer le jeu : ${mensagemDoErro(cause)}`,
       { cause }
     )));
 
     const timer = setTimeout(() => concluir(() => reject(new ProcessoJogoError(
       'GAME_SPAWN_TIMEOUT',
-      `O Windows nao confirmou a inicializacao do jogo em ${timeoutMs} ms.`
+      `Windows n'a pas confirmé le démarrage du jeu dans un délai de ${timeoutMs} ms.`
     ))), timeoutMs);
 
     child.once('spawn', aoIniciar);

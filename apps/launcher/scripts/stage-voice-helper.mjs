@@ -30,10 +30,10 @@ if (fs.existsSync(dest)) fs.rmSync(dest);
 
 if (!fs.existsSync(source)) {
   console.warn(
-    '[stage-voice-helper] voice-helper.exe nao encontrado em\n' +
+    '[stage-voice-helper] voice-helper.exe est introuvable dans\n' +
     `  ${source}\n` +
-    '  O launcher sera empacotado SEM a voz por proximidade nativa.\n' +
-    '  Para incluir: builde voice-helper/ (cmake --build build --config Release) antes.'
+    '  Le launcher sera créé SANS la voix de proximité native.\n' +
+    '  Pour l’inclure : compilez d’abord voice-helper/ (cmake --build build --config Release).'
   );
   process.exit(0);
 }
@@ -45,12 +45,12 @@ const sidecars = ['opus.dll', 'z.dll'].filter((dll) =>
 );
 if (sidecars.length > 0) {
   console.error(
-    `[stage-voice-helper] ERRO: ${sidecars.join(', ')} ao lado do exe — build dinamico.\n` +
-    '  Rebuilde com -DVCPKG_TARGET_TRIPLET=x64-windows-static (exe standalone).'
+    `[stage-voice-helper] ERREUR : ${sidecars.join(', ')} se trouve à côté de l’exécutable — compilation dynamique.\n` +
+    '  Recompilez avec -DVCPKG_TARGET_TRIPLET=x64-windows-static (exécutable autonome).'
   );
   process.exit(1);
 }
 
 fs.copyFileSync(source, dest);
 const kb = Math.round(fs.statSync(dest).size / 1024);
-console.log(`[stage-voice-helper] voice-helper.exe stajado (${kb} KB) -> build-resources/`);
+console.log(`[stage-voice-helper] voice-helper.exe préparé (${kb} Ko) -> build-resources/`);

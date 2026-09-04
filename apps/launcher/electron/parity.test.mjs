@@ -117,9 +117,9 @@ describe('cabeçalho TES4', () => {
   });
 
   it('arquivo truncado não explode', () => {
-    assert.match(parsePluginHeader(Buffer.alloc(10)).error, /menor que o cabecalho/);
-    assert.match(parsePluginHeader(Buffer.alloc(0)).error, /menor que o cabecalho/);
-    assert.match(parsePluginHeader(null).error, /menor que o cabecalho/);
+    assert.match(parsePluginHeader(Buffer.alloc(10)).error, /trop petit pour contenir un en-tête/);
+    assert.match(parsePluginHeader(Buffer.alloc(0)).error, /trop petit pour contenir un en-tête/);
+    assert.match(parsePluginHeader(null).error, /trop petit pour contenir un en-tête/);
   });
 
   it('dataSize mentiroso não faz o launcher ler além do arquivo', () => {
@@ -174,7 +174,7 @@ describe('comparação com o manifesto do servidor', () => {
       hashOf
     });
     assert.equal(r.success, false);
-    assert.match(r.error, /modificado ou corrompido/);
+    assert.match(r.error, /modifié ou est corrompu/);
   });
 
   it('hashOf assíncrono (ex: hash via stream) funciona igual ao síncrono', async () => {
@@ -266,8 +266,8 @@ describe('algoritmo de hash declarado pelo manifesto', () => {
       hashAlgorithm: undefined
     }).then(r => {
       assert.equal(r.success, false);
-      assert.match(r.error, /regerar o mods\.json/, 'a mensagem tem que dizer o que fazer');
-      assert.ok(!/corrompido/.test(r.error), 'nao pode culpar o mod do jogador');
+      assert.match(r.error, /régénérer mods\.json/, 'a mensagem tem que dizer o que fazer');
+      assert.ok(!/corrompu/.test(r.error), 'nao pode culpar o mod do jogador');
     });
   });
 
@@ -293,7 +293,7 @@ describe('algoritmo de hash declarado pelo manifesto', () => {
       hashOf,
       hashAlgorithm: 'md5'
     });
-    assert.match(r.error, /regerar o mods\.json/);
+    assert.match(r.error, /régénérer mods\.json/);
   });
 
   it('HASH_ALGORITHM e sha256, nao md5', () => {
@@ -324,7 +324,7 @@ describe('load order', () => {
       readHeader: semMasters
     });
     assert.equal(r.ok, false);
-    assert.ok(r.problems.some(p => /ausente: HeavyRP\.esm/.test(p)));
+    assert.ok(r.problems.some(p => /manquant : HeavyRP\.esm/.test(p)));
   });
 
   it('acusa master que carrega depois do dependente', () => {
@@ -336,7 +336,7 @@ describe('load order', () => {
         : semMasters()
     });
     assert.equal(r.ok, false);
-    assert.ok(r.problems.some(p => /carrega depois do plugin/.test(p)));
+    assert.ok(r.problems.some(p => /chargé après le plugin/.test(p)));
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -357,7 +357,7 @@ describe('load order', () => {
 
     assert.equal(r.ok, false, 'cliente com plugin extra NAO pode ser aprovado');
     assert.ok(
-      r.problems.some(p => /extra na load order: MeuMod\.esp/.test(p)),
+      r.problems.some(p => /supplémentaire dans l'ordre de chargement : MeuMod\.esp/.test(p)),
       `deveria acusar o plugin extra. Problemas: ${JSON.stringify(r.problems)}`
     );
     assert.ok(
@@ -400,7 +400,7 @@ describe('load order', () => {
         readHeader: semMasters
       });
       assert.equal(r.ok, false, `load order ${JSON.stringify(ordem)} nao pode ser aprovada`);
-      assert.match(r.problems[0], /impossivel verificar paridade/);
+      assert.match(r.problems[0], /vérification impossible/);
     }
   });
 
@@ -421,7 +421,7 @@ describe('load order', () => {
       readHeader: () => ({ masters: ['Skyrim.esm'], isMaster: false, isLight: false })
     });
     assert.equal(r.ok, false);
-    assert.ok(r.problems.some(p => /master ausente Skyrim\.esm/.test(p)));
+    assert.ok(r.problems.some(p => /master manquant Skyrim\.esm/.test(p)));
   });
 });
 
@@ -496,7 +496,7 @@ describe('ordem efetiva de carga (hoisting de master)', () => {
     });
     assert.equal(r.ok, false, 'espfe nao e hoistado, entao a ordem errada continua errada');
     assert.ok(
-      r.problems.some(p => /PatchLeve\.esp carrega depois do plugin/.test(p)),
+      r.problems.some(p => /PatchLeve\.esp est chargé après le plugin/.test(p)),
       `deveria acusar ordem. Problemas: ${JSON.stringify(r.problems)}`
     );
   });
@@ -514,7 +514,7 @@ describe('ordem efetiva de carga (hoisting de master)', () => {
       })
     });
     assert.equal(r.ok, false);
-    assert.ok(r.problems.some(p => /B\.esp carrega depois do plugin/.test(p)));
+    assert.ok(r.problems.some(p => /B\.esp est chargé après le plugin/.test(p)));
   });
 
   it('master ausente continua sendo acusado, hoisting ou nao', () => {
@@ -527,7 +527,7 @@ describe('ordem efetiva de carga (hoisting de master)', () => {
       })
     });
     assert.equal(r.ok, false);
-    assert.ok(r.problems.some(p => /master ausente SumiuBase\.esm/.test(p)));
+    assert.ok(r.problems.some(p => /master manquant SumiuBase\.esm/.test(p)));
   });
 });
 
@@ -573,7 +573,7 @@ describe('analyzeCreationClub', () => {
     });
     assert.equal(r.ok, false);
     assert.ok(r.problems.some(p => /ccBGSSSE001-Fish\.esm/.test(p)));
-    assert.ok(r.problems.some(p => /desloca os FormIDs/.test(p)));
+    assert.ok(r.problems.some(p => /décale alors les FormID/.test(p)));
   });
 
   it('entrada no .ccc sem o arquivo em Data/ não é problema: não carrega', () => {
@@ -597,7 +597,7 @@ describe('analyzeCreationClub', () => {
       serverLoadOrder: [...CINCO_MASTERS, 'ccBGSSSE001-Fish.esm']
     });
     assert.equal(r.ok, false);
-    assert.ok(r.problems.some(p => /exigido pelo servidor e ausente/.test(p)));
+    assert.ok(r.problems.some(p => /exigé par le serveur mais absent/.test(p)));
   });
 
   it('aprova quando os dois lados carregam o mesmo CC', () => {
@@ -638,7 +638,7 @@ describe('analyzeCreationClub', () => {
         serverLoadOrder: ordem
       });
       assert.equal(r.ok, false, `load order ${JSON.stringify(ordem)} nao pode ser aprovada`);
-      assert.match(r.problems[0], /impossivel verificar paridade/);
+      assert.match(r.problems[0], /vérification du Creation Club impossible/);
     }
   });
 

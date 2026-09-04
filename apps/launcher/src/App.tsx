@@ -17,7 +17,7 @@ export default function App() {
         setAuth(status);
       })
       .catch((err) => {
-        console.error('Failed to get auth status:', err);
+        console.error("Impossible d’obtenir l’état de l’authentification :", err);
         setAuth(null);
       })
       .finally(() => {
@@ -30,7 +30,7 @@ export default function App() {
       <div className="app-container">
         <TitleBar />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p>Carregando...</p>
+          <p>Chargement...</p>
         </div>
       </div>
     );

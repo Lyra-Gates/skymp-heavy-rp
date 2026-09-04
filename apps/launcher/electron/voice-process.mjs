@@ -34,7 +34,7 @@ export async function iniciarVoiceHelper(exePath, args, cwd, options = {}) {
       windowsHide: true
     });
   } catch (cause) {
-    throw new Error(`Nao foi possivel iniciar o voice-helper: ${mensagem(cause)}`);
+    throw new Error(`Impossible de lancer voice-helper : ${mensagem(cause)}`);
   }
 
   current = child;
@@ -52,17 +52,17 @@ export async function iniciarVoiceHelper(exePath, args, cwd, options = {}) {
     const onSpawn = () => finish(() => {
       if (!Number.isInteger(child.pid) || child.pid <= 0) {
         current = null;
-        reject(new Error('voice-helper iniciado sem PID valido.'));
+        reject(new Error('voice-helper a démarré sans PID valide.'));
         return;
       }
       resolve({ pid: child.pid });
     });
     const onError = (cause) => finish(() => {
       current = null;
-      reject(new Error(`Nao foi possivel iniciar o voice-helper: ${mensagem(cause)}`));
+      reject(new Error(`Impossible de lancer voice-helper : ${mensagem(cause)}`));
     });
     const timer = setTimeout(() => finish(() => {
-      reject(new Error(`O Windows nao confirmou o voice-helper em ${timeoutMs} ms.`));
+      reject(new Error(`Windows n’a pas confirmé le démarrage de voice-helper dans un délai de ${timeoutMs} ms.`));
     }), timeoutMs);
 
     child.once('spawn', onSpawn);
