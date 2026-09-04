@@ -308,11 +308,30 @@ ipcMain.handle('get-app-info', async () => {
 function readLauncherConfig(): LauncherConfig {
   try {
     if (fs.existsSync(LAUNCHER_CONFIG_FILE)) {
-      return JSON.parse(fs.readFileSync(LAUNCHER_CONFIG_FILE, 'utf8'));
+      const config: LauncherConfig = JSON.parse(
+        fs.readFileSync(LAUNCHER_CONFIG_FILE, 'utf8')
+      );
+
+      // Migration automatique des configurations V7.
+      // En V7, gamePath désignait directement le Skyrim original.
+      if (config.gamePath && !config.sourceGamePath) {
+        config.sourceGamePath = config.gamePath;
+      }
+
+      // Calcule automatiquement le futur dossier Primétoile.
+      if (config.sourceGamePath && !config.isolatedGamePath) {
+        config.isolatedGamePath = path.join(
+          path.dirname(config.sourceGamePath),
+          'Skyrim Special Edition - Primetoile'
+        );
+      }
+
+      return config;
     }
   } catch (e) {
-    console.error('Impossible de lire la configuration du launcher :', e);
+    console.error('Error reading launcher config:', e);
   }
+
   return {};
 }
 
