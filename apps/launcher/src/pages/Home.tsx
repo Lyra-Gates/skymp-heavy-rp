@@ -58,6 +58,11 @@ export function Home({ auth, setAuth }: HomeProps) {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updateResult, setUpdateResult] = useState<string>('');
+  const [isolatedInstallProgress, setIsolatedInstallProgress] = useState<{
+  current: number;
+  total: number;
+  file: string;
+} | null>(null);
   const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadAppInfo = () => {
@@ -96,6 +101,19 @@ export function Home({ auth, setAuth }: HomeProps) {
   useEffect(() => {
     loadAppInfo();
   }, []);
+
+  useEffect(() => {
+  window.electronAPI.onIsolatedInstallProgress((progress) => {
+    setIsolatedInstallProgress(progress);
+
+    const percent =
+      progress.total > 0
+        ? Math.round((progress.current / progress.total) * 100)
+        : 0;
+
+    setStatus(`Installation de Primétoile... ${percent} %`);
+  });
+}, []);
 
   // `invalid_ticket`/`not_authenticated` do apps/game-api significam que nem
   // a sessao de launcher (30 dias, ver migration-v25) conseguiu emitir um
@@ -184,8 +202,9 @@ export function Home({ auth, setAuth }: HomeProps) {
   };
 
   const handlePlay = async () => {
-    setIsPlaying(true);
-    setStatus('Vérification du dossier du jeu...');
+  setIsPlaying(true);
+  setIsolatedInstallProgress(null);
+  setStatus('Vérification du dossier du jeu...');
     try {
       const config = await window.electronAPI.getLauncherConfig();
 
@@ -210,6 +229,8 @@ if (!isolatedCheck.ok) {
   );
 
   const installResult = await window.electronAPI.installIsolatedGame();
+
+  setIsolatedInstallProgress(null);
 
   if (!installResult.ok) {
     if (
@@ -427,16 +448,74 @@ if (!pathOk.ok) {
           </div>
 
           <button
-            className="btn-primary"
-            style={{ width: '100%', maxWidth: '400px', padding: '18px', fontSize: '20px' }}
-            onClick={handlePlay}
-            disabled={isPlaying || serverOnline === false}
-          >
-            <Play size={24} />
-            {isPlaying ? 'VEUILLEZ PATIENTER' : 'JOUER'}
-          </button>
+  className="btn-primary"
+  style={{ width: '100%', maxWidth: '400px', padding: '18px', fontSize: '20px' }}
+  onClick={handlePlay}
+  disabled={isPlaying || serverOnline === false}
+>
+  <Play size={24} />
+  {isPlaying ? 'VEUILLEZ PATIENTER' : 'JOUER'}
+</button>
 
-          {status && <p style={{ color: 'var(--accent-gold)', textAlign: 'center', maxWidth: '620px' }}>{status}</p>}
+{isolatedInstallProgress && (
+  <div
+    style={{
+      width: '100%',
+      maxWidth: '500px',
+      marginTop: '12px'
+    }}
+  >
+    <div
+      style={{
+        width: '100%',
+        height: '8px',
+        background: 'rgba(255,255,255,0.15)',
+        borderRadius: '4px',
+        overflow: 'hidden'
+      }}
+    >
+      <div
+        style={{
+          width: `${
+            isolatedInstallProgress.total > 0
+              ? (isolatedInstallProgress.current /
+                  isolatedInstallProgress.total) *
+                100
+              : 0
+          }%`,
+          height: '100%',
+          background: 'var(--accent-gold)',
+          transition: 'width 0.2s ease'
+        }}
+      />
+    </div>
+
+    <p
+      style={{
+        color: 'var(--text-muted)',
+        textAlign: 'center',
+        fontSize: '12px',
+        marginTop: '6px'
+      }}
+    >
+      {isolatedInstallProgress.current} / {isolatedInstallProgress.total}
+      {' — '}
+      {isolatedInstallProgress.file}
+    </p>
+  </div>
+)}
+
+{status && (
+  <p
+    style={{
+      color: 'var(--accent-gold)',
+      textAlign: 'center',
+      maxWidth: '620px'
+    }}
+  >
+    {status}
+  </p>
+)}
         </div>
       </div>
     </div>
