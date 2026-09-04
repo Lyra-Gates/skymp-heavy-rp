@@ -149,7 +149,16 @@ async function armVoiceHandoff(gamePath: string) {
 }
 
 type LauncherConfig = {
+  // Ancien chemin utilisé par les versions précédentes du launcher.
+  // Conservé temporairement pour assurer la compatibilité avec la V7.
   gamePath?: string;
+
+  // Installation Skyrim originale du joueur (Steam).
+  sourceGamePath?: string;
+
+  // Installation indépendante gérée par Primétoile.
+  isolatedGamePath?: string;
+
   display?: {
     width?: number;
     height?: number;
