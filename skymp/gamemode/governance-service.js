@@ -980,11 +980,11 @@ async function getDefaultPrison() {
      LIMIT 1`
   );
   if (rows.length === 0) {
-    return { cellId: '162e2:Skyrim.esm', pos: [35, -165, -189] };
+    return { cellId: '1a26f:Skyrim.esm', pos: [22659, -8697, -3594] };
   }
   return {
     cellId: rows[0].prison_cell_id,
-    pos: [rows[0].prison_pos_x || 35, rows[0].prison_pos_y || -165, rows[0].prison_pos_z || -189]
+    pos: [rows[0].prison_pos_x || 22659, rows[0].prison_pos_y || -8697, rows[0].prison_pos_z || -3594]
   };
 }
 

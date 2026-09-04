@@ -23,6 +23,26 @@ test('le schéma et les configurations utilisent le FormDesc canonique', () => {
   const staging = JSON.parse(read('config', 'server-settings.staging.example.json'));
 
   assert.doesNotMatch(schema, /DEFAULT '0x[0-9a-f]+'/i);
-  assert.equal(local.startPoints[0].worldOrCell, '162e2:Skyrim.esm');
-  assert.equal(staging.startPoints[0].worldOrCell, '3c:Skyrim.esm');
+  assert.equal(local.startPoints[0].worldOrCell, '1a26f:Skyrim.esm');
+  assert.equal(staging.startPoints[0].worldOrCell, '1a26f:Skyrim.esm');
+});
+
+test('migration v31 utilise le point officiel SkyMP', () => {
+  const sql = read(
+    'packages',
+    'database',
+    'migration-v31-verified-spawn.sql'
+  );
+
+  assert.doesNotMatch(
+    sql,
+    /\bUSE\s+`/i,
+    'la migration doit utiliser la base s?lectionn?e par environnement'
+  );
+  assert.match(
+    sql,
+    /UPDATE `characters`[\s\S]*22659[\s\S]*-8697[\s\S]*-3594/
+  );
+  assert.match(sql, /'1a26f:Skyrim\.esm'/);
+  assert.match(sql, /'162e2:Skyrim\.esm'/);
 });

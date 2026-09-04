@@ -334,7 +334,7 @@ describe('death-service', () => {
     it('deriva a celula por mp.getDescFromId quando disponivel', () => {
       // Derivar sobrevive a mudança de load order; o literal não.
       assert.strictEqual(
-        deathService._respawnCellDesc(), 'desc-90850',
+        deathService._respawnCellDesc(), 'desc-107119',
         'o mock devolve `desc-<id>`; se vier o literal, a derivacao nao esta acontecendo'
       );
     });

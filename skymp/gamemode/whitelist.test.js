@@ -65,6 +65,7 @@ test('profile contract accepts only a positive safe integer', () => {
 
 test('local auto-whitelist persists the canonical spawn FormDesc', () => {
   const source = fs.readFileSync(require.resolve('./whitelist'), 'utf8');
-  assert.match(source, /cell_id: '162e2:Skyrim\.esm'/);
-  assert.doesNotMatch(source, /cell_id: '0x162e2'/);
+  assert.match(source, /cell_id: '1a26f:Skyrim\.esm'/);
+  assert.match(source, /pos_x: 22659/);
+  assert.doesNotMatch(source, /cell_id: '(?:0x)?162e2/);
 });

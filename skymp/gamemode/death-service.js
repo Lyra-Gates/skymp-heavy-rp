@@ -34,23 +34,10 @@ const { actorRef } = require('./core/papyrus');
 const skymp = require('./core/skymp-adapter');
 const interactionRegistry = require('./core/interaction-registry');
 
-const RESPAWN_POS = [-150, -100, -200]; // Coordenadas ficticias do Templo de Kynareth
-
-// FormID da celula de respawn (Templo de Kynareth).
-//
-// ⚠️ Era `RESPAWN_CELL = '0x162e2'`, e o `0x` nao e detalhe cosmetico.
-// **[DOC]** `FormDesc.cpp` (`SKYMP_UPSTREAM_REFERENCE.md` §8.5): a forma
-// canonica e hex **sem prefixo**, `:`, nome do arquivo — `"162e2:Skyrim.esm"`.
-// E `FormDesc::FromString` **nao valida**: uma string sem `:` cai no ramo sem
-// arquivo e resolve para `0xff000000 + id`, a faixa de forms gerados pelo
-// servidor. Nao da erro, nao loga, e aponta para outro lugar. Ver §10 da
-// `REVISAO_REALIDADE_COMPARTILHADA.md`.
-//
-// O numero em si continua **nao verificado in-game** — veio herdado e ninguem
-// abriu o ESM para conferir que 0x162e2 e o Templo. O que esta rodada conserta e
-// o formato, que era um defeito certo; o valor e observacao da Fase 0.
-const RESPAWN_CELL_FORM_ID = 0x162e2;
-const RESPAWN_CELL_FALLBACK = '162e2:Skyrim.esm';
+// Point de Whiterun publie dans la configuration officielle du SkyMP.
+const RESPAWN_POS = [22659, -8697, -3594];
+const RESPAWN_CELL_FORM_ID = 0x1a26f;
+const RESPAWN_CELL_FALLBACK = '1a26f:Skyrim.esm';
 
 /**
  * A celula de respawn como `FormDesc`.

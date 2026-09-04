@@ -23,12 +23,12 @@
   "startPoints": [
     {
       "pos": [
-        0,
-        0,
-        0
+        22659,
+        -8697,
+        -3594
       ],
-      "worldOrCell": "3c:Skyrim.esm",
-      "angleZ": 0
+      "worldOrCell": "1a26f:Skyrim.esm",
+      "angleZ": 268
     }
   ],
   "isPapyrusHotReloadEnabled": false,
