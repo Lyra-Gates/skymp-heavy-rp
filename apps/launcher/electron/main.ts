@@ -323,10 +323,30 @@ ipcMain.handle('get-launcher-config', async () => readLauncherConfig());
 ipcMain.handle('save-game-path', async (_event, folderPath) => {
   const check = await validateGamePath(folderPath);
   if (!check.ok) return check;
+
   const config = readLauncherConfig();
+
+  // Skyrim original du joueur : source uniquement.
+  config.sourceGamePath = folderPath;
+
+  // Installation indépendante réservée à Primétoile.
+  config.isolatedGamePath = path.join(
+    path.dirname(folderPath),
+    'Skyrim Special Edition - Primetoile'
+  );
+
+  // Compatibilité temporaire avec la V7.
+  // Les autres fonctions utilisent encore gamePath pour le moment.
   config.gamePath = folderPath;
+
   writeLauncherConfig(config);
-  return { ok: true, reason: 'ok' };
+
+  return {
+    ok: true,
+    reason: 'ok',
+    sourceGamePath: config.sourceGamePath,
+    isolatedGamePath: config.isolatedGamePath
+  };
 });
 
 function validateGamePath(folderPath: string) {
