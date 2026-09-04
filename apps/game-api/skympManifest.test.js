@@ -44,3 +44,20 @@ test('server.js declara a rota oficial SkyMP', () => {
   const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
   assert.match(source, /app\.get\('\/api\/servers\/:masterKey\/manifest\.json'/);
 });
+test('ordena mods segundo a load order exigida pelo cliente oficial', () => {
+  const result = createSkympManifest({
+    hashAlgorithm: 'sha256',
+    mods: [
+      { filename: 'Dawnguard.esm', hash: HASH, size: 30, crc32: 300 },
+      { filename: 'Skyrim.esm', hash: HASH, size: 10, crc32: 100 },
+      { filename: 'Update.esm', hash: HASH, size: 20, crc32: 200 }
+    ],
+    loadOrder: ['Skyrim.esm', 'Update.esm', 'Dawnguard.esm']
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.manifest.mods.map((mod) => mod.filename),
+    ['Skyrim.esm', 'Update.esm', 'Dawnguard.esm']
+  );
+});

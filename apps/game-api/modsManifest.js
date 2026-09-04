@@ -77,8 +77,38 @@ function createSkympManifest(manifest) {
     return { ok: false, reason: 'manifest_invalid_shape' };
   }
 
-  const mods = [];
+  const sourceModsByName = new Map();
+
   for (const mod of manifest.mods) {
+    const key = mod.filename.toLowerCase();
+
+    if (sourceModsByName.has(key)) {
+      return { ok: false, reason: 'skymp_duplicate_mod' };
+    }
+
+    sourceModsByName.set(key, mod);
+  }
+
+  const seenLoadOrder = new Set();
+  const mods = [];
+
+  for (const filename of manifest.loadOrder) {
+    if (typeof filename !== 'string' || filename.length === 0) {
+      return { ok: false, reason: 'skymp_invalid_load_order' };
+    }
+
+    const key = filename.toLowerCase();
+
+    if (seenLoadOrder.has(key)) {
+      return { ok: false, reason: 'skymp_duplicate_load_order' };
+    }
+    seenLoadOrder.add(key);
+
+    const mod = sourceModsByName.get(key);
+    if (!mod) {
+      return { ok: false, reason: 'skymp_load_order_missing_mod' };
+    }
+
     const validSize = Number.isSafeInteger(mod.size) && mod.size >= 0;
     const validCrc32 = Number.isInteger(mod.crc32) &&
       mod.crc32 >= -2147483648 && mod.crc32 <= 2147483647;
