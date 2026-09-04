@@ -1,7 +1,7 @@
 {
   "name": "primetoile-alpha-launcher",
   "private": true,
-  "version": "0.1.0-alpha.5",
+  "version": "0.1.0-alpha.6",
   "description": "Launcher officiel de Primétoile Alpha",
   "author": "Lyra-Gates",
   "main": "dist-electron/main.mjs",
