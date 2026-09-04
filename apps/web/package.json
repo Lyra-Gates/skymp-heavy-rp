@@ -1,12 +1,12 @@
 {
   "name": "skymp-staff-panel",
   "version": "1.0.0",
-  "description": "Painel Web de Staff - SkyMP Heavy RP",
+  "description": "Panel web du staff — Primétoile",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test server.test.js rateLimiter.test.js mysqlSessionStore.test.js"
+    "test": "node --test server.test.js rateLimiter.test.js mysqlSessionStore.test.js localization.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

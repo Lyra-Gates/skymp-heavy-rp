@@ -155,19 +155,19 @@ describe('validação da aplicação de personagem', () => {
   });
 
   test('rejeita nome ausente', () => {
-    assert.match(validateApplication({ ...valid, first_name: '' }).error, /Nome/);
+    assert.match(validateApplication({ ...valid, first_name: '' }).error, /Prénom/);
   });
 
   test('rejeita nome só com espaços', () => {
-    assert.match(validateApplication({ ...valid, first_name: '   ' }).error, /Nome/);
+    assert.match(validateApplication({ ...valid, first_name: '   ' }).error, /Prénom/);
   });
 
   test('rejeita biografia curta demais', () => {
-    assert.match(validateApplication({ ...valid, biography: 'curta' }).error, /Biografia/);
+    assert.match(validateApplication({ ...valid, biography: 'curta' }).error, /Biographie/);
   });
 
   test('rejeita campo acima do limite da coluna', () => {
-    assert.match(validateApplication({ ...valid, biography: 'x'.repeat(6000) }).error, /Biografia/);
+    assert.match(validateApplication({ ...valid, biography: 'x'.repeat(6000) }).error, /Biographie/);
   });
 
   // A rubrica de whitelist trata ficha sem estes campos como reprovada. Eles

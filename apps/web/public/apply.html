@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SkyMP Heavy RP - Aplicação de Whitelist</title>
+    <title>Primétoile — Candidature à la liste blanche</title>
     <link rel="stylesheet" href="style.css">
     <style>
         body {
@@ -89,58 +89,58 @@
 <body>
 
 <div class="container">
-    <h1>Aplicação de Whitelist</h1>
+    <h1>Candidature à la liste blanche</h1>
     
     <div id="auth-section">
-        <p>Para enviar ou verificar sua whitelist, faça login com o Discord.</p>
-        <a href="/api/auth/discord" class="discord-btn" style="color:white; padding:12px; border-radius:4px; text-align:center;">Login com Discord</a>
+        <p>Connectez-vous avec Discord pour envoyer ou consulter votre candidature.</p>
+        <a href="/api/auth/discord" class="discord-btn" style="color:white; padding:12px; border-radius:4px; text-align:center;">Se connecter avec Discord</a>
     </div>
 
     <div id="status-section" class="hidden">
-        <h2>Seu Status: <span id="status-text">Carregando...</span></h2>
+        <h2>État de votre candidature : <span id="status-text">Chargement...</span></h2>
         <div id="application-status"></div>
-        <button id="logout-btn" style="background-color:#d32f2f; margin-top:15px;">Sair</button>
+        <button id="logout-btn" style="background-color:#d32f2f; margin-top:15px;">Se déconnecter</button>
     </div>
 
     <div id="form-section" class="hidden">
-        <p>Preencha os dados do seu personagem abaixo. Lembre-se das regras de Heavy RP.</p>
+        <p>Renseignez les informations de votre personnage ci-dessous en respectant les règles du Heavy RP.</p>
         <form id="apply-form">
             <div class="form-group">
-                <label for="first_name">Nome do Personagem</label>
-                <input type="text" id="first_name" name="first_name" required placeholder="Ex: Ralof">
+                <label for="first_name">Prénom du personnage</label>
+                <input type="text" id="first_name" name="first_name" required placeholder="Ex. : Ralof">
             </div>
             
             <div class="form-group">
-                <label for="last_name">Sobrenome / Apelido</label>
-                <input type="text" id="last_name" name="last_name" required placeholder="Ex: de Riverwood">
+                <label for="last_name">Nom ou surnom</label>
+                <input type="text" id="last_name" name="last_name" required placeholder="Ex. : de Rivebois">
             </div>
 
             <div class="form-group">
-                <label for="biography">Biografia</label>
-                <textarea id="biography" name="biography" required placeholder="Conte a história do seu personagem: de onde veio, o que já viveu..."></textarea>
+                <label for="biography">Biographie</label>
+                <textarea id="biography" name="biography" required placeholder="Racontez l’histoire de votre personnage : ses origines, son vécu..."></textarea>
             </div>
 
             <div class="form-group">
-                <label for="motivations">Motivações</label>
-                <textarea id="motivations" name="motivations" required placeholder="O que seu personagem busca em jogo? Objetivos concretos, não genéricos."></textarea>
+                <label for="motivations">Motivations</label>
+                <textarea id="motivations" name="motivations" required placeholder="Que recherche votre personnage en jeu ? Donnez-lui des objectifs concrets."></textarea>
             </div>
 
             <div class="form-group">
-                <label for="weaknesses">Fraquezas e Limites</label>
-                <textarea id="weaknesses" name="weaknesses" required placeholder="Medos, vícios, limitações físicas ou sociais. Personagem sem fraqueza é rejeitado."></textarea>
+                <label for="weaknesses">Faiblesses et limites</label>
+                <textarea id="weaknesses" name="weaknesses" required placeholder="Peurs, vices, limites physiques ou sociales. Un personnage sans faiblesse sera refusé."></textarea>
             </div>
 
             <div class="form-group">
-                <label for="social_ties">Laços Sociais</label>
-                <textarea id="social_ties" name="social_ties" required placeholder="Que tipo de relações seu personagem pretende construir em jogo (família, facção, rivais)?"></textarea>
+                <label for="social_ties">Liens sociaux</label>
+                <textarea id="social_ties" name="social_ties" required placeholder="Quelles relations votre personnage souhaite-t-il construire en jeu : famille, faction, rivalités… ?"></textarea>
             </div>
 
             <p style="font-size:13px; color:#999; margin-top:-10px;">
-                Conceitos fortes (nobreza, magia poderosa, vampirismo, lycanthropia, Daedra, liderança de facção)
-                exigem aprovação extra da staff e podem demorar mais pra revisar.
+                Les concepts importants (noblesse, magie puissante, vampirisme, lycanthropie, Daedra ou direction de faction)
+                nécessitent une validation supplémentaire du staff et peuvent demander plus de temps.
             </p>
 
-            <button type="submit">Enviar Aplicação</button>
+            <button type="submit">Envoyer la candidature</button>
         </form>
     </div>
 </div>
@@ -158,18 +158,19 @@
                     const statusText = document.getElementById('status-text');
                     const statusBox = document.getElementById('application-status');
                     
-                    statusText.textContent = data.application.status.toUpperCase();
+                    const statusLabels = { pending: 'EN ATTENTE', approved: 'APPROUVÉE', rejected: 'REFUSÉE' };
+                    statusText.textContent = statusLabels[data.application.status] || data.application.status.toUpperCase();
                     statusBox.style.display = 'block';
                     
                     if(data.application.status === 'pending') {
                         statusBox.className = 'status-pending';
-                        statusBox.textContent = 'Sua aplicação está sendo analisada pela staff. Aguarde.';
+                        statusBox.textContent = 'Votre candidature est en cours d’examen par le staff.';
                     } else if (data.application.status === 'approved') {
                         statusBox.className = 'status-approved';
-                        statusBox.textContent = 'Parabéns! Sua whitelist foi aprovada.';
+                        statusBox.textContent = 'Félicitations ! Votre candidature a été approuvée.';
                     } else if (data.application.status === 'rejected') {
                         statusBox.className = 'status-rejected';
-                        statusBox.textContent = 'Sua aplicação foi rejeitada. Verifique seu Discord para notas da staff.';
+                        statusBox.textContent = 'Votre candidature a été refusée. Consultez Discord pour lire les remarques du staff.';
                     }
                 } else {
                     document.getElementById('form-section').classList.remove('hidden');
@@ -178,11 +179,11 @@
                     document.getElementById('logout-btn').style.display = 'block';
                 }
             } else {
-                // Não logado
+                // Non connecté
                 document.getElementById('auth-section').classList.remove('hidden');
             }
         } catch (error) {
-            console.error('Erro ao buscar status:', error);
+            console.error('Impossible de consulter l’état de la candidature :', error);
         }
     }
 
@@ -203,14 +204,14 @@
             });
             const result = await res.json();
             if (res.ok) {
-                alert('Aplicação enviada com sucesso!');
+                alert('Candidature envoyée avec succès !');
                 location.reload();
             } else {
-                alert('Erro: ' + result.error);
+                alert('Erreur : ' + result.error);
             }
         } catch (error) {
             console.error(error);
-            alert('Erro de conexão.');
+            alert('Erreur de connexion.');
         }
     });
 

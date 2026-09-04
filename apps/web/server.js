@@ -166,7 +166,7 @@ passport.use(new DiscordStrategy({
 function requireAuth(req, res, next) {
   if (req.isAuthenticated && req.isAuthenticated()) return next();
   runtimeMetrics.recordRejection('auth_required');
-  res.status(401).json({ error: 'Não autenticado' });
+  res.status(401).json({ error: 'Non authentifié' });
 }
 
 // A autoridade de staff é derivada EXCLUSIVAMENTE da tabela `staff_roles`.
@@ -175,19 +175,19 @@ function requireAuth(req, res, next) {
 async function requireStaff(req, res, next) {
   if (!req.isAuthenticated || !req.isAuthenticated()) {
     runtimeMetrics.recordRejection('staff_auth_required');
-    return res.status(401).json({ error: 'Nao autenticado' });
+    return res.status(401).json({ error: 'Non authentifié' });
   }
   try {
     const rows = await db('SELECT role FROM staff_roles WHERE account_id = ? LIMIT 1', [req.user.accountId]);
     if (rows.length === 0) {
       runtimeMetrics.recordRejection('staff_role_required');
-      return res.status(403).json({ error: 'Acesso staff negado' });
+      return res.status(403).json({ error: 'Accès réservé au staff' });
     }
     req.staff = { role: rows[0].role };
     return next();
   } catch (err) {
     console.error('[requireStaff]', err);
-    return res.status(500).json({ error: 'Erro interno do servidor' });
+    return res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 }
 
@@ -212,7 +212,7 @@ app.get('/api/auth/discord/callback', passport.authenticate('discord', {
 
 app.post('/api/auth/logout', (req, res) => {
   req.logout((err) => {
-    if(err) { console.error('[logout]', err); return res.status(500).json({ error: 'Erro interno do servidor' }); }
+    if(err) { console.error('[logout]', err); return res.status(500).json({ error: 'Erreur interne du serveur' }); }
     req.session.destroy(() => res.json({ ok: true }));
   });
 });
@@ -226,7 +226,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
             user: req.user,
             application
         });
-    } catch (err) { console.error('[/api/me]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+    } catch (err) { console.error('[/api/me]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // Heurística best-effort: sinaliza conceitos fortes pra staff olhar com mais
@@ -254,15 +254,15 @@ function detectsStrongConcept(...texts) {
 // um campo vazio ou de 1 caractere não é uma ficha, e um campo maior que o
 // tipo da coluna estoura no INSERT e vira 500 sem explicação pro jogador.
 const APPLY_FIELDS = {
-  first_name:  { required: true,  min: 2, max: 60,   label: 'Nome' },
-  last_name:   { required: true,  min: 2, max: 60,   label: 'Sobrenome' },
-  biography:   { required: true,  min: 80, max: 5000, label: 'Biografia' },
+  first_name:  { required: true,  min: 2, max: 60,   label: 'Prénom' },
+  last_name:   { required: true,  min: 2, max: 60,   label: 'Nom ou surnom' },
+  biography:   { required: true,  min: 80, max: 5000, label: 'Biographie' },
   // Obrigatórios também no servidor, não só no `required` do apply.html — o
   // formulário é só a UI, e a rubrica de whitelist trata ficha sem motivação,
   // fraqueza ou laço social como reprovada de saída.
-  motivations: { required: true,  min: 30, max: 2000, label: 'Motivações' },
-  weaknesses:  { required: true,  min: 30, max: 2000, label: 'Fraquezas' },
-  social_ties: { required: true,  min: 30, max: 2000, label: 'Laços sociais' }
+  motivations: { required: true,  min: 30, max: 2000, label: 'Motivations' },
+  weaknesses:  { required: true,  min: 30, max: 2000, label: 'Faiblesses' },
+  social_ties: { required: true,  min: 30, max: 2000, label: 'Liens sociaux' }
 };
 
 function validateApplication(body) {
@@ -270,12 +270,12 @@ function validateApplication(body) {
   for (const [field, rule] of Object.entries(APPLY_FIELDS)) {
     const value = typeof body[field] === 'string' ? body[field].trim() : '';
     if (!value) {
-      if (rule.required) return { error: `${rule.label} é obrigatório.` };
+      if (rule.required) return { error: `${rule.label} est obligatoire.` };
       clean[field] = null;
       continue;
     }
-    if (value.length < rule.min) return { error: `${rule.label} precisa de pelo menos ${rule.min} caracteres.` };
-    if (value.length > rule.max) return { error: `${rule.label} passa do limite de ${rule.max} caracteres.` };
+    if (value.length < rule.min) return { error: `${rule.label} doit contenir au moins ${rule.min} caractères.` };
+    if (value.length > rule.max) return { error: `${rule.label} dépasse la limite de ${rule.max} caractères.` };
     clean[field] = value;
   }
   return { clean };
@@ -288,7 +288,7 @@ app.post('/api/apply', requireAuth, async (req, res) => {
     try {
         const existing = await db('SELECT status FROM whitelist_applications WHERE account_id = ? ORDER BY id DESC LIMIT 1', [req.user.accountId]);
         if (existing.length > 0 && (existing[0].status === 'pending' || existing[0].status === 'approved')) {
-            return res.status(400).json({ error: 'Você já possui uma aplicação pendente ou aprovada.' });
+            return res.status(400).json({ error: 'Vous avez déjà une candidature en attente ou approuvée.' });
         }
 
         const needsExtraReview = detectsStrongConcept(biography, motivations, weaknesses, social_ties) ? 1 : 0;
@@ -306,7 +306,7 @@ app.post('/api/apply', requireAuth, async (req, res) => {
         );
 
         res.json({ ok: true });
-    } catch (err) { console.error('[/api/apply]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+    } catch (err) { console.error('[/api/apply]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Dashboard ─────────────────────────────────────────────────────────
@@ -332,7 +332,7 @@ app.get('/api/dashboard', requireStaff, async (req, res) => {
       prisoners:   prisoners[0].c,
       factions:    factions[0].c
     });
-  } catch (err) { console.error('[/api/dashboard]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/dashboard]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Whitelist ─────────────────────────────────────────────────────────
@@ -351,7 +351,7 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
        LIMIT 100`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/whitelist GET]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/whitelist GET]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 /**
@@ -370,13 +370,13 @@ function notifyModerationLog(evento, requestId) {
             'X-Request-Id': requestId
         },
         body: JSON.stringify({ ...evento, source: 'painel', at: new Date().toISOString() })
-    }).catch(e => console.error('[web] Falha ao enviar log de moderacao:', e.message));
+    }).catch(e => console.error('[web] Échec de l’envoi du journal de modération :', e.message));
 }
 
 app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
   const { status, reviewer_notes, extra_review_notes } = req.body;
   const validStatuses = ['approved', 'rejected', 'pending'];
-  if (!validStatuses.includes(status)) return res.status(400).json({ error: 'Status inválido' });
+  if (!validStatuses.includes(status)) return res.status(400).json({ error: 'État invalide' });
   try {
     await db(
       'UPDATE whitelist_applications SET status=?, reviewer_notes=?, reviewed_at=NOW() WHERE id=?',
@@ -441,7 +441,7 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
                 body: JSON.stringify({ discord_id: idRows[0].discord_id, status })
             });
         } catch (e) {
-            console.error('[web] Falha ao notificar o Bot do Discord:', e.message);
+            console.error('[web] Échec de la notification du bot Discord :', e.message);
         }
     }
 
@@ -458,13 +458,13 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
         kind: status === 'approved' ? 'whitelist_approve'
             : status === 'rejected' ? 'whitelist_reject'
             : 'whitelist_reset',
-        target: idRows.length > 0 ? `<@${idRows[0].discord_id}>` : `aplicacao #${req.params.id}`,
-        moderator: req.user.username || `conta #${req.user.accountId}`,
+        target: idRows.length > 0 ? `<@${idRows[0].discord_id}>` : `candidature #${req.params.id}`,
+        moderator: req.user.username || `compte #${req.user.accountId}`,
         reason: reviewer_notes || null
     }, req.requestId);
 
     res.json({ ok: true });
-  } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Personagens ───────────────────────────────────────────────────────
@@ -482,7 +482,7 @@ app.get('/api/characters', requireStaff, async (req, res) => {
       [search, search, search]
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/characters]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/characters]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Audit Logs ────────────────────────────────────────────────────────
@@ -499,7 +499,7 @@ app.get('/api/audit', requireStaff, async (req, res) => {
        ORDER BY al.created_at DESC LIMIT 200`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/audit]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/audit]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Economia / Holds ──────────────────────────────────────────────────
@@ -513,7 +513,7 @@ app.get('/api/economy/holds', requireStaff, async (req, res) => {
        ORDER BY h.name`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/economy/holds]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/economy/holds]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 app.get('/api/economy/top-gold', requireStaff, async (req, res) => {
@@ -526,7 +526,7 @@ app.get('/api/economy/top-gold', requireStaff, async (req, res) => {
        ORDER BY c.gold DESC LIMIT 10`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/economy/top-gold]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/economy/top-gold]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Fichas Criminais ──────────────────────────────────────────────────
@@ -540,7 +540,7 @@ app.get('/api/criminal', requireStaff, async (req, res) => {
        ORDER BY cr.resolved ASC, cr.created_at DESC LIMIT 100`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/criminal]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/criminal]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Facções ───────────────────────────────────────────────────────────
@@ -554,7 +554,7 @@ app.get('/api/factions', requireStaff, async (req, res) => {
        GROUP BY f.id ORDER BY member_count DESC`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/factions]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/factions]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // ── API: Presos Ativos ─────────────────────────────────────────────────────
@@ -570,7 +570,7 @@ app.get('/api/prison', requireStaff, async (req, res) => {
        ORDER BY pr.arrested_at DESC`
     );
     res.json(rows);
-  } catch (err) { console.error('[/api/prison]', err); res.status(500).json({ error: 'Erro interno do servidor' }); }
+  } catch (err) { console.error('[/api/prison]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
 // API: Crash reports do launcher
@@ -617,7 +617,7 @@ async function pruneCrashReports() {
   }
 
   if (doomed.size > 0) {
-    console.log(`[crash-reports] ${doomed.size} relatorio(s) antigo(s) removido(s).`);
+    console.log(`[crash-reports] ${doomed.size} ancien(s) rapport(s) supprimé(s).`);
   }
   return doomed.size;
 }
@@ -626,16 +626,16 @@ app.post('/api/crashes/client', async (req, res) => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     if (isRateLimited(`crashes:${ip}`, 10, 60 * 1000)) {
       runtimeMetrics.recordRejection('rate_limit_crashes');
-      return res.status(429).json({ ok: false, error: 'Muitas requisições, tente novamente mais tarde.' });
+      return res.status(429).json({ ok: false, error: 'Trop de requêtes, veuillez réessayer plus tard.' });
     }
 
     const contentLength = Number(req.get('content-length') || 0);
     if (contentLength > CRASH_REPORT_MAX_BYTES) {
-      return res.status(413).json({ ok: false, error: 'Payload muito grande' });
+      return res.status(413).json({ ok: false, error: 'Contenu trop volumineux' });
     }
 
     const report = normalizeCrashReport(req.body || {});
-    if (report.crashes.length === 0) return res.status(400).json({ ok: false, error: 'Nenhum crash valido recebido' });
+    if (report.crashes.length === 0) return res.status(400).json({ ok: false, error: 'Aucun rapport de plantage valide reçu' });
 
     await ensureCrashReportDir();
     const filePath = path.join(CRASH_REPORT_DIR, `${report.id}.json`);
@@ -644,12 +644,12 @@ app.post('/api/crashes/client', async (req, res) => {
     // Sem isto o diretório cresce pra sempre: cada relatório carrega até 64 KB
     // de log por crash, e um cliente instável reporta em série. Rodar depois da
     // escrita (e não em cron) mantém a limpeza acoplada ao que a causa.
-    pruneCrashReports().catch((err) => console.error('[crash-reports] Falha ao podar:', err.message));
+    pruneCrashReports().catch((err) => console.error('[crash-reports] Échec du nettoyage :', err.message));
 
     res.json({ ok: true, id: report.id, received: report.crashes.length });
   } catch (err) {
     console.error('[/api/crashes/client]', err);
-    res.status(500).json({ ok: false, error: 'Erro interno do servidor' });
+    res.status(500).json({ ok: false, error: 'Erreur interne du serveur' });
   }
 });
 
@@ -677,7 +677,7 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
           })) : []
         });
       } catch (fileErr) {
-        console.error(`[/api/crashes] Arquivo corrompido ignorado: ${name}`, fileErr.message);
+        console.error(`[/api/crashes] Fichier corrompu ignoré : ${name}`, fileErr.message);
       }
     }
 
@@ -685,7 +685,7 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
     res.json(reports.slice(0, 100));
   } catch (err) {
     console.error('[/api/crashes]', err);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -756,7 +756,7 @@ app.get('/api/servers/:masterKey/sessions/:session', async (req, res) => {
     res.json({ user: { id: rows[0].account_id, discordId: rows[0].discord_id } });
   } catch (err) {
     console.error('[master-api] /sessions', err);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -828,17 +828,17 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`oauth-exchange:${ip}`, 10, 60 * 1000)) {
     runtimeMetrics.recordRejection('rate_limit_oauth_exchange');
-    return res.status(429).json({ error: 'Muitas tentativas, aguarde um minuto.' });
+    return res.status(429).json({ error: 'Trop de tentatives, veuillez patienter une minute.' });
   }
 
   const { code, redirect_uri } = req.body || {};
-  if (typeof code !== 'string' || !code) return res.status(400).json({ error: 'code ausente' });
-  if (typeof redirect_uri !== 'string' || !redirect_uri) return res.status(400).json({ error: 'redirect_uri ausente' });
+  if (typeof code !== 'string' || !code) return res.status(400).json({ error: 'code absent' });
+  if (typeof redirect_uri !== 'string' || !redirect_uri) return res.status(400).json({ error: 'redirect_uri absent' });
 
   // Só aceitamos os redirect_uri que nós mesmos registramos. Sem isso, um code
   // roubado poderia ser trocado apontando pra um endereço controlado por terceiro.
   if (!LAUNCHER_REDIRECT_URIS.includes(redirect_uri)) {
-    return res.status(400).json({ error: 'redirect_uri não permitido' });
+    return res.status(400).json({ error: 'redirect_uri non autorisé' });
   }
 
   try {
@@ -854,16 +854,16 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
       })
     });
 
-    if (!tokenRes.ok) return res.status(401).json({ error: 'Falha ao autenticar no Discord.' });
+    if (!tokenRes.ok) return res.status(401).json({ error: 'Échec de l’authentification Discord.' });
     const token = await tokenRes.json();
-    if (!token.access_token) return res.status(401).json({ error: 'Falha ao autenticar no Discord.' });
+    if (!token.access_token) return res.status(401).json({ error: 'Échec de l’authentification Discord.' });
 
     const userRes = await fetch('https://discord.com/api/users/@me', {
       headers: { Authorization: `Bearer ${token.access_token}` }
     });
-    if (!userRes.ok) return res.status(401).json({ error: 'Falha ao ler o perfil do Discord.' });
+    if (!userRes.ok) return res.status(401).json({ error: 'Impossible de récupérer le profil Discord.' });
     const user = await userRes.json();
-    if (!user.id) return res.status(401).json({ error: 'Falha ao ler o perfil do Discord.' });
+    if (!user.id) return res.status(401).json({ error: 'Impossible de récupérer le profil Discord.' });
 
     // A conta precisa existir antes de emitir ticket — quem nunca passou pelo
     // painel não tem whitelist, então não tem o que fazer na fila.
@@ -888,7 +888,7 @@ app.post('/api/launcher/oauth/exchange', async (req, res) => {
     res.json(profile);
   } catch (err) {
     console.error('[/api/launcher/oauth/exchange]', err);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -900,7 +900,7 @@ app.post('/api/launcher/session/refresh-ticket', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (isRateLimited(`session-refresh:${ip}`, 30, 60 * 1000)) {
     runtimeMetrics.recordRejection('rate_limit_session_refresh');
-    return res.status(429).json({ error: 'Muitas tentativas, aguarde um minuto.' });
+    return res.status(429).json({ error: 'Trop de tentatives, veuillez patienter une minute.' });
   }
 
   const { sessionToken } = req.body || {};
@@ -913,7 +913,7 @@ app.post('/api/launcher/session/refresh-ticket', async (req, res) => {
     res.json({ launchTicket });
   } catch (err) {
     console.error('[/api/launcher/session/refresh-ticket]', err);
-    res.status(500).json({ error: 'Erro interno do servidor' });
+    res.status(500).json({ error: 'Erreur interne du serveur' });
   }
 });
 
@@ -953,7 +953,7 @@ app.get('*', (req, res) => {
 // abriria a porta 3001 de verdade.
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`[staff-panel] Painel rodando em http://localhost:${PORT}`);
+    console.log(`[staff-panel] Panel disponible sur http://localhost:${PORT}`);
   });
 }
 
