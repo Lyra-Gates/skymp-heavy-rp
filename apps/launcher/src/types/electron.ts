@@ -16,9 +16,32 @@ export interface LaunchGameResult {
 export interface ElectronAPI {
   windowMinimize: () => void;
   windowClose: () => void;
-  getLauncherConfig: () => Promise<{ gamePath?: string; display?: { width?: number; height?: number; mode?: string } }>;
+  getLauncherConfig: () => Promise<{
+  gamePath?: string;
+  sourceGamePath?: string;
+  isolatedGamePath?: string;
+  display?: {
+    width?: number;
+    height?: number;
+    mode?: string;
+  };
+}>;
   getAppInfo: () => Promise<{ launcherVersion: string; clientVersion: string | null; modsVersion: string | null; gamePath: string | null }>;
-  saveGamePath: (folderPath: string) => Promise<{ ok: boolean; reason?: string }>;
+  saveGamePath: (folderPath: string) => Promise<{
+  ok: boolean;
+  reason?: string;
+  sourceGamePath?: string;
+  isolatedGamePath?: string;
+  error?: string;
+}>;
+
+installIsolatedGame: () => Promise<{
+  ok: boolean;
+  copied?: number;
+  reason?: string;
+  missing?: string[];
+  error?: string;
+}>;
   selectGamePath: () => Promise<string | null>;
   checkGamePath: (folderPath: string) => Promise<{ ok: boolean; reason: string }>;
   ensureSkyrimIni: (opts?: any) => Promise<any>;
@@ -45,6 +68,13 @@ export interface ElectronAPI {
   reportRecentCrashes: () => Promise<any>;
   onUpdateProgress: (callback: (value: any) => void) => void;
   onModsUpdateProgress: (callback: (value: any) => void) => void;
+  onIsolatedInstallProgress: (
+  callback: (value: {
+    current: number;
+    total: number;
+    file: string;
+  }) => void
+) => void;
   launchGame: (folderPath: string, ticket: string) => Promise<LaunchGameResult>;
 }
 

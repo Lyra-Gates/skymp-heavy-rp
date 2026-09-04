@@ -6,6 +6,7 @@ const api = {
   getLauncherConfig: () => ipcRenderer.invoke('get-launcher-config'),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   saveGamePath: (folderPath: string) => ipcRenderer.invoke('save-game-path', folderPath),
+  installIsolatedGame: () => ipcRenderer.invoke('install-isolated-game'),
   selectGamePath: () => ipcRenderer.invoke('select-game-path'),
   checkGamePath: (folderPath: string) => ipcRenderer.invoke('check-game-path', folderPath),
   ensureSkyrimIni: (opts?: any) => ipcRenderer.invoke('ensure-skyrim-ini', opts),
@@ -30,6 +31,15 @@ const api = {
   installModsUpdate: (folderPath: string, force?: boolean) => ipcRenderer.invoke('install-mods-update', folderPath, force),
   getRecentCrashes: () => ipcRenderer.invoke('get-recent-crashes'),
   reportRecentCrashes: () => ipcRenderer.invoke('report-recent-crashes'),
+  onIsolatedInstallProgress: (
+    callback: (value: { current: number; total: number; file: string }) => void
+  ) => {
+    ipcRenderer.removeAllListeners('isolated-install-progress');
+    ipcRenderer.on(
+      'isolated-install-progress',
+      (_event, value) => callback(value)
+    );
+  },
   onUpdateProgress: (callback: (value: any) => void) => {
     ipcRenderer.removeAllListeners('update-progress');
     ipcRenderer.on('update-progress', (_event, value) => callback(value));
