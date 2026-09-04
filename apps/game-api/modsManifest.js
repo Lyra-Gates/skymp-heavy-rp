@@ -72,4 +72,40 @@ function createManifestLoader(manifestPath) {
   return { load };
 }
 
-module.exports = { createManifestLoader, isValidManifest };
+function createSkympManifest(manifest) {
+  if (!isValidManifest(manifest)) {
+    return { ok: false, reason: 'manifest_invalid_shape' };
+  }
+
+  const mods = [];
+  for (const mod of manifest.mods) {
+    const validSize = Number.isSafeInteger(mod.size) && mod.size >= 0;
+    const validCrc32 = Number.isInteger(mod.crc32) &&
+      mod.crc32 >= -2147483648 && mod.crc32 <= 2147483647;
+
+    if (!validSize || !validCrc32) {
+      return { ok: false, reason: 'skymp_fields_missing' };
+    }
+
+    mods.push({
+      filename: mod.filename,
+      size: mod.size,
+      crc32: mod.crc32
+    });
+  }
+
+  return {
+    ok: true,
+    manifest: {
+      versionMajor: 1,
+      mods,
+      loadOrder: [...manifest.loadOrder]
+    }
+  };
+}
+
+module.exports = {
+  createManifestLoader,
+  createSkympManifest,
+  isValidManifest
+};

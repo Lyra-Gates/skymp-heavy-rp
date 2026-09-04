@@ -1521,6 +1521,8 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
       serverIp: SERVER_IP,
       serverPort: SERVER_PORT,
       discordId: auth.discordId,
+      masterUrl: GAME_API_URL,
+      serverMasterKey: 'primetoile',
     });
 
     await killGameProcesses();

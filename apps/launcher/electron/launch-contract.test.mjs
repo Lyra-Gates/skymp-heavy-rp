@@ -26,8 +26,8 @@ test('launch-game devolve resultado estruturado e nao inicia o SKSE por shell', 
   assert.doesNotMatch(handler, /exec\(`?['"]?\$?\{?exePath/);
 });
 
-test('bootstrap direto fica travado no contrato server-info-ignore', () => {
+test('bootstrap direto usa master proprio com fallback oficial', () => {
   const writer = fs.readFileSync(path.join(electronDir, 'connection-settings.mjs'), 'utf8');
-  assert.match(writer, /clientSettings\['server-info-ignore'\]\s*=\s*true/);
+  assert.match(writer, /clientSettings\['server-info-ignore'\]\s*=\s*!masterUrl/);
   assert.match(writer, /writtenSettings\['server-info-ignore'\]\s*===\s*true/);
 });

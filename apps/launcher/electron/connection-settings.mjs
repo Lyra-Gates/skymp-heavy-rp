@@ -8,6 +8,8 @@ export const CONNECTION_SETTINGS_ERROR_CODES = Object.freeze({
   EMPTY_TICKET: 'EMPTY_TICKET',
   INVALID_SERVER_HOST: 'INVALID_SERVER_HOST',
   INVALID_SERVER_PORT: 'INVALID_SERVER_PORT',
+  INVALID_MASTER_URL: 'INVALID_MASTER_URL',
+  INVALID_MASTER_KEY: 'INVALID_MASTER_KEY',
   INVALID_EXISTING_JSON: 'INVALID_EXISTING_JSON',
   INVALID_EXISTING_SHAPE: 'INVALID_EXISTING_SHAPE',
   WRITE_FAILED: 'WRITE_FAILED',
@@ -183,6 +185,52 @@ export function prepararConfiguracaoConexao(input) {
     throw new ConnectionSettingsError('INVALID_SERVER_PORT', 'A porta do servidor deve estar entre 1 e 65535.');
   }
 
+  const masterUrlInput = typeof input?.masterUrl === 'string'
+    ? input.masterUrl.trim()
+    : '';
+  let masterUrl = '';
+  let serverMasterKey = '';
+
+  if (masterUrlInput) {
+    let parsedMasterUrl;
+    try {
+      parsedMasterUrl = new URL(masterUrlInput);
+    } catch {
+      throw new ConnectionSettingsError(
+        'INVALID_MASTER_URL',
+        'A URL da API principal e invalida.'
+      );
+    }
+
+    const validProtocol =
+      parsedMasterUrl.protocol === 'http:' ||
+      parsedMasterUrl.protocol === 'https:';
+    const hasForbiddenParts =
+      parsedMasterUrl.username ||
+      parsedMasterUrl.password ||
+      parsedMasterUrl.search ||
+      parsedMasterUrl.hash;
+
+    if (!validProtocol || hasForbiddenParts) {
+      throw new ConnectionSettingsError(
+        'INVALID_MASTER_URL',
+        'A URL da API principal deve usar HTTP ou HTTPS, sem credenciais.'
+      );
+    }
+
+    masterUrl = parsedMasterUrl.toString().replace(/\/+$/, '');
+    serverMasterKey = typeof input?.serverMasterKey === 'string'
+      ? input.serverMasterKey.trim()
+      : '';
+
+    if (!/^[a-z0-9._-]{1,80}$/i.test(serverMasterKey)) {
+      throw new ConnectionSettingsError(
+        'INVALID_MASTER_KEY',
+        'A chave publica do servidor e invalida.'
+      );
+    }
+  }
+
   const pluginsDirectory = path.join(gamePath, 'Data', 'Platform', 'Plugins');
   const authDirectory = path.join(gamePath, 'Data', 'Platform', 'PluginsNoLoad');
   const configPath = path.join(pluginsDirectory, 'skymp_config.json');
@@ -206,10 +254,11 @@ export function prepararConfiguracaoConexao(input) {
 
   gameData.session = ticket;
   clientSettings.gameData = gameData;
-  clientSettings['server-info-ignore'] = true;
+  clientSettings['server-info-ignore'] = !masterUrl;
   clientSettings['server-ip'] = serverIp;
   clientSettings['server-port'] = serverPort;
-  clientSettings.master = '';
+  clientSettings.master = masterUrl;
+  if (masterUrl) clientSettings['server-master-key'] = serverMasterKey;
 
   const remoteAuthData = {
     session: ticket,
@@ -241,14 +290,20 @@ export function prepararConfiguracaoConexao(input) {
     );
   }
   const writtenGameData = isRecord(writtenSettings.gameData) ? writtenSettings.gameData : null;
+  const masterContractValid = masterUrl
+    ? writtenSettings['server-info-ignore'] === false &&
+      writtenSettings.master === masterUrl &&
+      writtenSettings['server-master-key'] === serverMasterKey
+    : writtenSettings['server-info-ignore'] === true &&
+      writtenSettings.master === '';
+
   const valid =
     writtenConfig.session === `ticket:${ticket}` &&
     writtenConfig.serverAddress === formatServerAddress(serverIp, serverPort) &&
     !hasForbiddenCredential(writtenConfig) &&
-    writtenSettings['server-info-ignore'] === true &&
+    masterContractValid &&
     writtenSettings['server-ip'] === serverIp &&
     writtenSettings['server-port'] === serverPort &&
-    writtenSettings.master === '' &&
     writtenGameData !== null &&
     writtenGameData.session === ticket &&
     !hasForbiddenCredential(writtenSettings) &&

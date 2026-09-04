@@ -28,6 +28,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const zlib = require('node:zlib');
 
 const GERADOR = path.join(__dirname, 'scripts', 'generate-mods-manifest.js');
 
@@ -138,5 +139,25 @@ describe('load order sem plugins.txt é marcada como não confiável', () => {
       m.loadOrderSource, /NAO CONFIAVEL/,
       'quem ler o manifesto depois precisa saber que a ordem foi inferida por nome de arquivo'
     );
+  });
+});
+
+describe('compatibilidade com o manifesto oficial SkyMP', () => {
+  it('grava tamanho e CRC32 assinado sem remover o SHA-256', () => {
+    const out = path.join(tmp, 'skymp-compatible.json');
+    const r = rodar([
+      dataDir,
+      '--plugins-txt', path.join(tmp, 'plugins.txt'),
+      '--out', out,
+      '--only-load-order'
+    ]);
+    assert.ok(r.ok, r.saida);
+
+    const manifest = JSON.parse(fs.readFileSync(out, 'utf8'));
+    const skyrim = manifest.mods.find((mod) => mod.filename === 'Skyrim.esm');
+
+    assert.equal(skyrim.hash.length, 64);
+    assert.equal(skyrim.size, Buffer.byteLength('base'));
+    assert.equal(skyrim.crc32, zlib.crc32(Buffer.from('base')) | 0);
   });
 });

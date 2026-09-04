@@ -172,3 +172,36 @@ test('recusa raiz JSON que não seja objeto', () => {
     }), 'INVALID_EXISTING_SHAPE');
   } finally { cleanup(f.gamePath); }
 });
+
+
+test('configura master proprio para o cliente oficial', () => {
+  const f = fixture();
+  try {
+    const result = prepareConnectionSettings({
+      gamePath: f.gamePath,
+      ticket: 'ticket',
+      serverIp: '51.255.42.176',
+      serverPort: 7777,
+      masterUrl: 'https://api.example.test/',
+      serverMasterKey: 'primetoile'
+    });
+
+    assert.equal(result.clientSettings.master, 'https://api.example.test');
+    assert.equal(result.clientSettings['server-master-key'], 'primetoile');
+    assert.equal(result.clientSettings['server-info-ignore'], false);
+  } finally { cleanup(f.gamePath); }
+});
+
+test('recusa URL de master fora de HTTP ou HTTPS', () => {
+  const f = fixture();
+  try {
+    expectCode(() => prepareConnectionSettings({
+      gamePath: f.gamePath,
+      ticket: 'ticket',
+      serverIp: '51.255.42.176',
+      serverPort: 7777,
+      masterUrl: 'file:///servidor',
+      serverMasterKey: 'primetoile'
+    }), 'INVALID_MASTER_URL');
+  } finally { cleanup(f.gamePath); }
+});

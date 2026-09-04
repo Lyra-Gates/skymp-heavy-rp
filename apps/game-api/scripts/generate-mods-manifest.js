@@ -20,6 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('node:zlib');
 
 const PLUGIN_EXTENSIONS = ['.esm', '.esp', '.esl'];
 // Extensões que valem a pena verificar por hash. Não incluímos tudo: uma pasta
@@ -48,12 +49,24 @@ function parseArgs(argv) {
 // acusar todo mod de corrompido.
 const HASH_ALGORITHM = 'sha256';
 
-function hashFile(filePath) {
+function fingerprintFile(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash(HASH_ALGORITHM);
     const stream = fs.createReadStream(filePath);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
+    let crc32Value = 0;
+    let size = 0;
+
+    stream.on('data', (chunk) => {
+      hash.update(chunk);
+      crc32Value = zlib.crc32(chunk, crc32Value);
+      size += chunk.length;
+    });
+    stream.on('end', () => resolve({
+      hash: hash.digest('hex'),
+      size,
+      // SkyrimPlatform expose le CRC32 comme un entier signe.
+      crc32: crc32Value | 0
+    }));
     stream.on('error', reject);
   });
 }
@@ -143,9 +156,9 @@ async function main() {
   console.log(`[manifest] Hasheando ${entries.length} arquivos em ${dataDir}...`);
   const mods = [];
   for (const filename of entries) {
-    const hash = await hashFile(path.join(dataDir, filename));
-    mods.push({ filename, hash });
-    process.stdout.write(`  ${filename} ${hash}\n`);
+    const fingerprint = await fingerprintFile(path.join(dataDir, filename));
+    mods.push({ filename, ...fingerprint });
+    process.stdout.write(`  ${filename} ${fingerprint.hash}\n`);
   }
 
   let loadOrder;

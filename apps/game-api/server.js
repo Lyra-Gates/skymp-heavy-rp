@@ -32,7 +32,7 @@ const mysql = require('mysql2/promise');
 const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
 
 const { createQueue } = require('./queue');
-const { createManifestLoader } = require('./modsManifest');
+const { createManifestLoader, createSkympManifest } = require('./modsManifest');
 
 const app = express();
 const runtimeMetrics = createRuntimeMetrics({ service: 'game-api' });
@@ -199,6 +199,25 @@ app.get('/mods.json', (req, res) => {
     return res.status(503).json({ error: 'Manifesto de mods indisponivel no servidor.' });
   }
   res.json(result.manifest);
+});
+
+// Contrato legado consumido diretamente pelo cliente oficial SkyMP.
+app.get('/api/servers/:masterKey/manifest.json', (req, res) => {
+  if (req.params.masterKey !== 'primetoile') {
+    return res.status(404).json({ error: 'Servidor desconhecido.' });
+  }
+
+  const result = manifestLoader.load();
+  if (!result.ok) {
+    return res.status(503).json({ error: 'Manifesto de mods indisponivel no servidor.' });
+  }
+
+  const skympResult = createSkympManifest(result.manifest);
+  if (!skympResult.ok) {
+    return res.status(503).json({ error: 'Manifesto SkyMP incompleto.' });
+  }
+
+  res.json(skympResult.manifest);
 });
 
 // ── Fila ────────────────────────────────────────────────────────────────────
