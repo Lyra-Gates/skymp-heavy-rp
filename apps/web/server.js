@@ -11,6 +11,11 @@ const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
 const { createMysqlSessionStore } = require('./mysqlSessionStore');
+const {
+  AdminActionError,
+  resetWhitelistApplication,
+  queueCharacterRecreation
+} = require('./characterAdmin');
 
 const app  = express();
 const runtimeMetrics = createRuntimeMetrics({ service: 'web' });
@@ -191,6 +196,20 @@ async function requireStaff(req, res, next) {
   }
 }
 
+function requireCharacterAdmin(req, res, next) {
+  if (req.staff && (req.staff.role === 'admin' || req.staff.role === 'owner')) return next();
+  runtimeMetrics.recordRejection('character_admin_required');
+  return res.status(403).json({ error: 'Cette action est réservée aux administrateurs.' });
+}
+
+function sendAdminActionError(res, error, context) {
+  if (error instanceof AdminActionError) {
+    return res.status(error.statusCode).json({ error: error.message });
+  }
+  console.error(context, error);
+  return res.status(500).json({ error: 'Erreur interne du serveur' });
+}
+
 app.get('/api/metrics', requireStaff, (req, res) => res.json(runtimeMetrics.snapshot()));
 
 app.get('/health', async (req, res) => {
@@ -346,7 +365,11 @@ app.get('/api/whitelist', requireStaff, async (req, res) => {
        FROM whitelist_applications wa
        LEFT JOIN accounts a ON a.id = wa.account_id
        LEFT JOIN discord_identities d ON d.account_id = a.id
-       LEFT JOIN characters c ON c.account_id = a.id
+       LEFT JOIN characters c ON c.id = (
+         SELECT c2.id FROM characters c2
+          WHERE c2.account_id = a.id AND c2.status <> 'retired'
+          ORDER BY c2.id DESC LIMIT 1
+       )
        ORDER BY wa.status='pending' DESC, wa.created_at DESC
        LIMIT 100`
     );
@@ -467,13 +490,54 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
   } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
+app.post('/api/whitelist/:id/reset', requireStaff, async (req, res) => {
+  try {
+    const result = await resetWhitelistApplication({
+      pool,
+      applicationId: req.params.id,
+      moderatorAccountId: req.user.accountId,
+      reason: req.body && req.body.reason
+    });
+
+    if (result.discordId) {
+      try {
+        await fetch(`${BOT_INTERNAL_URL}/api/sync-role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Internal-Secret': INTERNAL_API_SECRET,
+            'X-Request-Id': req.requestId
+          },
+          body: JSON.stringify({ discord_id: result.discordId, status: 'pending' })
+        });
+      } catch (error) {
+        console.error('[web] Échec de la notification du bot Discord :', error.message);
+      }
+    }
+
+    notifyModerationLog({
+      kind: 'whitelist_reset',
+      target: result.discordId ? `<@${result.discordId}>` : `candidature #${result.applicationId}`,
+      moderator: req.user.username || `compte #${req.user.accountId}`,
+      reason: result.reason
+    }, req.requestId);
+    return res.json({ ok: true });
+  } catch (error) {
+    return sendAdminActionError(res, error, '[/api/whitelist reset]');
+  }
+});
+
 // ── API: Personagens ───────────────────────────────────────────────────────
 app.get('/api/characters', requireStaff, async (req, res) => {
   try {
     const search = req.query.q ? `%${req.query.q}%` : '%';
     const rows = await db(
       `SELECT c.id, c.first_name, c.last_name, c.status, c.gold, c.created_at,
-              d.username as discord_name
+              d.username as discord_name,
+              (SELECT r.status
+                 FROM character_recreation_requests r
+                WHERE r.new_character_id = c.id
+                ORDER BY r.id DESC LIMIT 1) as recreation_status
        FROM characters c
        LEFT JOIN accounts a ON a.id = c.account_id
        LEFT JOIN discord_identities d ON d.account_id = a.id
@@ -483,6 +547,32 @@ app.get('/api/characters', requireStaff, async (req, res) => {
     );
     res.json(rows);
   } catch (err) { console.error('[/api/characters]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
+});
+
+app.post('/api/characters/:id/recreate', requireStaff, requireCharacterAdmin, async (req, res) => {
+  try {
+    const result = await queueCharacterRecreation({
+      pool,
+      characterId: req.params.id,
+      moderatorAccountId: req.user.accountId,
+      reason: req.body && req.body.reason
+    });
+
+    notifyModerationLog({
+      kind: 'character_recreate',
+      target: result.discordId ? `<@${result.discordId}> — ${result.displayName}` : result.displayName,
+      moderator: req.user.username || `compte #${req.user.accountId}`,
+      reason: result.reason
+    }, req.requestId);
+    return res.status(202).json({
+      ok: true,
+      previousCharacterId: result.previousCharacterId,
+      newCharacterId: result.newCharacterId,
+      message: 'Recréation programmée. Le joueur sera déconnecté une fois à sa prochaine connexion.'
+    });
+  } catch (error) {
+    return sendAdminActionError(res, error, '[/api/characters recreate]');
+  }
 });
 
 // ── API: Audit Logs ────────────────────────────────────────────────────────
@@ -704,6 +794,32 @@ app.get('/api/crashes', requireStaff, async (req, res) => {
 // O `master` padrão do SkyMP é `https://gateway.skymp.net`. Apontar para o
 // nosso painel é só trocar a string em `server-settings.json` — e faz sentido,
 // porque o painel já é quem autentica o Discord e aprova a whitelist.
+app.post('/api/servers/:masterKey', (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+  if (!MASTER_KEY || !safeEquals(req.params.masterKey, MASTER_KEY)) {
+    console.warn(`[master-api] masterKey invalida vinda de ${ip}`);
+    return res.status(404).json({ error: 'Unknown server' });
+  }
+
+  if (isRateLimited(`master-heartbeat:${ip}`, 60, 60 * 1000)) {
+    runtimeMetrics.recordRejection('rate_limit_master_heartbeat');
+    return res.status(429).json({ error: 'Too many requests' });
+  }
+
+  const { name, maxPlayers, online } = req.body || {};
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  if (
+    !cleanName || cleanName.length > 120 ||
+    !Number.isInteger(maxPlayers) || maxPlayers < 1 || maxPlayers > 10000 ||
+    !Number.isInteger(online) || online < 0 || online > maxPlayers
+  ) {
+    return res.status(400).json({ error: 'Invalid server heartbeat' });
+  }
+
+  return res.json({ ok: true });
+});
+
 app.get('/api/servers/:masterKey/sessions/:session', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
 

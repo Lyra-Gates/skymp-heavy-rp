@@ -16,7 +16,10 @@ test('le panel du staff expose son interface en français', () => {
     'Tableau de bord',
     'Candidatures',
     'Casiers judiciaires',
-    'Journal d’audit'
+    'Journal d’audit',
+    'Réinitialiser',
+    'Recréer',
+    'Recréation programmée'
   ]) {
     assert.ok(html.includes(text), `texte français absent du panel : ${text}`);
   }

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test server.test.js rateLimiter.test.js mysqlSessionStore.test.js localization.test.js"
+    "test": "node --test server.test.js rateLimiter.test.js mysqlSessionStore.test.js localization.test.js characterAdmin.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
