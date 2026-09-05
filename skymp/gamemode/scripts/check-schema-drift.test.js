@@ -86,7 +86,8 @@ describe('parser, contra as migrations reais do repositório', () => {
   it('encontra as tabelas centrais', () => {
     for (const tabela of [
       'accounts', 'characters', 'character_inventory', 'audit_logs', 'gold_transactions',
-      'staff_roles', 'market_stalls', 'governance_roles', 'launch_tickets', 'game_sessions', 'web_sessions'
+      'staff_roles', 'market_stalls', 'governance_roles', 'launch_tickets', 'game_sessions', 'web_sessions',
+      'character_recreation_requests'
     ]) {
       assert.ok(esperado.has(tabela), `tabela '${tabela}' nao foi extraida das migrations`);
     }

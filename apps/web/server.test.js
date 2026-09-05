@@ -107,6 +107,13 @@ describe('autenticação obrigatória', () => {
     const res = await post('/api/apply', { first_name: 'A' });
     assert.equal(res.status, 401);
   });
+
+  test('les actions de réinitialisation exigent une authentification staff', async () => {
+    const application = await post('/api/whitelist/1/reset', {});
+    const character = await post('/api/characters/1/recreate', {});
+    assert.equal(application.status, 401);
+    assert.equal(character.status, 401);
+  });
 });
 
 describe('hardening HTTP', () => {
@@ -394,6 +401,25 @@ describe('master API de sessão (contrato do SkyMP)', () => {
   // que respondermos vira o profileId do gamemode.
   const MASTER_KEY = 'chave-do-servidor-de-teste';
   const SESSION = 'b'.repeat(64);
+
+  test('accepte le heartbeat du serveur SkyMP avec la bonne masterKey', async () => {
+    const res = await post(`/api/servers/${MASTER_KEY}`, {
+      name: 'Primétoile Alpha', maxPlayers: 10, online: 1
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
+  });
+
+  test('refuse un heartbeat invalide ou une mauvaise masterKey', async () => {
+    const invalidBody = await post(`/api/servers/${MASTER_KEY}`, {
+      name: '', maxPlayers: 10, online: 1
+    });
+    const invalidKey = await post('/api/servers/mauvaise-cle', {
+      name: 'Primétoile Alpha', maxPlayers: 10, online: 1
+    });
+    assert.equal(invalidBody.status, 400);
+    assert.equal(invalidKey.status, 404);
+  });
 
   test('masterKey errada responde 404, não 403', async () => {
     // 404 e não 403 de propósito: não confirmamos a existência da chave certa

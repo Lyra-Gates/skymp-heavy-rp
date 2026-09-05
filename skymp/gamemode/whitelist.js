@@ -6,6 +6,7 @@ const characterState = require('./core/character-state');
 const serverOptions = require('./core/server-options');
 const transactionService = require('./core/transaction-service');
 const economyPhysicalSync = require('./core/economy-physical-sync');
+const { processCharacterRecreation } = require('./character-recreation-service');
 // NOTA: nenhum módulo PARKED é importado aqui. Eles são inicializados
 // exclusivamente pelo module-registry quando a flag ENABLE_* correspondente
 // está ligada — importar direto no boot os faria rodar sem passar pelo registry.
@@ -186,6 +187,22 @@ async function checkWhitelist(userId, profileId, actorId) {
       }
     } else {
       character = charRows[0];
+    }
+
+    // Une recréation demandée depuis le panel doit passer avant tout cache,
+    // récompense ou synchronisation d'inventaire. Le premier login détruit
+    // l'ancien acteur persistant et coupe la session ; le suivant reçoit le
+    // nouvel acteur vierge que le Spawn officiel ouvre dans le RaceMenu.
+    if (typeof mp !== 'undefined') {
+      const recreation = await processCharacterRecreation({
+        db,
+        mp,
+        userId,
+        accountId: account.id,
+        characterId: character.id,
+        actorId
+      });
+      if (recreation.blockLogin) return false;
     }
 
     console.log(`[whitelist] Whitelist check passed! Welcome, ${character.first_name} ${character.last_name}`);

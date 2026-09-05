@@ -166,6 +166,13 @@ async function apiPatch(path, body) {
   return r.json();
 }
 
+async function apiPost(path, body={}) {
+  const r = await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'include' });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
 function statusLabel(status, feminine = false) {
   const labels = {
     pending: 'En attente',
@@ -238,7 +245,7 @@ async function renderWhitelist(el) {
           ${r.status==='pending' ? `
             <button class="btn btn-success btn-sm" onclick="reviewApp(${r.id},'approved')">✓ Approuver</button>
             <button class="btn btn-danger btn-sm"  onclick="reviewApp(${r.id},'rejected')">✕ Refuser</button>
-          ` : ''}
+          ` : `<button class="btn btn-sm" onclick="resetApplication(${r.id})">↩ Réinitialiser</button>`}
         </td>
       </tr>
       <tr id="app-details-${r.id}" style="display:none"><td colspan="5">
@@ -277,22 +284,61 @@ async function reviewApp(id, status) {
   renderPage('whitelist');
 }
 
+async function resetApplication(id) {
+  if (!confirm('Remettre cette candidature en attente ? Le joueur perdra son accès jusqu’à une nouvelle approbation.')) return;
+  const reason = prompt('Motif de la réinitialisation (facultatif) :');
+  if (reason === null) return;
+  try {
+    await apiPost(`/api/whitelist/${id}/reset`, { reason });
+    toast('↩ Candidature remise en attente.', 'success');
+    renderPage('whitelist');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function characterRows(rows) {
+  return rows.map(r=>`<tr>
+    <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
+    <td style="color:var(--muted)">${escapeHtml(r.discord_name)||'—'}</td>
+    <td><span class="pill pill-${r.status}">${statusLabel(r.status)}</span></td>
+    <td>⚜ ${Number(r.gold || 0).toLocaleString('fr-FR')}</td>
+    <td style="color:var(--muted)">${fmt(r.created_at)}</td>
+    <td>${r.recreation_status==='pending' || r.recreation_status==='processing'
+      ? '<span class="pill pill-pending">Recréation programmée</span>'
+      : r.status==='approved'
+        ? `<button class="btn btn-danger btn-sm" onclick="recreateCharacter(${r.id})">Recréer</button>`
+        : '—'}</td>
+  </tr>`).join('');
+}
+
+async function recreateCharacter(id) {
+  const character = (window._characterRows || []).find(row => row.id === id);
+  const name = character ? `${character.first_name} ${character.last_name}` : `le personnage #${id}`;
+  const warning = `Recréer ${name} ?\n\nL’ancien personnage sera archivé. Son inventaire, son or, sa position, son apparence et sa progression ne seront pas transférés.\n\nÀ sa prochaine connexion, le joueur sera déconnecté une fois. Il devra relancer le jeu pour ouvrir la création de personnage.`;
+  if (!confirm(warning)) return;
+  const reason = prompt('Motif de la recréation (facultatif) :');
+  if (reason === null) return;
+  try {
+    await apiPost(`/api/characters/${id}/recreate`, { reason });
+    toast('Recréation programmée. Prévenez le joueur qu’un second lancement sera nécessaire.', 'success');
+    renderPage('characters');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
 async function renderCharacters(el) {
   const rows = await api('/api/characters');
+  window._characterRows = rows;
   el.innerHTML = `<div class="card">
     <div class="card-header">Personnages
       <input class="search-input" placeholder="Rechercher..." oninput="searchChars(this.value)">
     </div>
     <table id="chars-table">
-      <thead><tr><th>Nom RP</th><th>Discord</th><th>État</th><th>Or</th><th>Créé le</th></tr></thead>
-      <tbody>${rows.map(r=>`<tr>
-        <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
-        <td style="color:var(--muted)">${escapeHtml(r.discord_name)||'—'}</td>
-        <td><span class="pill pill-${r.status}">${statusLabel(r.status)}</span></td>
-        <td>⚜ ${r.gold.toLocaleString('fr-FR')}</td>
-        <td style="color:var(--muted)">${fmt(r.created_at)}</td>
-      </tr>`).join('')}
-      ${rows.length===0?'<tr><td colspan="5" class="empty">Aucun personnage</td></tr>':''}
+      <thead><tr><th>Nom RP</th><th>Discord</th><th>État</th><th>Or</th><th>Créé le</th><th>Actions</th></tr></thead>
+      <tbody>${characterRows(rows)}
+      ${rows.length===0?'<tr><td colspan="6" class="empty">Aucun personnage</td></tr>':''}
       </tbody>
     </table>
   </div>`;
@@ -300,13 +346,8 @@ async function renderCharacters(el) {
 
 async function searchChars(q) {
   const rows = await api(`/api/characters?q=${encodeURIComponent(q)}`);
-  document.querySelector('#chars-table tbody').innerHTML = rows.map(r=>`<tr>
-    <td><strong>${escapeHtml(r.first_name)} ${escapeHtml(r.last_name)}</strong></td>
-    <td style="color:var(--muted)">${escapeHtml(r.discord_name)||'—'}</td>
-    <td><span class="pill pill-${r.status}">${statusLabel(r.status)}</span></td>
-    <td>⚜ ${r.gold.toLocaleString('fr-FR')}</td>
-    <td style="color:var(--muted)">${fmt(r.created_at)}</td>
-  </tr>`).join('') || '<tr><td colspan="5" class="empty">Aucun résultat</td></tr>';
+  window._characterRows = rows;
+  document.querySelector('#chars-table tbody').innerHTML = characterRows(rows) || '<tr><td colspan="6" class="empty">Aucun résultat</td></tr>';
 }
 
 async function renderEconomy(el) {

@@ -45,7 +45,8 @@ const EVENT_KINDS = Object.freeze({
   permakill:          { titulo: 'Permakill',            cor: 0x71368a, icone: '⚰️' },
   whitelist_approve:  { titulo: 'Whitelist aprovada',   cor: 0x2ecc71, icone: '✅' },
   whitelist_reject:   { titulo: 'Whitelist recusada',   cor: 0xe74c3c, icone: '❌' },
-  whitelist_reset:    { titulo: 'Whitelist revertida',  cor: 0x95a5a6, icone: '↩️' }
+  whitelist_reset:    { titulo: 'Whitelist revertida',  cor: 0x95a5a6, icone: '↩️' },
+  character_recreate: { titulo: 'Recréation du personnage', cor: 0xe67e22, icone: '♻️' }
 });
 
 /** Corta e limpa texto que veio de fora antes de virar mensagem no Discord. */

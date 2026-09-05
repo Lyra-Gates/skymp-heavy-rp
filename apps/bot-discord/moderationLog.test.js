@@ -146,6 +146,11 @@ describe('buildEmbed', () => {
       assert.strictEqual(typeof e.color, 'number', `'${kind}' sem cor`);
     }
   });
+
+  it('identifie clairement une recréation de personnage', () => {
+    const { evento } = parseEvent({ kind: 'character_recreate', target: 'Alvara' });
+    assert.match(json(buildEmbed(evento)).title, /Recréation du personnage/);
+  });
 });
 
 describe('sendModerationLog', () => {
