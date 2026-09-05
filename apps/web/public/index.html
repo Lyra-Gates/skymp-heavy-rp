@@ -173,6 +173,13 @@ async function apiPost(path, body={}) {
   return data;
 }
 
+async function apiDelete(path, body={}) {
+  const r = await fetch(path, { method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), credentials:'include' });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
 function statusLabel(status, feminine = false) {
   const labels = {
     pending: 'En attente',
@@ -245,7 +252,8 @@ async function renderWhitelist(el) {
           ${r.status==='pending' ? `
             <button class="btn btn-success btn-sm" onclick="reviewApp(${r.id},'approved')">✓ Approuver</button>
             <button class="btn btn-danger btn-sm"  onclick="reviewApp(${r.id},'rejected')">✕ Refuser</button>
-          ` : `<button class="btn btn-sm" onclick="resetApplication(${r.id})">↩ Réinitialiser</button>`}
+          ` : ''}
+          <button class="btn btn-danger btn-sm" onclick="deleteApplication(${r.id})">Supprimer</button>
         </td>
       </tr>
       <tr id="app-details-${r.id}" style="display:none"><td colspan="5">
@@ -284,13 +292,13 @@ async function reviewApp(id, status) {
   renderPage('whitelist');
 }
 
-async function resetApplication(id) {
-  if (!confirm('Remettre cette candidature en attente ? Le joueur perdra son accès jusqu’à une nouvelle approbation.')) return;
-  const reason = prompt('Motif de la réinitialisation (facultatif) :');
+async function deleteApplication(id) {
+  if (!confirm('Supprimer cette candidature ? Le personnage actuel sera archivé, le joueur perdra son accès et pourra remplir une nouvelle candidature.')) return;
+  const reason = prompt('Motif de la suppression (facultatif) :');
   if (reason === null) return;
   try {
-    await apiPost(`/api/whitelist/${id}/reset`, { reason });
-    toast('↩ Candidature remise en attente.', 'success');
+    await apiDelete(`/api/whitelist/${id}`, { reason });
+    toast('Candidature supprimée. Le joueur peut en envoyer une nouvelle.', 'success');
     renderPage('whitelist');
   } catch (error) {
     toast(error.message, 'error');

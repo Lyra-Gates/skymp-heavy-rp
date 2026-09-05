@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { describe, test } = require('node:test');
 const {
   AdminActionError,
-  resetWhitelistApplication,
+  deleteWhitelistApplication,
   queueCharacterRecreation
 } = require('./characterAdmin');
 
@@ -24,8 +24,8 @@ function fakePool(handler) {
   return { pool: { getConnection: async () => connection }, log };
 }
 
-describe('réinitialisation de candidature', () => {
-  test('repasse la candidature et le personnage en attente dans une transaction', async () => {
+describe('suppression de candidature', () => {
+  test('supprime la candidature et archive le personnage dans une transaction', async () => {
     const state = fakePool((sql) => {
       if (sql.startsWith('SELECT wa.id')) {
         return [{ id: 9, account_id: 42, status: 'approved', discord_id: '123' }];
@@ -33,29 +33,27 @@ describe('réinitialisation de candidature', () => {
       return { affectedRows: 1 };
     });
 
-    const result = await resetWhitelistApplication({
+    const result = await deleteWhitelistApplication({
       pool: state.pool,
       applicationId: 9,
       moderatorAccountId: 7,
-      reason: 'Nouvel examen demandé'
+      reason: 'Nouvelle candidature demandée'
     });
 
     assert.equal(result.accountId, 42);
     assert.deepEqual(state.log.filter(x => x.action !== 'execute').map(x => x.action),
       ['begin', 'commit', 'release']);
-    assert.ok(state.log.some(x => /SET status = 'pending'.*reviewed_at = NULL/.test(x.sql)));
-    assert.ok(state.log.some(x => /UPDATE characters SET status = 'pending'/.test(x.sql)));
-    assert.ok(state.log.some(x => /VALUES \('whitelist:reset'/.test(x.sql)));
+    assert.ok(state.log.some(x => /UPDATE characters SET status = 'retired'/.test(x.sql)));
+    assert.ok(state.log.some(x => /DELETE FROM whitelist_applications WHERE id = \?/.test(x.sql)));
+    assert.ok(state.log.some(x => /VALUES \('whitelist:delete'/.test(x.sql)));
   });
 
-  test('refuse une candidature déjà en attente et annule la transaction', async () => {
-    const state = fakePool((sql) => sql.startsWith('SELECT wa.id')
-      ? [{ id: 9, account_id: 42, status: 'pending' }]
-      : { affectedRows: 1 });
+  test('refuse une candidature introuvable et annule la transaction', async () => {
+    const state = fakePool(() => []);
 
     await assert.rejects(
-      resetWhitelistApplication({ pool: state.pool, applicationId: 9, moderatorAccountId: 7 }),
-      error => error instanceof AdminActionError && error.statusCode === 409
+      deleteWhitelistApplication({ pool: state.pool, applicationId: 9, moderatorAccountId: 7 }),
+      error => error instanceof AdminActionError && error.statusCode === 404
     );
     assert.deepEqual(state.log.filter(x => x.action !== 'execute').map(x => x.action),
       ['begin', 'rollback', 'release']);

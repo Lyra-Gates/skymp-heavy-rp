@@ -46,6 +46,7 @@ const EVENT_KINDS = Object.freeze({
   whitelist_approve:  { titulo: 'Whitelist aprovada',   cor: 0x2ecc71, icone: '✅' },
   whitelist_reject:   { titulo: 'Whitelist recusada',   cor: 0xe74c3c, icone: '❌' },
   whitelist_reset:    { titulo: 'Whitelist revertida',  cor: 0x95a5a6, icone: '↩️' },
+  whitelist_delete:   { titulo: 'Candidature supprimée', cor: 0xe74c3c, icone: '🗑️' },
   character_recreate: { titulo: 'Recréation du personnage', cor: 0xe67e22, icone: '♻️' }
 });
 

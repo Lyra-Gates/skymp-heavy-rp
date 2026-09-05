@@ -151,6 +151,11 @@ describe('buildEmbed', () => {
     const { evento } = parseEvent({ kind: 'character_recreate', target: 'Alvara' });
     assert.match(json(buildEmbed(evento)).title, /Recréation du personnage/);
   });
+
+  it('identifie clairement une candidature supprimée', () => {
+    const { evento } = parseEvent({ kind: 'whitelist_delete', target: 'Alvara' });
+    assert.match(json(buildEmbed(evento)).title, /Candidature supprimée/);
+  });
 });
 
 describe('sendModerationLog', () => {

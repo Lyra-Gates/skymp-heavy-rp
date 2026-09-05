@@ -17,7 +17,7 @@ test('le panel du staff expose son interface en français', () => {
     'Candidatures',
     'Casiers judiciaires',
     'Journal d’audit',
-    'Réinitialiser',
+    'Supprimer',
     'Recréer',
     'Recréation programmée'
   ]) {
@@ -41,6 +41,11 @@ test('le formulaire de candidature expose son interface en français', () => {
   ]) {
     assert.ok(html.includes(text), `texte français absent du formulaire : ${text}`);
   }
+
+  assert.ok(
+    html.includes('/api/auth/discord?returnTo=%2Fapply.html'),
+    'la connexion Discord doit revenir au formulaire de candidature'
+  );
 
   for (const text of ['Aplicação de Whitelist', 'Entrar com Discord', 'Enviar Aplicação']) {
     assert.equal(html.includes(text), false, `texte portugais encore visible dans le formulaire : ${text}`);
