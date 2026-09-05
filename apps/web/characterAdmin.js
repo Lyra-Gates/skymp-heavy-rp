@@ -36,7 +36,7 @@ async function inTransaction(pool, work) {
   }
 }
 
-async function resetWhitelistApplication({ pool, applicationId, moderatorAccountId, reason }) {
+async function deleteWhitelistApplication({ pool, applicationId, moderatorAccountId, reason }) {
   const id = positiveId(applicationId, 'Candidature');
   const moderatorId = positiveId(moderatorAccountId, 'Compte staff');
   const resetReason = cleanReason(reason);
@@ -51,25 +51,22 @@ async function resetWhitelistApplication({ pool, applicationId, moderatorAccount
       [id]
     );
     if (rows.length === 0) throw new AdminActionError(404, 'Candidature introuvable.');
-    if (rows[0].status === 'pending') {
-      throw new AdminActionError(409, 'Cette candidature est déjà en attente.');
-    }
-
-    await connection.execute(
-      `UPDATE whitelist_applications
-          SET status = 'pending', reviewed_by = NULL, reviewer_notes = NULL, reviewed_at = NULL
-        WHERE id = ?`,
-      [id]
-    );
+    // La fiche de personnage reste archée pour conserver l'audit et les
+    // relations historiques, mais elle ne pourra plus être réapprouvée par
+    // erreur lors de l'envoi de la nouvelle candidature.
     await connection.execute(
       `UPDATE characters
-          SET status = 'pending'
-        WHERE account_id = ? AND status = 'approved'`,
+          SET status = 'retired'
+        WHERE account_id = ? AND status <> 'retired'`,
       [rows[0].account_id]
     );
     await connection.execute(
+      'DELETE FROM whitelist_applications WHERE id = ?',
+      [id]
+    );
+    await connection.execute(
       `INSERT INTO audit_logs (action, actor_account_id, target_account_id, details)
-       VALUES ('whitelist:reset', ?, ?, ?)`,
+       VALUES ('whitelist:delete', ?, ?, ?)`,
       [moderatorId, rows[0].account_id, resetReason]
     );
 
@@ -157,6 +154,6 @@ async function queueCharacterRecreation({ pool, characterId, moderatorAccountId,
 module.exports = {
   AdminActionError,
   cleanReason,
-  resetWhitelistApplication,
+  deleteWhitelistApplication,
   queueCharacterRecreation
 };

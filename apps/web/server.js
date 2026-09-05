@@ -13,7 +13,7 @@ const { createRuntimeMetrics } = require('../shared/runtimeMetrics');
 const { createMysqlSessionStore } = require('./mysqlSessionStore');
 const {
   AdminActionError,
-  resetWhitelistApplication,
+  deleteWhitelistApplication,
   queueCharacterRecreation
 } = require('./characterAdmin');
 
@@ -222,11 +222,28 @@ app.get('/health', async (req, res) => {
   }
 });
 
-app.get('/api/auth/discord', passport.authenticate('discord'));
+function authReturnPath(value) {
+  return value === '/apply.html' ? '/apply.html' : '/';
+}
+
+app.get('/api/auth/discord', (req, res, next) => {
+  req.session.authReturnTo = authReturnPath(req.query.returnTo);
+  // Sauvegarde explicite avant la redirection OAuth : avec un session store
+  // distant, le navigateur peut revenir de Discord avant la fin de l'écriture.
+  req.session.save((error) => error ? next(error) : next());
+}, passport.authenticate('discord'));
 app.get('/api/auth/discord/callback', passport.authenticate('discord', {
-    failureRedirect: '/?error=auth_failed'
+    failureRedirect: '/?error=auth_failed',
+    // Passport 0.7 régénère la session après connexion. Sans cette option,
+    // la destination enregistrée avant Discord serait perdue.
+    keepSessionInfo: true
 }), (req, res) => {
-    res.redirect('/');
+    const returnTo = authReturnPath(req.session.authReturnTo);
+    delete req.session.authReturnTo;
+    req.session.save((error) => {
+      if (error) return res.status(500).send('Erreur interne du serveur');
+      res.redirect(returnTo);
+    });
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -490,9 +507,9 @@ app.patch('/api/whitelist/:id', requireStaff, async (req, res) => {
   } catch (err) { console.error('[/api/whitelist PATCH]', err); res.status(500).json({ error: 'Erreur interne du serveur' }); }
 });
 
-app.post('/api/whitelist/:id/reset', requireStaff, async (req, res) => {
+app.delete('/api/whitelist/:id', requireStaff, async (req, res) => {
   try {
-    const result = await resetWhitelistApplication({
+    const result = await deleteWhitelistApplication({
       pool,
       applicationId: req.params.id,
       moderatorAccountId: req.user.accountId,
@@ -516,14 +533,14 @@ app.post('/api/whitelist/:id/reset', requireStaff, async (req, res) => {
     }
 
     notifyModerationLog({
-      kind: 'whitelist_reset',
+      kind: 'whitelist_delete',
       target: result.discordId ? `<@${result.discordId}>` : `candidature #${result.applicationId}`,
       moderator: req.user.username || `compte #${req.user.accountId}`,
       reason: result.reason
     }, req.requestId);
     return res.json({ ok: true });
   } catch (error) {
-    return sendAdminActionError(res, error, '[/api/whitelist reset]');
+    return sendAdminActionError(res, error, '[/api/whitelist delete]');
   }
 });
 
@@ -1073,4 +1090,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, validateApplication, issueLaunchTicket, issueLauncherSession, resolveLauncherSession, hashTicket, pruneCrashReports, CRASH_REPORT_DIR };
+module.exports = { app, authReturnPath, validateApplication, issueLaunchTicket, issueLauncherSession, resolveLauncherSession, hashTicket, pruneCrashReports, CRASH_REPORT_DIR };

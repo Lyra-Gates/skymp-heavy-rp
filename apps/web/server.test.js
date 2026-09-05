@@ -44,7 +44,7 @@ process.env.SESSION_SECRET = 'test-session-secret';
 process.env.DISCORD_CLIENT_ID = 'test-client-id';
 process.env.DISCORD_CLIENT_SECRET = 'test-client-secret';
 
-const { app, validateApplication, hashTicket, issueLauncherSession, resolveLauncherSession } = require(path.join(__dirname, 'server.js'));
+const { app, authReturnPath, validateApplication, hashTicket, issueLauncherSession, resolveLauncherSession } = require(path.join(__dirname, 'server.js'));
 
 Module._load = realLoad;
 
@@ -71,6 +71,12 @@ beforeEach(() => {
 const get = (p, opts) => fetch(`${baseUrl}${p}`, { redirect: 'manual', ...opts });
 const post = (p, body) => fetch(`${baseUrl}${p}`, {
   method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+  redirect: 'manual'
+});
+const del = (p, body) => fetch(`${baseUrl}${p}`, {
+  method: 'DELETE',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(body),
   redirect: 'manual'
@@ -108,11 +114,20 @@ describe('autenticação obrigatória', () => {
     assert.equal(res.status, 401);
   });
 
-  test('les actions de réinitialisation exigent une authentification staff', async () => {
-    const application = await post('/api/whitelist/1/reset', {});
+  test('les actions de suppression et recréation exigent une authentification staff', async () => {
+    const application = await del('/api/whitelist/1', {});
     const character = await post('/api/characters/1/recreate', {});
     assert.equal(application.status, 401);
     assert.equal(character.status, 401);
+  });
+});
+
+describe('retour après authentification Discord', () => {
+  test('autorise uniquement le formulaire comme destination spéciale', () => {
+    assert.equal(authReturnPath('/apply.html'), '/apply.html');
+    assert.equal(authReturnPath('/api/whitelist'), '/');
+    assert.equal(authReturnPath('https://attaquant.example'), '/');
+    assert.equal(authReturnPath(undefined), '/');
   });
 });
 
