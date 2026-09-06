@@ -1,5 +1,5 @@
+import { installPrimetoileV9 } from './v9-install.js';
 import {
-  copyPrimetoileBase,
   checkPrimetoileBase
 } from './isolated-install.js';
 import { app, BrowserWindow, ipcMain, dialog, screen } from 'electron';
@@ -10,6 +10,7 @@ import http from 'http';
 import https from 'https';
 import crypto from 'crypto';
 import { URL, fileURLToPath } from 'url';
+
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
 import { avaliarEspaco, ehDiscoCheio } from './disk.mjs';
 import { syncUiBundle } from './ui-integrity.mjs';
@@ -376,71 +377,6 @@ ipcMain.handle('save-game-path', async (_event, folderPath) => {
     };
   }
 
-ipcMain.handle('install-isolated-game', async (event) => {
-  const config = readLauncherConfig();
-
-  const sourceGamePath = config.sourceGamePath;
-  const isolatedGamePath = config.isolatedGamePath;
-
-  if (!sourceGamePath || !isolatedGamePath) {
-    return {
-      ok: false,
-      reason: 'paths-not-configured'
-    };
-  }
-
-  const result = await copyPrimetoileBase(
-    sourceGamePath,
-    isolatedGamePath,
-    (progress) => {
-      event.sender.send('isolated-install-progress', progress);
-    }
-  );
-
-  if (result.ok) {
-    // À partir de maintenant, les fonctions existantes du launcher
-    // travailleront sur l'installation Primétoile.
-    config.gamePath = isolatedGamePath;
-    writeLauncherConfig(config);
-  }
-
-  return result;
-});
-ipcMain.handle('check-isolated-game', async () => {
-  const config = readLauncherConfig();
-
-  if (!config.isolatedGamePath) {
-    return {
-      ok: false,
-      reason: 'isolated-path-not-configured',
-      missing: []
-    };
-  }
-
-  const result = checkPrimetoileBase(config.isolatedGamePath);
-
-  if (!result.ok) {
-    return {
-      ok: false,
-      reason: 'incomplete',
-      missing: result.missing
-    };
-  }
-
-  // L'installation Primétoile est complète :
-  // elle devient désormais l'installation utilisée par le launcher.
-  if (config.gamePath !== config.isolatedGamePath) {
-    config.gamePath = config.isolatedGamePath;
-    writeLauncherConfig(config);
-  }
-
-  return {
-    ok: true,
-    reason: 'ok',
-    gamePath: config.isolatedGamePath
-  };
-});
-
   // Compatibilité temporaire avec la V7.
   // Le launcher utilise encore l'installation originale
   // tant que la copie isolée n'est pas prête.
@@ -455,6 +391,175 @@ ipcMain.handle('check-isolated-game', async () => {
     isolatedGamePath: config.isolatedGamePath
   };
 });
+
+ipcMain.handle('install-isolated-game', async (event) => {
+  const config = readLauncherConfig();
+
+  const sourceGamePath = config.sourceGamePath;
+  const isolatedGamePath = config.isolatedGamePath;
+
+  if (!sourceGamePath || !isolatedGamePath) {
+    return {
+      ok: false,
+      reason: 'paths-not-configured'
+    };
+  }
+
+  const phaseOrder = [
+    'validate-steam',
+    'prepare-destination',
+    'copy-vanilla',
+    'downgrade-runtime',
+    'install-skse',
+    'install-skymp',
+    'install-ui',
+    'write-connection',
+    'validate-final'
+  ];
+
+  try {
+    const result = await installPrimetoileV9(
+      sourceGamePath,
+      isolatedGamePath,
+      (progress) => {
+        const index = phaseOrder.indexOf(progress.phase);
+
+        event.sender.send(
+          'isolated-install-progress',
+          {
+            current: index >= 0 ? index + 1 : 1,
+            total: phaseOrder.length,
+            file: progress.message
+          }
+        );
+      }
+    );
+
+    config.gamePath = isolatedGamePath;
+    writeLauncherConfig(config);
+
+    return result;
+  } catch (error) {
+    return {
+      ok: false,
+      reason: 'v9-install-failed',
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error)
+    };
+  }
+});
+ipcMain.handle('check-isolated-game', async () => {
+  const config = readLauncherConfig();
+
+  if (!config.isolatedGamePath) {
+    return {
+      ok: false,
+      reason: 'isolated-path-not-configured',
+      missing: []
+    };
+  }
+
+  const gamePath = config.isolatedGamePath;
+
+  const baseResult = checkPrimetoileBase(gamePath);
+
+  const requiredV9 = [
+    'skse64_loader.exe',
+    'skse64_1_6_1170.dll',
+
+    path.join(
+      'Data',
+      'SKSE',
+      'Plugins',
+      'MpClientPlugin.dll'
+    ),
+
+    path.join(
+      'Data',
+      'SKSE',
+      'Plugins',
+      'SkyrimPlatform.dll'
+    ),
+
+    path.join(
+      'Data',
+      'Platform',
+      'Plugins',
+      'skymp5-client.js'
+    ),
+
+    path.join(
+      'Data',
+      'Platform',
+      'Plugins',
+      'skymp5-client-settings.txt'
+    ),
+
+    path.join(
+      'Data',
+      'Platform',
+      'Distribution',
+      'RuntimeDependencies',
+      'SkyrimPlatformImpl.dll'
+    )
+  ];
+
+  const missing = [
+    ...(baseResult.ok ? [] : baseResult.missing)
+  ];
+
+  for (const relative of requiredV9) {
+    if (!fs.existsSync(path.join(gamePath, relative))) {
+      missing.push(relative);
+    }
+  }
+
+  const uiPath = path.join(
+    gamePath,
+    'Data',
+    'Platform',
+    'UI'
+  );
+
+  try {
+    if (
+      !fs.existsSync(uiPath) ||
+      fs.readdirSync(uiPath).length === 0
+    ) {
+      missing.push(
+        path.join('Data', 'Platform', 'UI')
+      );
+    }
+  } catch {
+    missing.push(
+      path.join('Data', 'Platform', 'UI')
+    );
+  }
+
+  if (!baseResult.ok || missing.length > 0) {
+    return {
+      ok: false,
+      reason: 'incomplete',
+      missing
+    };
+  }
+
+  if (config.gamePath !== gamePath) {
+    config.gamePath = gamePath;
+    writeLauncherConfig(config);
+  }
+
+  return {
+    ok: true,
+    reason: 'ok',
+    gamePath
+  };
+});
+
+
+
 
 function validateGamePath(folderPath: string) {
   if (!folderPath) return { ok: false, reason: 'empty' };
@@ -940,28 +1045,7 @@ function collectRecentCrashLogs(limit = 2) {
 }
 
 function postJsonToApi(pathname: string, body: any): Promise<any> {
-  return new Promise((resolve) => {
-    const postData = JSON.stringify(body);
-    const req = http.request({
-      hostname: SERVER_IP,
-      port: API_PORT,
-      path: pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
-      }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch { resolve({ ok: res.statusCode && res.statusCode < 300, status: res.statusCode }); }
-      });
-    });
-    req.on('error', (err) => resolve({ ok: false, error: err.message }));
-    req.write(postData);
-    req.end();
-  });
+  return postJsonToUrl(`${GAME_API_URL}${pathname}`, body);
 }
 
 ipcMain.handle('discord-login', async () => {

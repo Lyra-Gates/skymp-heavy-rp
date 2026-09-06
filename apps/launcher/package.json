@@ -1,7 +1,7 @@
 {
   "name": "primetoile-alpha-launcher",
   "private": true,
-  "version": "0.1.0-alpha.8",
+  "version": "0.1.0-alpha.9",
   "description": "Launcher officiel de Primétoile Alpha",
   "author": "Lyra-Gates",
   "main": "dist-electron/main.mjs",
@@ -19,6 +19,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

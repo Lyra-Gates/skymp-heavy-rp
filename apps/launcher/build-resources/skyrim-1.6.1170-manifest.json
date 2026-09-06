@@ -1,0 +1,419 @@
+{
+    "schemaVersion":  2,
+    "runtime":  "1.6.1170.0",
+    "coreFiles":  [
+                      {
+                          "path":  "bink2w64.dll",
+                          "size":  391360,
+                          "sha256":  "653247E35DB8D6453E83A008C805A877FD2D56A1D844282F9065CE2F34388FEC"
+                      },
+                      {
+                          "path":  "Data/Dawnguard.esm",
+                          "size":  25885111,
+                          "sha256":  "1BDA804009A21228ACF6B30AA6AA7A692B247FF8A0313FE9AA69B3617ED4A6C4"
+                      },
+                      {
+                          "path":  "Data/Dragonborn.esm",
+                          "size":  64663863,
+                          "sha256":  "5F44F343552688C04F73BF83DE58B90F70C7376B133FBBCB56B6FE33ACF8778B"
+                      },
+                      {
+                          "path":  "Data/HearthFires.esm",
+                          "size":  3977420,
+                          "sha256":  "AD4CA9F32C81E7DDD3E39EC95E03B07841F20712989E598778442EA69B6E6A97"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Animations.bsa",
+                          "size":  65155583,
+                          "sha256":  "F2E1BF18F6498D637998808A06ECF17220D17D123ECEDDBB796ECED8B68DC68A"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Interface.bsa",
+                          "size":  105799354,
+                          "sha256":  "5C8D5275EEAAA87EEC84C893DA8DC3BF977E0197EBA86560BB0D1DC651432957"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Meshes0.bsa",
+                          "size":  1153126177,
+                          "sha256":  "3BCB3E42EDB00AA63A06AF43A6A5A092029632E9A3FDD2C90FCED0CC07DB5C7D"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Meshes1.bsa",
+                          "size":  378762772,
+                          "sha256":  "49CC83CD6592A676481D62C8483657AC94AA51FC15C66B1A35A8F5FCBB870880"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Misc.bsa",
+                          "size":  17713449,
+                          "sha256":  "DDB19908DCD5C135B8BBA240E8DFCDB95395B569852F715D330396E9C1390B9D"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Shaders.bsa",
+                          "size":  67308970,
+                          "sha256":  "4685203A8F115937E34FAB3879C6B599734D8A913A698891866ED72385B5CFA5"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Sounds.bsa",
+                          "size":  1538656059,
+                          "sha256":  "196368D2987887E65C9687191373F9E57CEB3F931A959350552FDA924D33EF84"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures0.bsa",
+                          "size":  652490581,
+                          "sha256":  "47CE44B6C8265153875F6A52AA5DADA1890CE6B22AE527C448270FFBF26C90EF"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures1.bsa",
+                          "size":  1511492648,
+                          "sha256":  "92516F098211F961FF2BBE8B398D546D5DD62DEEA789F60A46E1B749C1E758F2"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures2.bsa",
+                          "size":  1345109830,
+                          "sha256":  "EBBBD4998A05AE520CE16A67AD27834487E4989F7B87AA5360ACFCD95B5CC2B7"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures3.bsa",
+                          "size":  1406304717,
+                          "sha256":  "AD1557A02B7A2922F314C10C1C957EE09AEA0BE3732274CF737502929A6BA1B5"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures4.bsa",
+                          "size":  1265325033,
+                          "sha256":  "53FE60B2831CD49F9D73ED36779CED234A310E0F76F229DD9D53FFA5C8C02BDF"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures5.bsa",
+                          "size":  813639992,
+                          "sha256":  "F6CF263CD3753F2921C1A0E7D40AA10A37625CEE3BA92E7D2BB8CE3B0147BF80"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures6.bsa",
+                          "size":  97210200,
+                          "sha256":  "4EC70FE57E45D8331C70C47A037A619E08E2D663500A5607A7ABDE6F0DA44CAB"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures7.bsa",
+                          "size":  677006639,
+                          "sha256":  "A494C65FE3472EA9898BFE8F30B651AE1A840FBB1099D2561898194D0551AEB3"
+                      },
+                      {
+                          "path":  "Data/Skyrim - Textures8.bsa",
+                          "size":  255927303,
+                          "sha256":  "31FB46D6AA2CDD4D7124063FA7EE77831448DEE19AD8FB69793679CB9540AF94"
+                      },
+                      {
+                          "path":  "Data/Skyrim.esm",
+                          "size":  249753412,
+                          "sha256":  "2BBC77FDEC35A70EF96B710F8C525E50A1DB9E63E11A391A0EB9EE8F56D36107"
+                      },
+                      {
+                          "path":  "Data/Update.esm",
+                          "size":  18874041,
+                          "sha256":  "C1795E0A1218DA45DBFD523F064F1857B42805C49714C46091E75277E525AED9"
+                      },
+                      {
+                          "path":  "Data/Video/BGS_Logo.bik",
+                          "size":  13835808,
+                          "sha256":  "21FDA4C1C5964142AAA9366ACC29C6C19B3633BA80AFDAC24E82EC714CF2C58D"
+                      },
+                      {
+                          "path":  "High.ini",
+                          "size":  906,
+                          "sha256":  "2413DC2F7CBF4551D9C6686780DFD20664C68604CAB764604E30DAA648606F95"
+                      },
+                      {
+                          "path":  "Low.ini",
+                          "size":  898,
+                          "sha256":  "F045A0165B9D09D167EA11A228401E21C517497D0A333939DB0A2E9AB7A25C9B"
+                      },
+                      {
+                          "path":  "Medium.ini",
+                          "size":  898,
+                          "sha256":  "E5CB56C29C28A0E57055B75BF3153C6E7D8510100F656B490FADD3B9BDFFC5FE"
+                      },
+                      {
+                          "path":  "Skyrim_Default.ini",
+                          "size":  1859,
+                          "sha256":  "61C151BC60D5D737DAD3D65A99A48D9BB8B50812B6B9F1F993323F0337813FA8"
+                      },
+                      {
+                          "path":  "SkyrimSE.exe",
+                          "size":  37157144,
+                          "sha256":  "C434208894F07F604B852F29B8EDC3A58C4DE63DE783373733E72B2B73F33BE9"
+                      },
+                      {
+                          "path":  "SkyrimSELauncher.exe",
+                          "size":  4713472,
+                          "sha256":  "CE2A1B3F9727C8B53FFB8E0BCCD2BBED2BD8BEC47B0AB8552C2850CAA05E68B1"
+                      },
+                      {
+                          "path":  "steam_api64.dll",
+                          "size":  298384,
+                          "sha256":  "1DB3FD414039D3E5815A5721925DD2E0A3A9F2549603C6CAB7C49B84966A1AF3"
+                      },
+                      {
+                          "path":  "Ultra.ini",
+                          "size":  911,
+                          "sha256":  "10DC00F0DAE7783E2F904EABF68BE09E4C2460EC1EDD30A6231F22B47B847000"
+                      }
+                  ],
+    "voiceFiles":  [
+                       {
+                           "path":  "Data/Skyrim - Voices_en0.bsa",
+                           "size":  1807969854,
+                           "sha256":  "28EED50CAC2F9606E045420E4426F6141DE0B900F7E1BA021ADC41BB8C9F1D08"
+                       },
+                       {
+                           "path":  "Data/Skyrim - Voices_fr0.bsa",
+                           "size":  1829070375,
+                           "sha256":  "51171C3CD9564A77D9E207DB01AFE3B78C929DA6EAE7144D816E3EB9CD2F1DEB"
+                       }
+                   ],
+    "localizationFiles":  [
+                              {
+                                  "path":  "Data/Strings/ccbgssse001-fish_English.DLSTRINGS",
+                                  "size":  87059
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse001-fish_English.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse001-fish_English.STRINGS",
+                                  "size":  28842
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse001-fish_French.DLSTRINGS",
+                                  "size":  98967
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse001-fish_French.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse001-fish_French.STRINGS",
+                                  "size":  33849
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse025-advdsgs_English.DLSTRINGS",
+                                  "size":  38734
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse025-advdsgs_English.ILSTRINGS",
+                                  "size":  139
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse025-advdsgs_English.STRINGS",
+                                  "size":  11183
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse025-advdsgs_French.DLSTRINGS",
+                                  "size":  45568
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse025-advdsgs_French.ILSTRINGS",
+                                  "size":  161
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse025-advdsgs_French.STRINGS",
+                                  "size":  12774
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse037-curios_English.DLSTRINGS",
+                                  "size":  148
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse037-curios_English.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse037-curios_English.STRINGS",
+                                  "size":  1790
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse037-curios_French.DLSTRINGS",
+                                  "size":  194
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse037-curios_French.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/ccbgssse037-curios_French.STRINGS",
+                                  "size":  2110
+                              },
+                              {
+                                  "path":  "Data/Strings/ccqdrsse001-survivalmode_English.DLSTRINGS",
+                                  "size":  14877
+                              },
+                              {
+                                  "path":  "Data/Strings/ccqdrsse001-survivalmode_English.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/ccqdrsse001-survivalmode_English.STRINGS",
+                                  "size":  13421
+                              },
+                              {
+                                  "path":  "Data/Strings/ccqdrsse001-survivalmode_French.DLSTRINGS",
+                                  "size":  18179
+                              },
+                              {
+                                  "path":  "Data/Strings/ccqdrsse001-survivalmode_French.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/ccqdrsse001-survivalmode_French.STRINGS",
+                                  "size":  18598
+                              },
+                              {
+                                  "path":  "Data/Strings/Dawnguard_English.DLSTRINGS",
+                                  "size":  116999
+                              },
+                              {
+                                  "path":  "Data/Strings/Dawnguard_English.ILSTRINGS",
+                                  "size":  297716
+                              },
+                              {
+                                  "path":  "Data/Strings/Dawnguard_English.STRINGS",
+                                  "size":  100391
+                              },
+                              {
+                                  "path":  "Data/Strings/Dawnguard_French.DLSTRINGS",
+                                  "size":  129436
+                              },
+                              {
+                                  "path":  "Data/Strings/Dawnguard_French.ILSTRINGS",
+                                  "size":  333301
+                              },
+                              {
+                                  "path":  "Data/Strings/Dawnguard_French.STRINGS",
+                                  "size":  115844
+                              },
+                              {
+                                  "path":  "Data/Strings/Dragonborn_English.DLSTRINGS",
+                                  "size":  314849
+                              },
+                              {
+                                  "path":  "Data/Strings/Dragonborn_English.ILSTRINGS",
+                                  "size":  375388
+                              },
+                              {
+                                  "path":  "Data/Strings/Dragonborn_English.STRINGS",
+                                  "size":  153056
+                              },
+                              {
+                                  "path":  "Data/Strings/Dragonborn_French.DLSTRINGS",
+                                  "size":  358713
+                              },
+                              {
+                                  "path":  "Data/Strings/Dragonborn_French.ILSTRINGS",
+                                  "size":  425591
+                              },
+                              {
+                                  "path":  "Data/Strings/Dragonborn_French.STRINGS",
+                                  "size":  175640
+                              },
+                              {
+                                  "path":  "Data/Strings/Hearthfires_English.DLSTRINGS",
+                                  "size":  22504
+                              },
+                              {
+                                  "path":  "Data/Strings/Hearthfires_English.ILSTRINGS",
+                                  "size":  47744
+                              },
+                              {
+                                  "path":  "Data/Strings/Hearthfires_English.STRINGS",
+                                  "size":  36190
+                              },
+                              {
+                                  "path":  "Data/Strings/Hearthfires_French.DLSTRINGS",
+                                  "size":  24664
+                              },
+                              {
+                                  "path":  "Data/Strings/Hearthfires_French.ILSTRINGS",
+                                  "size":  53527
+                              },
+                              {
+                                  "path":  "Data/Strings/Hearthfires_French.STRINGS",
+                                  "size":  40474
+                              },
+                              {
+                                  "path":  "Data/Strings/Skyrim_English.DLSTRINGS",
+                                  "size":  2443149
+                              },
+                              {
+                                  "path":  "Data/Strings/Skyrim_English.ILSTRINGS",
+                                  "size":  2711850
+                              },
+                              {
+                                  "path":  "Data/Strings/Skyrim_English.STRINGS",
+                                  "size":  833794
+                              },
+                              {
+                                  "path":  "Data/Strings/Skyrim_French.DLSTRINGS",
+                                  "size":  2769138
+                              },
+                              {
+                                  "path":  "Data/Strings/Skyrim_French.ILSTRINGS",
+                                  "size":  3086784
+                              },
+                              {
+                                  "path":  "Data/Strings/Skyrim_French.STRINGS",
+                                  "size":  935546
+                              },
+                              {
+                                  "path":  "Data/Strings/Update_English.DLSTRINGS",
+                                  "size":  110381
+                              },
+                              {
+                                  "path":  "Data/Strings/Update_English.ILSTRINGS",
+                                  "size":  13452
+                              },
+                              {
+                                  "path":  "Data/Strings/Update_English.STRINGS",
+                                  "size":  31910
+                              },
+                              {
+                                  "path":  "Data/Strings/Update_French.DLSTRINGS",
+                                  "size":  125883
+                              },
+                              {
+                                  "path":  "Data/Strings/Update_French.ILSTRINGS",
+                                  "size":  15104
+                              },
+                              {
+                                  "path":  "Data/Strings/Update_French.STRINGS",
+                                  "size":  36658
+                              },
+                              {
+                                  "path":  "Data/Strings/_resourcepack_English.DLSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/_resourcepack_English.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/_resourcepack_English.STRINGS",
+                                  "size":  328
+                              },
+                              {
+                                  "path":  "Data/Strings/_resourcepack_French.DLSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/_resourcepack_French.ILSTRINGS",
+                                  "size":  8
+                              },
+                              {
+                                  "path":  "Data/Strings/_resourcepack_French.STRINGS",
+                                  "size":  351
+                              },
+                              {
+                                  "path":  "Data/Strings/__folder_managed_by_vortex",
+                                  "size":  96
+                              }
+                          ]
+}

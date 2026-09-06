@@ -1,42 +1,59 @@
 {
-  "appId": "fr.primetoile.alpha.launcher",
-  "productName": "Primétoile Alpha Launcher",
-  "directories": {
-    "output": "dist-electron"
-  },
-  "files": [
-    "dist/**/*",
-    "dist-electron/main.mjs",
-    "dist-electron/preload.mjs"
-  ],
-  "extraResources": [
-    {
-      "from": "../../skymp/ui",
-      "to": "skymp-ui",
-      "filter": ["**/*"]
-    },
-    {
-      "from": "build-resources",
-      "to": "vendor",
-      "filter": ["voice-helper.exe"]
-    }
-  ],
-  "extraMetadata": {
-    "main": "dist-electron/main.mjs"
-  },
-  "win": {
-    "target": "nsis",
-    "icon": "public/logo.png",
-    "signtoolOptions": {
-      "timeStampServer": "http://timestamp.digicert.com",
-      "rfc3161TimeStampServer": "http://timestamp.digicert.com",
-      "signingHashAlgorithms": ["sha256"]
-    }
-  },
-  "nsis": {
-    "oneClick": false,
-    "perMachine": false,
-    "allowToChangeInstallationDirectory": true,
-    "shortcutName": "Primétoile Alpha"
-  }
+    "appId":  "fr.primetoile.alpha.launcher",
+    "productName":  "Primétoile Alpha Launcher",
+    "directories":  {
+                        "output":  "dist-electron"
+                    },
+    "files":  [
+                  "dist/**/*",
+                  "dist-electron/main.mjs",
+                  "dist-electron/preload.mjs"
+              ],
+    "extraResources":  [
+                           {
+                               "filter":  [
+                                              "**/*"
+                                          ],
+                               "from":  "../../skymp/ui",
+                               "to":  "skymp-ui"
+                           },
+                           {
+                               "filter":  [
+                                              "**/*"
+                                          ],
+                               "from":  "../../skymp/artifacts/dist/client",
+                               "to":  "v9/skymp-client"
+                           },
+                           {
+                               "to":  "v9/skyrim-1.6.1170-manifest.json",
+                               "from":  "build-resources/skyrim-1.6.1170-manifest.json"
+                           },
+                           {
+                               "filter":  [
+                                              "voice-helper.exe"
+                                          ],
+                               "from":  "build-resources",
+                               "to":  "vendor"
+                           }
+                       ],
+    "extraMetadata":  {
+                          "main":  "dist-electron/main.mjs"
+                      },
+    "win":  {
+                "target":  "nsis",
+                "icon":  "public/logo.png",
+                "signtoolOptions":  {
+                                        "timeStampServer":  "http://timestamp.digicert.com",
+                                        "rfc3161TimeStampServer":  "http://timestamp.digicert.com",
+                                        "signingHashAlgorithms":  [
+                                                                      "sha256"
+                                                                  ]
+                                    }
+            },
+    "nsis":  {
+                 "oneClick":  false,
+                 "perMachine":  false,
+                 "allowToChangeInstallationDirectory":  true,
+                 "shortcutName":  "Primétoile Alpha"
+             }
 }
