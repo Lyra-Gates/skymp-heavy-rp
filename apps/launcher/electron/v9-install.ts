@@ -6,6 +6,7 @@ import { copyVanillaBaseV9 } from './v9-vanilla.js';
 import { validateSkyrim1170V9 } from './v9-validate.js';
 import { installSkseV9 } from './v9-skse.js';
 import { installSkympV9 } from './v9-skymp.js';
+import { downgradeSkyrimTo1170V10 } from './v10-downgrade.js';
 
 export const V9_TARGET_RUNTIME = '1.6.1170.0';
 
@@ -277,26 +278,15 @@ export async function installPrimetoileV9(
       'Vérification de Skyrim 1.6.1170...'
   });
 
-  const runtimeValidation =
-    await validateSkyrim1170V9(
-      isolatedGamePath
-    );
-
-  if (!runtimeValidation.valid1170) {
-    const incompatibleFiles =
-      runtimeValidation.invalidFiles
-        .map((file) => file.path)
-        .join(', ');
-
-    throw new Error(
-      [
-        'La copie Skyrim n’est pas en 1.6.1170.',
-        'Le moteur de downgrade V9 n’est pas encore branché.',
-        `Fichiers concernés : ${incompatibleFiles}`
-      ].join(' ')
-    );
-  }
-
+  await downgradeSkyrimTo1170V10(
+    isolatedGamePath,
+    (progress) => {
+      onProgress?.({
+        phase: 'downgrade-runtime',
+        message: progress.message
+      });
+    }
+  );
   onProgress?.({
     phase: 'install-skse',
     message:
