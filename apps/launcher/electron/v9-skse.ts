@@ -12,6 +12,27 @@ const sevenBin = require('7zip-bin') as {
   path7za: string;
 };
 
+function resolveSevenZipExecutable(): string {
+  const asarPath = `${path.sep}app.asar${path.sep}`;
+  const unpackedPath = `${path.sep}app.asar.unpacked${path.sep}`;
+
+  const unpackedCandidate = sevenBin.path7za.replace(
+    asarPath,
+    unpackedPath
+  );
+
+  if (
+    unpackedCandidate !== sevenBin.path7za &&
+    fs.existsSync(unpackedCandidate)
+  ) {
+    return unpackedCandidate;
+  }
+
+  return sevenBin.path7za;
+}
+
+const sevenZipExecutable = resolveSevenZipExecutable();
+
 const SKSE_VERSION = '2.2.6';
 const SKSE_RUNTIME = '1.6.1170.0';
 
@@ -144,7 +165,7 @@ function extract7z(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const process = spawn(
-      sevenBin.path7za,
+      sevenZipExecutable,
       [
         'x',
         archivePath,

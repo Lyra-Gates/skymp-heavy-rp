@@ -14,6 +14,27 @@ const sevenBin = require('7zip-bin') as {
   path7za: string;
 };
 
+function resolveSevenZipExecutable(): string {
+  const asarPath = `${path.sep}app.asar${path.sep}`;
+  const unpackedPath = `${path.sep}app.asar.unpacked${path.sep}`;
+
+  const unpackedCandidate = sevenBin.path7za.replace(
+    asarPath,
+    unpackedPath
+  );
+
+  if (
+    unpackedCandidate !== sevenBin.path7za &&
+    fs.existsSync(unpackedCandidate)
+  ) {
+    return unpackedCandidate;
+  }
+
+  return sevenBin.path7za;
+}
+
+const sevenZipExecutable = resolveSevenZipExecutable();
+
 const SOURCE_17104_SKYRIMSE_SHA1 =
   '2f784a183f884067a9a41338664b55f6dc198a48';
 
@@ -386,7 +407,7 @@ async function extractArchive(
   );
 
   await runExecutable(
-    sevenBin.path7za,
+    sevenZipExecutable,
     [
       'x',
       archivePath,

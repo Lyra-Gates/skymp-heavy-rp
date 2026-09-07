@@ -28,6 +28,10 @@ export const PRIMETOILE_DATA_FILES = [
   'HearthFires.esm',
   'Dragonborn.esm',
 
+  'MarketplaceTextures.bsa',
+  '_ResourcePack.bsa',
+  '_ResourcePack.esl',
+
   'Skyrim - Animations.bsa',
   'Skyrim - Interface.bsa',
   'Skyrim - Meshes0.bsa',
