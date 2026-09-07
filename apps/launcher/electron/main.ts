@@ -1,4 +1,4 @@
-import { installPrimetoileV9 } from './v9-install.js';
+import { installPrimetoileV11 } from './v9-install.js';
 import {
   checkPrimetoileBase
 } from './isolated-install.js';
@@ -392,7 +392,14 @@ ipcMain.handle('save-game-path', async (_event, folderPath) => {
   };
 });
 
-ipcMain.handle('install-isolated-game', async (event) => {
+ipcMain.handle('install-isolated-game', async (event, installMode: '1.6' | '1.7') => {
+  if (installMode !== '1.6' && installMode !== '1.7') {
+    return {
+      ok: false,
+      reason: 'invalid-install-mode'
+    };
+  }
+
   const config = readLauncherConfig();
 
   const sourceGamePath = config.sourceGamePath;
@@ -412,15 +419,17 @@ ipcMain.handle('install-isolated-game', async (event) => {
     'downgrade-runtime',
     'install-skse',
     'install-skymp',
+    'install-primetoile',
     'install-ui',
     'write-connection',
     'validate-final'
   ];
 
   try {
-    const result = await installPrimetoileV9(
+    const result = await installPrimetoileV11(
       sourceGamePath,
       isolatedGamePath,
+      installMode,
       (progress) => {
         const index = phaseOrder.indexOf(progress.phase);
 
@@ -442,7 +451,7 @@ ipcMain.handle('install-isolated-game', async (event) => {
   } catch (error) {
     return {
       ok: false,
-      reason: 'v9-install-failed',
+      reason: 'v11-install-failed',
       error:
         error instanceof Error
           ? error.message
@@ -465,9 +474,14 @@ ipcMain.handle('check-isolated-game', async () => {
 
   const baseResult = checkPrimetoileBase(gamePath);
 
-  const requiredV9 = [
+  const requiredV11 = [
     'skse64_loader.exe',
     'skse64_1_6_1170.dll',
+
+    path.join(
+      'Data',
+      'Primetoile.esp'
+    ),
 
     path.join(
       'Data',
@@ -510,7 +524,7 @@ ipcMain.handle('check-isolated-game', async () => {
     ...(baseResult.ok ? [] : baseResult.missing)
   ];
 
-  for (const relative of requiredV9) {
+  for (const relative of requiredV11) {
     if (!fs.existsSync(path.join(gamePath, relative))) {
       missing.push(relative);
     }
@@ -843,7 +857,7 @@ function httpGetJson(url: string): Promise<any> {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch { resolve(null); }
+        try { resolve(JSON.parse(data.replace(/^\uFEFF/, ''))); } catch { resolve(null); }
       });
     });
     req.on('error', () => resolve(null));
@@ -1013,7 +1027,7 @@ function writeInstalledModsParts(gamePath: string, value: Record<string, string 
 }
 
 function clientManifestUrl() {
-  return DIST_REPO ? `https://github.com/${DIST_REPO}/releases/latest/download/client-update.json` : '';
+  return DIST_REPO ? `https://github.com/${DIST_REPO}/releases/download/client/client-update.json` : '';
 }
 
 function modsManifestUrl() {
@@ -1587,7 +1601,7 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
 });
 
 ipcMain.handle('check-mods-update', async (_event, gamePath) => {
-  if (!DIST_REPO) return { updateAvailable: false, error: 'La source des mises à jour (VITE_GITHUB_DIST_REPO) n’est pas configurée.' };
+  if (!DIST_REPO) return { updateAvailable: false };
   const manifest = await httpGetJson(modsManifestUrl());
   if (!manifest || !manifest.modsVersion) return { updateAvailable: false, error: 'Le manifeste des mods est indisponible.' };
   const installedVersion = gamePath ? readStamp(gamePath, MODS_VERSION_FILENAME) : null;

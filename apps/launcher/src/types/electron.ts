@@ -35,7 +35,7 @@ export interface ElectronAPI {
   error?: string;
 }>;
 
-installIsolatedGame: () => Promise<{
+installIsolatedGame: (installMode: '1.6' | '1.7') => Promise<{
   ok: boolean;
   copied?: number;
   reason?: string;

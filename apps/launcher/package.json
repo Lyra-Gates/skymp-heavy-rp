@@ -41,9 +41,5 @@
     "vite-plugin-electron-renderer": "^1.0.0",
     "wait-on": "^9.0.10"
   },
-  "license": "AGPL-3.0-or-later",
-  "build": {
-    "productName": "Primetoile Launcher",
-    "artifactName": "Primetoile-Launcher-${version}.${ext}"
-  }
+  "license": "AGPL-3.0-or-later"
 }

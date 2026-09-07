@@ -34,7 +34,7 @@ export function Login({ setAuth }: LoginProps) {
         <img src="/logo.png" alt="" style={{ width: '96px', height: '96px', objectFit: 'contain' }} />
 
         <div style={{ textAlign: 'center' }}>
-          <h1 className="brand-title" style={{ fontSize: '34px', marginBottom: '10px' }}>Skyrim Heavy RP</h1>
+          <h1 className="brand-title" style={{ fontSize: '34px', marginBottom: '10px' }}>PRIMÉTOILE</h1>
           <p style={{ color: 'var(--text-muted)' }}>Authentification requise pour jouer</p>
         </div>
 

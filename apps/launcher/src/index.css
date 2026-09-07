@@ -345,6 +345,16 @@ body {
   flex-direction: column;
   gap: 20px;
   overflow-y: auto;
+
+  /* Scroll fonctionnel mais barre invisible */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.info-sidebar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .info-section-title {
@@ -582,4 +592,9 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-weight: 600;
+}
+
+.install-version-btn {
+  justify-content: center;
+  text-align: center;
 }

@@ -201,147 +201,263 @@ export function Home({ auth, setAuth }: HomeProps) {
     }
   };
 
-  const handlePlay = async () => {
-  setIsPlaying(true);
-  setIsolatedInstallProgress(null);
-  setStatus('Vérification du dossier du jeu...');
+  const handleInstall = async (installMode: '1.6' | '1.7') => {
+    setIsPlaying(true);
+    setIsolatedInstallProgress(null);
+    setStatus(`Installation Primétoile pour Skyrim ${installMode}...`);
+
     try {
       const config = await window.electronAPI.getLauncherConfig();
+      const sourceGamePath = config.sourceGamePath || config.gamePath;
 
-const sourceGamePath = config.sourceGamePath || config.gamePath;
-
-if (!sourceGamePath) {
-  setStatus('Configurez le dossier de Skyrim avant de jouer.');
-  navigate('/settings');
-  return;
-}
-
-// Vérifie si l'installation indépendante Primétoile existe déjà.
-setStatus("Vérification de l'installation Primétoile...");
-
-const isolatedCheck = await window.electronAPI.checkIsolatedGame();
-
-let gamePath: string;
-
-if (!isolatedCheck.ok) {
-  setStatus(
-    "Première installation de Primétoile en cours... Cela peut prendre plusieurs minutes."
-  );
-
-  const installResult = await window.electronAPI.installIsolatedGame();
-
-  setIsolatedInstallProgress(null);
-
-  if (!installResult.ok) {
-    if (
-      installResult.reason === 'missing-source-files' &&
-      installResult.missing?.length
-    ) {
-      setStatus(
-        `Installation Skyrim source incomplète : ${installResult.missing[0]}`
-      );
-    } else {
-      setStatus(
-        `Impossible de créer l'installation Primétoile : ${
-          installResult.error || installResult.reason || 'erreur inconnue'
-        }`
-      );
-    }
-
-    return;
-  }
-
-  // installIsolatedGame vient de basculer gamePath sur
-  // l'installation indépendante Primétoile.
-  const updatedConfig = await window.electronAPI.getLauncherConfig();
-
-  if (!updatedConfig.gamePath) {
-    setStatus("Impossible de récupérer le dossier Primétoile après l'installation.");
-    return;
-  }
-
-  gamePath = updatedConfig.gamePath;
-} else {
-  if (!isolatedCheck.gamePath) {
-    setStatus("Impossible de récupérer le dossier d'installation Primétoile.");
-    return;
-  }
-
-  gamePath = isolatedCheck.gamePath;
-}
-
-// À partir d'ici, gamePath doit toujours désigner
-// Skyrim Special Edition - Primetoile.
-const pathOk = await window.electronAPI.checkGamePath(gamePath);
-
-if (!pathOk.ok) {
-  setStatus(
-    `Installation Primétoile invalide : ${gamePathReason(pathOk.reason)}`
-  );
-  return;
-}
-
-      setStatus("Vérification de l'interface du jeu...");
-      const ui = await window.electronAPI.ensureSkympUi(gamePath);
-      if (!ui.ok) {
-        setStatus(`Échec de l'installation de l'interface : ${ui.error || 'fichiers indisponibles'}`);
-        return;
-      }
-
-      // Voz por proximidade: opcional, nunca trava o JOGAR. Se o helper nao veio
-      // no pacote (skipped) ou a copia falhou, segue — a voz so nao funciona.
-      const voice = await window.electronAPI.ensureVoiceHelper(gamePath);
-      if (!voice.ok) {
-        console.warn('[launcher] voice-helper n’a pas été installé :', voice.error);
-      }
-
-      setStatus('Validation de la version du client...');
-      const clientUpdate = await window.electronAPI.checkClientUpdate(gamePath);
-      if (clientUpdate.error) {
-        setStatus(`Impossible de valider la version du client : ${clientUpdate.error}`);
-        return;
-      }
-      if (clientUpdate.updateAvailable) {
-        setStatus(`Mise à jour obligatoire du client : ${clientUpdate.version}. Installez-la dans les paramètres.`);
+      if (!sourceGamePath) {
+        setStatus('Configurez le dossier de Skyrim avant de lancer l’installation.');
         navigate('/settings');
         return;
       }
 
-      await window.electronAPI.ensureSkyrimIni({ repairOnly: true });
+      const installResult = await window.electronAPI.installIsolatedGame(installMode);
 
-      setStatus('Validation des mods avec le serveur...');
-      const verify = await window.electronAPI.verifyMods(gamePath);
-      if (!verify.success) {
-        setStatus(`Mods invalides : ${verify.error || 'échec de la vérification'}`);
+      setIsolatedInstallProgress(null);
+
+      if (!installResult.ok) {
+        if (
+          installResult.reason === 'missing-source-files' &&
+          installResult.missing?.length
+        ) {
+          setStatus(
+            `Installation Skyrim source incomplète : ${installResult.missing[0]}`
+          );
+        } else {
+          setStatus(
+            `Impossible de créer l’installation Primétoile : ${
+              installResult.error || installResult.reason || 'erreur inconnue'
+            }`
+          );
+        }
         return;
       }
 
-      if (verify.loadOrder) {
-        await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
-        const analysis = await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);
-        if (!analysis.ok) {
-          setStatus(`Problème dans l'ordre de chargement : ${analysis.problems[0]}`);
+      const updatedConfig = await window.electronAPI.getLauncherConfig();
+
+      if (!updatedConfig.gamePath) {
+        setStatus(
+          "Impossible de récupérer le dossier Primétoile après l’installation."
+        );
+        return;
+      }
+
+      const gamePath = updatedConfig.gamePath;
+
+      const pathOk = await window.electronAPI.checkGamePath(gamePath);
+      if (!pathOk.ok) {
+        setStatus(
+          `Installation Primétoile invalide : ${gamePathReason(pathOk.reason)}`
+        );
+        return;
+      }
+
+      setStatus('Vérification de la version du client...');
+      const clientUpdate = await window.electronAPI.checkClientUpdate(gamePath);
+
+      if (clientUpdate.error) {
+        setStatus(
+          `Impossible de vérifier le client : ${clientUpdate.error}`
+        );
+        return;
+      }
+
+      if (clientUpdate.updateAvailable) {
+        setStatus(`Installation du client ${clientUpdate.version}...`);
+
+        const clientInstall =
+          await window.electronAPI.installClientUpdate(gamePath);
+
+        if (!clientInstall.success) {
+          setStatus(
+            `Échec de l’installation du client : ${
+              clientInstall.error || 'erreur inconnue'
+            }`
+          );
           return;
         }
       }
 
-      setStatus("Entrée dans la file d'attente...");
+      setStatus('Vérification des mises à jour des mods...');
+      const modsUpdate = await window.electronAPI.checkModsUpdate(gamePath);
+
+      if (modsUpdate.error) {
+        setStatus(
+          `Impossible de vérifier les mods : ${modsUpdate.error}`
+        );
+        return;
+      }
+
+      if (modsUpdate.updateAvailable) {
+        setStatus(`Installation des mods ${modsUpdate.version}...`);
+
+        const modsInstall =
+          await window.electronAPI.installModsUpdate(gamePath, false);
+
+        if (!modsInstall.success) {
+          setStatus(
+            `Échec de l’installation des mods : ${
+              modsInstall.error || 'erreur inconnue'
+            }`
+          );
+          return;
+        }
+      }
+
+      setStatus('Validation des fichiers avec le serveur...');
+      const verify = await window.electronAPI.verifyMods(gamePath);
+
+      if (!verify.success) {
+        setStatus(
+          `Mods invalides : ${verify.error || 'échec de la vérification'}`
+        );
+        return;
+      }
+
+      if (!Array.isArray(verify.loadOrder) || verify.loadOrder.length === 0) {
+        setStatus(
+          "Le serveur n’a fourni aucun ordre de chargement valide."
+        );
+        return;
+      }
+
+      setStatus("Configuration de l’ordre de chargement...");
+      await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
+
+      const analysis =
+        await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);
+
+      if (!analysis.ok) {
+        setStatus(
+          `Problème dans l’ordre de chargement : ${analysis.problems[0]}`
+        );
+        return;
+      }
+
+      // La voix de proximité reste optionnelle et ne bloque pas l'installation.
+      const voice = await window.electronAPI.ensureVoiceHelper(gamePath);
+      if (!voice.ok) {
+        console.warn(
+          '[launcher] voice-helper n’a pas été installé :',
+          voice.error
+        );
+      }
+
+      setStatus(
+        'Installation Primétoile terminée. Vous pouvez maintenant cliquer sur JOUER.'
+      );
+    } catch (e: any) {
+      setStatus(`Erreur : ${e.message}`);
+    } finally {
+      setIsolatedInstallProgress(null);
+      setIsPlaying(false);
+    }
+  };
+
+  const handlePlay = async () => {
+    setIsPlaying(true);
+    setIsolatedInstallProgress(null);
+    setStatus("Vérification de l’installation Primétoile...");
+
+    try {
+      const isolatedCheck = await window.electronAPI.checkIsolatedGame();
+
+      if (!isolatedCheck.ok || !isolatedCheck.gamePath) {
+        setStatus(
+          'Primétoile n’est pas installé. Utilisez d’abord le bouton correspondant à votre version de Skyrim.'
+        );
+        return;
+      }
+
+      const gamePath = isolatedCheck.gamePath;
+
+      const pathOk = await window.electronAPI.checkGamePath(gamePath);
+      if (!pathOk.ok) {
+        setStatus(
+          `Installation Primétoile invalide : ${gamePathReason(pathOk.reason)}`
+        );
+        return;
+      }
+
+      // JOUER V11 ne répare et n'installe rien.
+      setStatus('Validation de la version du client...');
+      const clientUpdate = await window.electronAPI.checkClientUpdate(gamePath);
+
+      if (clientUpdate.error) {
+        setStatus(
+          `Impossible de valider la version du client : ${clientUpdate.error}`
+        );
+        return;
+      }
+
+      if (clientUpdate.updateAvailable) {
+        setStatus(
+          `Mise à jour obligatoire du client : ${clientUpdate.version}. Relancez l’installation Primétoile.`
+        );
+        return;
+      }
+
+      setStatus('Validation des mods avec le serveur...');
+      const verify = await window.electronAPI.verifyMods(gamePath);
+
+      if (!verify.success) {
+        setStatus(
+          `Mods invalides : ${verify.error || 'échec de la vérification'}`
+        );
+        return;
+      }
+
+      if (!Array.isArray(verify.loadOrder) || verify.loadOrder.length === 0) {
+        setStatus(
+          "Le serveur n’a fourni aucun ordre de chargement valide."
+        );
+        return;
+      }
+
+      const analysis =
+        await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);
+
+      if (!analysis.ok) {
+        setStatus(
+          `Problème dans l’ordre de chargement : ${analysis.problems[0]}`
+        );
+        return;
+      }
+
+      setStatus("Entrée dans la file d’attente...");
       const queueRes = await window.electronAPI.joinQueue();
+
       if (queueRes.status === 'queued') {
-        setStatus(`Dans la file d'attente (position : ${queueRes.position})`);
+        setStatus(
+          `Dans la file d’attente (position : ${queueRes.position})`
+        );
         startQueuePolling(gamePath);
         return;
       }
+
       if (queueRes.status === 'success') {
         setStatus('Démarrage de Skyrim...');
-        const launchResult = await window.electronAPI.launchGame(gamePath, queueRes.ticket);
-        setStatus(launchResult.ok ? 'Skyrim est démarré.' : launchFailureMessage(launchResult));
+        const launchResult =
+          await window.electronAPI.launchGame(gamePath, queueRes.ticket);
+
+        setStatus(
+          launchResult.ok
+            ? 'Skyrim est démarré.'
+            : launchFailureMessage(launchResult)
+        );
         return;
       }
+
       if (isSessionExpiredMessage(queueRes.message)) {
         await handleSessionExpired();
         return;
       }
+
       setStatus(`Erreur : ${queueErrorMessage(queueRes.message)}`);
     } catch (e: any) {
       setStatus(`Erreur : ${e.message}`);
@@ -349,7 +465,6 @@ if (!pathOk.ok) {
       setIsPlaying(false);
     }
   };
-
   const statusDotClass = serverOnline === null ? 'checking' : serverOnline ? 'online' : 'offline';
   const statusLabel = serverOnline === null ? 'Vérification' : serverOnline ? 'En ligne' : 'Hors ligne';
 
@@ -358,7 +473,7 @@ if (!pathOk.ok) {
       <nav className="dashboard-nav">
         <div className="nav-brand">
           <img src="/logo.png" alt="" />
-          <span>Skyrim Heavy RP</span>
+          <span>PRIMÉTOILE</span>
         </div>
 
         <div className="nav-tabs">
@@ -432,7 +547,7 @@ if (!pathOk.ok) {
         </aside>
 
         <div className="dashboard-main">
-          <h1 className="brand-title" style={{ fontSize: '36px' }}>Skyrim Heavy RP</h1>
+          <h1 className="brand-title" style={{ fontSize: '36px' }}>PRIMÉTOILE</h1>
 
           <div className="brand-flourish">
             <span className="brand-flourish-mark" />
@@ -446,16 +561,51 @@ if (!pathOk.ok) {
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Mods vérifiés automatiquement</p>
           </div>
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '500px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                display: 'flex',
+                gap: '10px'
+              }}
+            >
+              <button
+                className="maintenance-btn install-version-btn"
+                style={{ flex: 1, padding: '14px 12px', fontSize: '14px' }}
+                onClick={() => handleInstall('1.6')}
+                disabled={isPlaying}
+              >
+                Installation pour Skyrim 1.6
+              </button>
 
-          <button
-  className="btn-primary"
-  style={{ width: '100%', maxWidth: '400px', padding: '18px', fontSize: '20px' }}
-  onClick={handlePlay}
-  disabled={isPlaying || serverOnline === false}
->
-  <Play size={24} />
-  {isPlaying ? 'VEUILLEZ PATIENTER' : 'JOUER'}
-</button>
+              <button
+                className="maintenance-btn install-version-btn"
+                style={{ flex: 1, padding: '14px 12px', fontSize: '14px' }}
+                onClick={() => handleInstall('1.7')}
+                disabled={isPlaying}
+              >
+                Installation pour Skyrim 1.7
+              </button>
+            </div>
+
+            <button
+              className="btn-primary"
+              style={{ width: '100%', padding: '18px', fontSize: '20px' }}
+              onClick={handlePlay}
+              disabled={isPlaying || serverOnline === false}
+            >
+              <Play size={24} />
+              {isPlaying ? 'VEUILLEZ PATIENTER' : 'JOUER'}
+            </button>
+          </div>
 
 {isolatedInstallProgress && (
   <div

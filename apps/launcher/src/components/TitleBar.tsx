@@ -11,7 +11,7 @@ export function TitleBar() {
 
   return (
     <div className="titlebar drag-region">
-      <div className="titlebar-title">SKYRIM HEAVY RP</div>
+      <div className="titlebar-title">PRIMÉTOILE</div>
       <div className="titlebar-controls no-drag">
         <button className="titlebar-btn" onClick={handleMinimize} tabIndex={-1}>
           <Minus size={16} />

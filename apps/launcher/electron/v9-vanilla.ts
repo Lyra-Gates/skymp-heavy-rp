@@ -21,6 +21,12 @@ export const V9_VANILLA_MASTERS = [
   'Dragonborn.esm'
 ] as const;
 
+export const V9_VANILLA_AUXILIARY_FILES = [
+  'MarketplaceTextures.bsa',
+  '_ResourcePack.bsa',
+  '_ResourcePack.esl'
+] as const;
+
 export type V9CopyProgress = {
   current: number;
   total: number;
@@ -110,6 +116,12 @@ export async function copyVanillaBaseV9(
     })),
 
     ...V9_VANILLA_MASTERS.map((name) => ({
+      source: path.join(sourceData, name),
+      destination: path.join(destination, 'Data', name),
+      display: `Data/${name}`
+    })),
+
+    ...V9_VANILLA_AUXILIARY_FILES.map((name) => ({
       source: path.join(sourceData, name),
       destination: path.join(destination, 'Data', name),
       display: `Data/${name}`

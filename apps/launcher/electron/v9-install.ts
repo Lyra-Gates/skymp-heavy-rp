@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { app } from 'electron';
 
 import { copyVanillaBaseV9 } from './v9-vanilla.js';
@@ -10,6 +11,83 @@ import { downgradeSkyrimTo1170V10 } from './v10-downgrade.js';
 
 export const V9_TARGET_RUNTIME = '1.6.1170.0';
 
+const PRIMETOILE_ESP_SHA256 =
+  '8FE4F7223ABFB8D31D96E231CCF78F7B3D9838F52AA211B419F151379CA29653';
+
+function resolvePrimetoileEspSourceV11(): string {
+  if (app.isPackaged) {
+    return path.join(
+      process.resourcesPath,
+      'v11',
+      'Primetoile.esp'
+    );
+  }
+
+  return path.resolve(
+    app.getAppPath(),
+    '..',
+    '..',
+    'skymp',
+    'data',
+    'Primetoile.esp'
+  );
+}
+
+function sha256FileV11(filePath: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(filePath))
+    .digest('hex')
+    .toUpperCase();
+}
+
+async function installPrimetoileEspV11(
+  isolatedGamePath: string
+): Promise<void> {
+  const sourcePath =
+    resolvePrimetoileEspSourceV11();
+
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(
+      `Primetoile.esp est absent des ressources du launcher : ${sourcePath}`
+    );
+  }
+
+  const sourceHash =
+    sha256FileV11(sourcePath);
+
+  if (sourceHash !== PRIMETOILE_ESP_SHA256) {
+    throw new Error(
+      `Primetoile.esp embarque est invalide : SHA-256 ${sourceHash}`
+    );
+  }
+
+  const destinationPath = path.join(
+    isolatedGamePath,
+    'Data',
+    'Primetoile.esp'
+  );
+
+  await fs.promises.mkdir(
+    path.dirname(destinationPath),
+    { recursive: true }
+  );
+
+  await fs.promises.copyFile(
+    sourcePath,
+    destinationPath
+  );
+
+  const destinationHash =
+    sha256FileV11(destinationPath);
+
+  if (destinationHash !== PRIMETOILE_ESP_SHA256) {
+    throw new Error(
+      `Primetoile.esp copie dans Data est invalide : SHA-256 ${destinationHash}`
+    );
+  }
+}
+
 export type V9InstallPhase =
   | 'validate-steam'
   | 'prepare-destination'
@@ -17,6 +95,7 @@ export type V9InstallPhase =
   | 'downgrade-runtime'
   | 'install-skse'
   | 'install-skymp'
+  | 'install-primetoile'
   | 'install-ui'
   | 'write-connection'
   | 'validate-final';
@@ -90,7 +169,7 @@ function assertSafePaths(
 
   if (source === destination) {
     throw new Error(
-      'La source Skyrim Steam et la destination Primétoile doivent être différentes.'
+      'La source Skyrim Steam et la destination PrimÃ©toile doivent Ãªtre diffÃ©rentes.'
     );
   }
 
@@ -99,7 +178,7 @@ function assertSafePaths(
     source.startsWith(`${destination}${path.sep}`)
   ) {
     throw new Error(
-      'La source Skyrim et la destination Primétoile ne doivent pas être imbriquées.'
+      'La source Skyrim et la destination PrimÃ©toile ne doivent pas Ãªtre imbriquÃ©es.'
     );
   }
 }
@@ -123,7 +202,7 @@ function validateSteamSource(sourceGamePath: string): void {
 
     if (!fs.existsSync(full)) {
       throw new Error(
-        `Installation Skyrim Steam incomplète : ${full}`
+        `Installation Skyrim Steam incomplÃ¨te : ${full}`
       );
     }
   }
@@ -182,7 +261,7 @@ async function validateFinalInstall(
 
     if (!fs.existsSync(full)) {
       throw new Error(
-        `Installation Primétoile incomplète : ${full}`
+        `Installation PrimÃ©toile incomplÃ¨te : ${full}`
       );
     }
   }
@@ -196,7 +275,7 @@ async function validateFinalInstall(
 
   if (!fs.existsSync(uiPath)) {
     throw new Error(
-      'Interface Primétoile introuvable.'
+      'Interface PrimÃ©toile introuvable.'
     );
   }
 
@@ -206,7 +285,7 @@ async function validateFinalInstall(
 
   if (uiEntries.length === 0) {
     throw new Error(
-      'Interface Primétoile vide.'
+      'Interface PrimÃ©toile vide.'
     );
   }
 
@@ -219,14 +298,15 @@ async function validateFinalInstall(
       .join(', ');
 
     throw new Error(
-      `Validation finale 1.6.1170 échouée : ${badFiles}`
+      `Validation finale 1.6.1170 Ã©chouÃ©e : ${badFiles}`
     );
   }
 }
 
-export async function installPrimetoileV9(
+export async function installPrimetoileV11(
   sourceGamePath: string,
   isolatedGamePath: string,
+  installMode: '1.6' | '1.7',
   onProgress?: (
     progress: V9InstallProgress
   ) => void
@@ -239,7 +319,7 @@ export async function installPrimetoileV9(
   onProgress?.({
     phase: 'validate-steam',
     message:
-      'Vérification de l’installation Skyrim Steam...'
+      'VÃ©rification de lâ€™installation Skyrim Steam...'
   });
 
   validateSteamSource(sourceGamePath);
@@ -247,7 +327,7 @@ export async function installPrimetoileV9(
   onProgress?.({
     phase: 'prepare-destination',
     message:
-      'Préparation de Skyrim Special Edition - Primetoile...'
+      'PrÃ©paration de Skyrim Special Edition - Primetoile...'
   });
 
   await fs.promises.mkdir(
@@ -272,21 +352,30 @@ export async function installPrimetoileV9(
     }
   );
 
-  onProgress?.({
-    phase: 'downgrade-runtime',
-    message:
-      'Vérification de Skyrim 1.6.1170...'
-  });
+  if (installMode === '1.7') {
+    onProgress?.({
+      phase: 'downgrade-runtime',
+      message:
+        'Conversion de Skyrim 1.7 vers Skyrim 1.6.1170...'
+    });
 
-  await downgradeSkyrimTo1170V10(
-    isolatedGamePath,
-    (progress) => {
-      onProgress?.({
-        phase: 'downgrade-runtime',
-        message: progress.message
-      });
-    }
-  );
+    await downgradeSkyrimTo1170V10(
+      isolatedGamePath,
+      (progress) => {
+        onProgress?.({
+          phase: 'downgrade-runtime',
+          message: progress.message
+        });
+      }
+    );
+  } else {
+    onProgress?.({
+      phase: 'downgrade-runtime',
+      message:
+        'Skyrim 1.6 selectionne : aucun downgrade necessaire.'
+    });
+  }
+
   onProgress?.({
     phase: 'install-skse',
     message:
@@ -306,7 +395,7 @@ export async function installPrimetoileV9(
   onProgress?.({
     phase: 'install-skymp',
     message:
-      'Installation du client SkyMP Primétoile...'
+      'Installation du client SkyMP PrimÃ©toile...'
   });
 
   const skymp = await installSkympV9(
@@ -322,12 +411,22 @@ export async function installPrimetoileV9(
     }
   );
 
+  onProgress?.({
+    phase: 'install-primetoile',
+    message:
+      'Installation du plugin Primetoile...'
+  });
+
+  await installPrimetoileEspV11(
+    isolatedGamePath
+  );
+
   await ensureSkyrimSavePathV9();
 
   onProgress?.({
     phase: 'write-connection',
     message:
-      'Vérification de la configuration Primétoile...'
+      'VÃ©rification de la configuration PrimÃ©toile...'
   });
 
   const clientSettings = path.join(
@@ -347,7 +446,7 @@ export async function installPrimetoileV9(
   onProgress?.({
     phase: 'validate-final',
     message:
-      'Validation finale de l’installation Primétoile...'
+      'Validation finale de lâ€™installation PrimÃ©toile...'
   });
 
   await validateFinalInstall(

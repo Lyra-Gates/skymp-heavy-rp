@@ -33,3 +33,59 @@ test('o pacote não inclui recursivamente a própria pasta de saída', () => {
   assert.ok(config.files.includes('dist-electron/preload.mjs'));
   assert.ok(!config.files.includes('dist-electron/**/*'));
 });
+
+
+test('o pacote inclui Primetoile.esp como ressource V11', () => {
+  const config = JSON.parse(
+    fs.readFileSync(
+      new URL('../electron-builder.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  const resource = config.extraResources.find(
+    entry =>
+      entry.from === '../../skymp/data/Primetoile.esp' &&
+      entry.to === 'v11/Primetoile.esp'
+  );
+
+  assert.ok(
+    resource,
+    'Primetoile.esp nao esta declarado em extraResources'
+  );
+});
+
+test('o executavel V11 usa o nome Primetoile Launcher', () => {
+  const config = JSON.parse(
+    fs.readFileSync(
+      new URL('../electron-builder.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  assert.equal(
+    config.productName,
+    'Primetoile Launcher'
+  );
+
+  assert.equal(
+    config.artifactName,
+    'Primetoile-Launcher-${version}.${ext}'
+  );
+});
+
+
+test('package.json nao deve mascarar electron-builder.json', () => {
+  const pkg = JSON.parse(
+    fs.readFileSync(
+      new URL('../package.json', import.meta.url),
+      'utf8'
+    )
+  );
+
+  assert.equal(
+    pkg.build,
+    undefined,
+    'package.json#build mascara electron-builder.json'
+  );
+});
