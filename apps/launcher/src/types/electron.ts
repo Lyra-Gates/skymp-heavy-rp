@@ -1,4 +1,4 @@
-export interface AuthData {
+﻿export interface AuthData {
   discordId: string;
   username: string;
   globalName: string;
@@ -16,6 +16,7 @@ export interface LaunchGameResult {
 export interface ElectronAPI {
   windowMinimize: () => void;
   windowClose: () => void;
+  openExternal: (url: string) => Promise<{ ok: boolean; error?: string }>;
   getLauncherConfig: () => Promise<{
   gamePath?: string;
   sourceGamePath?: string;
@@ -89,3 +90,4 @@ declare global {
     electronAPI: ElectronAPI;
   }
 }
+

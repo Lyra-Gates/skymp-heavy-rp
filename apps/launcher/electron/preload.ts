@@ -1,8 +1,9 @@
-import { contextBridge, ipcRenderer } from 'electron';
+﻿import { contextBridge, ipcRenderer } from 'electron';
 
 const api = {
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowClose: () => ipcRenderer.send('window-close'),
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   getLauncherConfig: () => ipcRenderer.invoke('get-launcher-config'),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   saveGamePath: (folderPath: string) => ipcRenderer.invoke('save-game-path', folderPath),
@@ -53,3 +54,4 @@ const api = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);
+

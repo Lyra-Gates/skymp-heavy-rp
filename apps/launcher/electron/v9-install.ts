@@ -1,11 +1,10 @@
-import fs from 'node:fs';
+﻿import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { app } from 'electron';
 
 import { copyVanillaBaseV9 } from './v9-vanilla.js';
 import { validateSkyrim1170V9 } from './v9-validate.js';
-import { installSkseV9 } from './v9-skse.js';
 import { installSkympV9 } from './v9-skymp.js';
 import { downgradeSkyrimTo1170V10 } from './v10-downgrade.js';
 import { normalizePrimetoileRuntimeV11 } from './v11-normalize.js';
@@ -94,7 +93,6 @@ export type V9InstallPhase =
   | 'prepare-destination'
   | 'copy-vanilla'
   | 'downgrade-runtime'
-  | 'install-skse'
   | 'install-skymp'
   | 'install-primetoile'
   | 'install-ui'
@@ -112,7 +110,6 @@ export type V9InstallResult = {
   sourceGamePath: string;
   isolatedGamePath: string;
   runtime: string;
-  skseInstalledFiles: number;
   skympClientFiles: number;
   uiFiles: number;
 };
@@ -234,8 +231,6 @@ async function validateFinalInstall(
 ): Promise<void> {
   const required = [
     'SkyrimSE.exe',
-    'skse64_loader.exe',
-    'skse64_1_6_1170.dll',
 
     path.join(
       'Data',
@@ -309,7 +304,6 @@ async function validateFinalInstall(
       'Interface PrimÃ©toile vide.'
     );
   }
-
   const runtimeValidation =
     await validateSkyrim1170V9(gamePath);
 
@@ -404,31 +398,6 @@ export async function installPrimetoileV11(
   await normalizePrimetoileRuntimeV11(
     isolatedGamePath
   );
-
-  onProgress?.({
-    phase: 'install-skse',
-    message:
-      'Installation automatique de SKSE 2.2.6...'
-  });
-
-  const skse = await installSkseV9(
-    isolatedGamePath,
-    (progress) => {
-      const stepProgress =
-        progress.step === 'download' ? 10 :
-        progress.step === 'verify' ? 40 :
-        progress.step === 'extract' ? 60 :
-        progress.step === 'install' ? 80 :
-        95;
-
-      onProgress?.({
-        phase: 'install-skse',
-        message: progress.message,
-        phaseProgress: stepProgress
-      });
-    }
-  );
-
   onProgress?.({
     phase: 'install-skymp',
     message:
@@ -505,11 +474,18 @@ export async function installPrimetoileV11(
     sourceGamePath,
     isolatedGamePath,
     runtime: V9_TARGET_RUNTIME,
-    skseInstalledFiles:
-      skse.installedFiles,
     skympClientFiles:
       skymp.clientFiles,
     uiFiles:
       skymp.uiFiles
   };
 }
+
+
+
+
+
+
+
+
+

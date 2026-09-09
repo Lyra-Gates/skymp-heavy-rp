@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthData, LaunchGameResult } from '../types/electron';
-import { Play, Settings as SettingsIcon, LogOut, FolderOpen, RefreshCw } from 'lucide-react';
+import { Play, Settings as SettingsIcon, LogOut, FolderOpen, RefreshCw, BookOpen } from 'lucide-react';
 import heroBg from '../assets/launcher-bg.png';
 
 interface HomeProps {
@@ -481,9 +481,22 @@ export function Home({ auth, setAuth }: HomeProps) {
           <button className="nav-tab" onClick={() => navigate('/settings')}>
             <SettingsIcon size={14} /> Paramètres
           </button>
+
+          <button className="nav-tab" onClick={() => navigate('/tutorial')}>
+            <BookOpen size={14} /> Tutoriel
+          </button>
         </div>
 
         <div className="nav-right">
+          <button
+            className="discord-btn"
+            onClick={() =>
+              window.electronAPI.openExternal('https://discord.gg/HR2JGM7wA9')
+            }
+          >
+            DISCORD
+          </button>
+
           <div className="status-pill">
             <span className={`status-dot ${statusDotClass}`} />
             {statusLabel}
@@ -597,6 +610,18 @@ export function Home({ auth, setAuth }: HomeProps) {
             </div>
 
             <button
+              className="maintenance-btn install-version-btn"
+              style={{ width: '100%', padding: '14px 12px', fontSize: '14px' }}
+              onClick={() =>
+                window.electronAPI.openExternal(
+                  'https://www.nexusmods.com/games/skyrimspecialedition/collections/kawzcj/revisions/3'
+                )
+              }
+            >
+              MODS VORTEX
+            </button>
+
+            <button
               className="btn-primary"
               style={{ width: '100%', padding: '18px', fontSize: '20px' }}
               onClick={handlePlay}
@@ -677,3 +702,6 @@ export function Home({ auth, setAuth }: HomeProps) {
     </div>
   );
 }
+
+
+

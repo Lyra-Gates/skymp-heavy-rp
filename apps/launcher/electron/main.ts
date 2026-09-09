@@ -1,8 +1,9 @@
+﻿import { validatePrimetoileIntegrity } from './integrity-validator.js';
 import { installPrimetoileV11 } from './v9-install.js';
 import {
   checkPrimetoileBase
 } from './isolated-install.js';
-import { app, BrowserWindow, ipcMain, dialog, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, screen, shell } from 'electron';
 import path from 'path';
 import { exec, spawn } from 'child_process';
 import fs from 'fs';
@@ -21,15 +22,15 @@ import { iniciarVoiceHelper, killVoiceHelper } from './voice-process.mjs';
 import { createVoiceHandoffServer, VOICE_HANDOFF_PORT } from './voice-handoff.mjs';
 
 // package.json tem "type": "module", entao o Vite empacota este arquivo como
-// ESM — __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
+// ESM â€” __dirname nao existe em ESM (e' global so de CommonJS). Sem isso,
 // qualquer `npm start` falhava na primeira BrowserWindow com
 // "ReferenceError: __dirname is not defined", antes mesmo da janela abrir.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ─── Constants & Env ───
-// Estes valores são substituídos em tempo de build pelo `define` do
-// vite.config.ts — em runtime não existe `.env` do lado do app empacotado.
-// VITE_DISCORD_CLIENT_SECRET foi removido de propósito: o secret vive só no
+// â”€â”€â”€ Constants & Env â”€â”€â”€
+// Estes valores sÃ£o substituÃ­dos em tempo de build pelo `define` do
+// vite.config.ts â€” em runtime nÃ£o existe `.env` do lado do app empacotado.
+// VITE_DISCORD_CLIENT_SECRET foi removido de propÃ³sito: o secret vive sÃ³ no
 // painel web (ver POST /api/launcher/oauth/exchange).
 const DISCORD_CLIENT_ID = process.env.VITE_DISCORD_CLIENT_ID || '';
 const DISCORD_REDIRECT_URI = process.env.VITE_DISCORD_REDIRECT_URI || 'http://localhost:19847/callback';
@@ -86,11 +87,11 @@ function deployedVoiceHelperPath(gamePath: string) {
   return path.join(gamePath, 'Data', 'Platform', 'voice-helper.exe');
 }
 
-// ─── Handoff do ticket de voz ───
+// â”€â”€â”€ Handoff do ticket de voz â”€â”€â”€
 // O comando /voz no jogo emite um ticket de 'sender'; a CEF o repassa pra este
 // servidor loopback (porta 19848), que sobe o voice-helper.exe com --ticket.
 // Tudo opcional: sem exe, ou sem a CEF conseguindo fazer o fetch, falar nao
-// sobe e ouvir segue. Ver docs/technical/VOICE_NATIVE_HELPER.md §11.
+// sobe e ouvir segue. Ver docs/technical/VOICE_NATIVE_HELPER.md Â§11.
 let voiceHandoff: ReturnType<typeof createVoiceHandoffServer> | null = null;
 let voiceWatchdog: NodeJS.Timeout | null = null;
 let voiceHandoffMissingLogged = false;
@@ -138,7 +139,7 @@ async function armVoiceHandoff(gamePath: string) {
   voiceHandoff.arm();
 
   // Sem watcher de saida do jogo (o spawn e detached). Quando o jogo fecha,
-  // desarma o handoff e mata o helper — a voz nao faz sentido sem o jogo.
+  // desarma o handoff e mata o helper â€” a voz nao faz sentido sem o jogo.
   if (voiceWatchdog) clearInterval(voiceWatchdog);
   let vimoJogoRodando = false;
   voiceWatchdog = setInterval(async () => {
@@ -154,14 +155,14 @@ async function armVoiceHandoff(gamePath: string) {
 }
 
 type LauncherConfig = {
-  // Ancien chemin utilisé par les versions précédentes du launcher.
-  // Conservé temporairement pour assurer la compatibilité avec la V7.
+  // Ancien chemin utilisÃ© par les versions prÃ©cÃ©dentes du launcher.
+  // ConservÃ© temporairement pour assurer la compatibilitÃ© avec la V7.
   gamePath?: string;
 
   // Installation Skyrim originale du joueur (Steam).
   sourceGamePath?: string;
 
-  // Installation indépendante gérée par Primétoile.
+  // Installation indÃ©pendante gÃ©rÃ©e par PrimÃ©toile.
   isolatedGamePath?: string;
 
   display?: {
@@ -189,7 +190,7 @@ function createWindow() {
     height: 680,
     minWidth: 1024,
     minHeight: 640,
-    title: "Primétoile Alpha Launcher",
+    title: "PrimÃ©toile Alpha Launcher",
     icon: path.join(__dirname, '../public/logo.png'),
     resizable: true,
     frame: false,
@@ -205,25 +206,25 @@ function createWindow() {
       // resolvidas com preload em ESM (`.mjs`): o arquivo carrega sem erro,
       // mas o contextBridge.exposeInMainWorld nunca roda, e o renderer ve
       // `window.electronAPI === undefined`. contextIsolation continua ligado
-      // — isso ja isola o preload do conteudo da pagina; o sandbox e' uma
+      // â€” isso ja isola o preload do conteudo da pagina; o sandbox e' uma
       // camada a mais especificamente sobre chamadas de sistema do proprio
       // preload, e o nosso preload e' codigo nosso, nao conteudo de terceiro.
       //
       // Tentei trocar o preload pra CommonJS pra manter o sandbox ligado
       // (22/08/2026) e reverti: o vite-plugin-electron desta versao mira
       // Vite 8/Rolldown e ignora silenciosamente `format: 'cjs'` passado por
-      // `rollupOptions` — o arquivo saia `.cjs` por fora, ESM por dentro, o
+      // `rollupOptions` â€” o arquivo saia `.cjs` por fora, ESM por dentro, o
       // que quebraria ao carregar. Sem uma via confirmada de configurar o
       // formato do preload nesta versao do plugin, `sandbox: false` continua
       // sendo a correcao que de fato funciona. Ver
-      // docs/technical/LAUNCHER_DISTRIBUTION.md §7.
+      // docs/technical/LAUNCHER_DISTRIBUTION.md Â§7.
       sandbox: false,
     },
   });
 
   mainWindow.setMenuBarVisibility(false);
 
-  // ─── Navigation hardening ───
+  // â”€â”€â”€ Navigation hardening â”€â”€â”€
   // The main window carries the full electronAPI preload, so it must never be
   // allowed to navigate to (or open) an arbitrary/attacker-controlled origin.
   const allowedOrigin = process.env.VITE_DEV_SERVER_URL
@@ -283,17 +284,33 @@ app.on('activate', () => {
   }
 });
 
-// ─── Window Controls ───
+// â”€â”€â”€ Window Controls â”€â”€â”€
 ipcMain.on('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
 ipcMain.on('window-close', () => { if (mainWindow) mainWindow.close(); });
 
-// ─── Info do App (Home) ───
+// â”€â”€â”€ Info do App (Home) â”€â”€â”€
 //
-// Tudo aqui já existia em algum canto do processo main — só nunca tinha sido
-// exposto pra tela inicial. `launcherVersion` já era lido em
-// report-recent-crashes; `clientVersion`/`modsVersion` já eram lidos via
-// readStamp() pelos handlers de update. Sem chamada de rede: os stamps são
-// arquivos locais gravados na última instalação/atualização bem-sucedida.
+// Tudo aqui jÃ¡ existia em algum canto do processo main â€” sÃ³ nunca tinha sido
+// exposto pra tela inicial. `launcherVersion` jÃ¡ era lido em
+// report-recent-crashes; `clientVersion`/`modsVersion` jÃ¡ eram lidos via
+// readStamp() pelos handlers de update. Sem chamada de rede: os stamps sÃ£o
+// arquivos locais gravados na Ãºltima instalaÃ§Ã£o/atualizaÃ§Ã£o bem-sucedida.
+
+ipcMain.handle('open-external', async (_event, url: string) => {
+  try {
+    if (!/^https?:\/\//i.test(url)) {
+      return { ok: false, error: 'URL externe invalide' };
+    }
+
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (error: any) {
+    return {
+      ok: false,
+      error: error?.message || 'Impossible d’ouvrir le lien'
+    };
+  }
+});
 ipcMain.handle('get-app-info', async () => {
   const config = readLauncherConfig();
   const gamePath = config.gamePath || null;
@@ -305,7 +322,7 @@ ipcMain.handle('get-app-info', async () => {
   };
 });
 
-// ─── Local Config ───
+// â”€â”€â”€ Local Config â”€â”€â”€
 function readLauncherConfig(): LauncherConfig {
   try {
     if (fs.existsSync(LAUNCHER_CONFIG_FILE)) {
@@ -314,12 +331,12 @@ function readLauncherConfig(): LauncherConfig {
       );
 
       // Migration automatique des configurations V7.
-      // En V7, gamePath désignait directement le Skyrim original.
+      // En V7, gamePath dÃ©signait directement le Skyrim original.
       if (config.gamePath && !config.sourceGamePath) {
         config.sourceGamePath = config.gamePath;
       }
 
-      // Calcule automatiquement le futur dossier Primétoile.
+      // Calcule automatiquement le futur dossier PrimÃ©toile.
       if (config.sourceGamePath && !config.isolatedGamePath) {
         config.isolatedGamePath = path.join(
           path.dirname(config.sourceGamePath),
@@ -353,20 +370,20 @@ ipcMain.handle('save-game-path', async (_event, folderPath) => {
   // Skyrim original du joueur : source uniquement.
   config.sourceGamePath = folderPath;
 
-  // Installation indépendante réservée à Primétoile.
+  // Installation indÃ©pendante rÃ©servÃ©e Ã  PrimÃ©toile.
   config.isolatedGamePath = path.join(
     path.dirname(folderPath),
     'Skyrim Special Edition - Primetoile'
   );
 
   try {
-    // Crée le dossier Primétoile s'il n'existe pas encore.
+    // CrÃ©e le dossier PrimÃ©toile s'il n'existe pas encore.
     // recursive:true permet aussi de ne pas provoquer d'erreur
-    // si le dossier existe déjà.
+    // si le dossier existe dÃ©jÃ .
     fs.mkdirSync(config.isolatedGamePath, { recursive: true });
   } catch (error: any) {
     console.error(
-      '[launcher] Impossible de créer le dossier Primétoile:',
+      '[launcher] Impossible de crÃ©er le dossier PrimÃ©toile:',
       error
     );
 
@@ -377,9 +394,9 @@ ipcMain.handle('save-game-path', async (_event, folderPath) => {
     };
   }
 
-  // Compatibilité temporaire avec la V7.
+  // CompatibilitÃ© temporaire avec la V7.
   // Le launcher utilise encore l'installation originale
-  // tant que la copie isolée n'est pas prête.
+  // tant que la copie isolÃ©e n'est pas prÃªte.
   config.gamePath = folderPath;
 
   writeLauncherConfig(config);
@@ -417,7 +434,6 @@ ipcMain.handle('install-isolated-game', async (event, installMode: '1.6' | '1.7'
     'prepare-destination': 1,
     'copy-vanilla': 50,
     'downgrade-runtime': installMode === '1.7' ? 20 : 0,
-    'install-skse': 8,
     'install-skymp': 7,
     'install-primetoile': 3,
     'install-ui': 3,
@@ -629,12 +645,12 @@ function validateGamePath(folderPath: string) {
   return { ok: true, reason: 'ok' };
 }
 
-// ─── Game Path & Validation ───
+// â”€â”€â”€ Game Path & Validation â”€â”€â”€
 ipcMain.handle('select-game-path', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
-    title: 'Sélectionnez le dossier de Skyrim (celui qui contient SkyrimSE.exe)'
+    title: 'SÃ©lectionnez le dossier de Skyrim (celui qui contient SkyrimSE.exe)'
   });
   if (result.canceled) return null;
   return result.filePaths[0];
@@ -644,7 +660,7 @@ ipcMain.handle('check-game-path', async (_event, folderPath) => {
   return validateGamePath(folderPath);
 });
 
-// ─── Skyrim INI Repair ───
+// â”€â”€â”€ Skyrim INI Repair â”€â”€â”€
 function skyrimDocumentsDir() {
   return path.join(app.getPath('documents'), 'My Games', 'Skyrim Special Edition');
 }
@@ -808,14 +824,14 @@ ipcMain.handle('get-display-settings', async () => {
   return result;
 });
 
-// ─── Auth Flow ───
+// â”€â”€â”€ Auth Flow â”€â”€â”€
 function readAuthFile() {
   try {
     if (fs.existsSync(AUTH_FILE)) {
       return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8'));
     }
   } catch (e) {
-    console.error("Impossible de lire le fichier d’authentification :", e);
+    console.error("Impossible de lire le fichier dâ€™authentification :", e);
   }
   return null;
 }
@@ -824,7 +840,7 @@ function writeAuthFile(data: any) {
   try {
     fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2));
   } catch (e) {
-    console.error("Impossible d’écrire le fichier d’authentification :", e);
+    console.error("Impossible dâ€™Ã©crire le fichier dâ€™authentification :", e);
   }
 }
 
@@ -844,8 +860,8 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * POST de JSON para uma URL arbitrária (http ou https). Diferente de
- * `postJsonToApi`, que é fixo no host/porta do servidor de jogo — o painel web
+ * POST de JSON para uma URL arbitrÃ¡ria (http ou https). Diferente de
+ * `postJsonToApi`, que Ã© fixo no host/porta do servidor de jogo â€” o painel web
  * costuma ficar em outro host/porta (VITE_PANEL_URL).
  */
 function postJsonToUrl(url: string, body: any): Promise<{ status: number, data: any }> {
@@ -934,7 +950,7 @@ function checarEspacoParaBaixar(tmpPath: string, destinoPath: string, sizeBytes:
 function downloadToFile(url: string, destPath: string, onProgress?: (percent: number) => void, redirectsLeft = 5): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!url.startsWith('https:')) {
-      reject(new Error(`Téléchargement bloqué : protocole d’URL non sécurisé (${url})`));
+      reject(new Error(`TÃ©lÃ©chargement bloquÃ© : protocole dâ€™URL non sÃ©curisÃ© (${url})`));
       return;
     }
     const req = https.get(url, { headers: { 'User-Agent': 'Skyrim-Heavy-RP-Launcher' } }, (res) => {
@@ -946,7 +962,7 @@ function downloadToFile(url: string, destPath: string, onProgress?: (percent: nu
         }
         const nextUrl = new URL(res.headers.location, url).toString();
         if (!nextUrl.startsWith('https:')) {
-          reject(new Error(`Téléchargement bloqué : redirection vers un protocole non sécurisé (${nextUrl})`));
+          reject(new Error(`TÃ©lÃ©chargement bloquÃ© : redirection vers un protocole non sÃ©curisÃ© (${nextUrl})`));
           return;
         }
         downloadToFile(nextUrl, destPath, onProgress, redirectsLeft - 1).then(resolve, reject);
@@ -954,7 +970,7 @@ function downloadToFile(url: string, destPath: string, onProgress?: (percent: nu
       }
       if (res.statusCode !== 200) {
         res.resume();
-        reject(new Error(`Erreur HTTP ${res.statusCode} pendant le téléchargement`));
+        reject(new Error(`Erreur HTTP ${res.statusCode} pendant le tÃ©lÃ©chargement`));
         return;
       }
       const total = parseInt(String(res.headers['content-length'] || '0'), 10);
@@ -970,7 +986,7 @@ function downloadToFile(url: string, destPath: string, onProgress?: (percent: nu
       res.on('error', reject);
     });
     req.on('error', reject);
-    req.setTimeout(60000, () => req.destroy(new Error('Le téléchargement a expiré')));
+    req.setTimeout(60000, () => req.destroy(new Error('Le tÃ©lÃ©chargement a expirÃ©')));
   });
 }
 
@@ -1012,9 +1028,9 @@ function extractZip(zipPath: string, destDir: string): Promise<void> {
       let psErr = '';
       ps.stderr.on('data', data => psErr += data.toString());
       ps.on('error', reject);
-      ps.on('close', code => code === 0 ? resolve() : reject(new Error(psErr || `Expand-Archive s’est terminé avec le code ${code}`)));
+      ps.on('close', code => code === 0 ? resolve() : reject(new Error(psErr || `Expand-Archive sâ€™est terminÃ© avec le code ${code}`)));
     });
-    tar.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || `tar s’est terminé avec le code ${code}`)));
+    tar.on('close', code => code === 0 ? resolve() : reject(new Error(stderr || `tar sâ€™est terminÃ© avec le code ${code}`)));
   });
 }
 
@@ -1027,7 +1043,7 @@ function isGameRunning(): Promise<boolean> {
 }
 
 function killGameProcesses(): Promise<void> {
-  // O helper de voz e filho do launcher — mata pelo handle primeiro; o taskkill
+  // O helper de voz e filho do launcher â€” mata pelo handle primeiro; o taskkill
   // e rede de seguranca pra uma instancia orfa de sessao anterior.
   voiceHandoff?.disarm();
   killVoiceHelper();
@@ -1120,7 +1136,7 @@ ipcMain.handle('discord-login', async () => {
 
         if (!state || state !== oauthState) {
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erreur : le paramètre state est absent ou invalide.</h1>');
+          res.end('<h1>Erreur : le paramÃ¨tre state est absent ou invalide.</h1>');
           callbackServer.close();
           finish(null);
           return;
@@ -1128,14 +1144,14 @@ ipcMain.handle('discord-login', async () => {
 
         if (!code) {
           res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Erreur : le code d’autorisation n’a pas été reçu.</h1>');
+          res.end('<h1>Erreur : le code dâ€™autorisation nâ€™a pas Ã©tÃ© reÃ§u.</h1>');
           callbackServer.close();
           finish(null);
           return;
         }
 
-        // A troca de `code` por token roda no painel web, não aqui: o client
-        // secret do Discord não pode viajar dentro de um instalador que os
+        // A troca de `code` por token roda no painel web, nÃ£o aqui: o client
+        // secret do Discord nÃ£o pode viajar dentro de um instalador que os
         // jogadores baixam. Ver POST /api/launcher/oauth/exchange em
         // apps/web/server.js e docs/technical/LAUNCHER_DISTRIBUTION.md.
         const exchange = await postJsonToUrl(`${PANEL_URL}/api/launcher/oauth/exchange`, {
@@ -1145,7 +1161,7 @@ ipcMain.handle('discord-login', async () => {
 
         if (exchange.status !== 200 || !exchange.data || !exchange.data.discordId) {
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end('<h1>Impossible de terminer la connexion. Vérifiez que le panel du serveur est accessible.</h1>');
+          res.end('<h1>Impossible de terminer la connexion. VÃ©rifiez que le panel du serveur est accessible.</h1>');
           callbackServer.close();
           finish(null);
           return;
@@ -1158,11 +1174,11 @@ ipcMain.handle('discord-login', async () => {
           globalName: user.globalName || user.username,
           avatar: user.avatar || null,
           // Prova de que este Discord autenticou de fato, emitida pelo painel.
-          // É o que a fila (apps/game-api) exige — `discordId` sozinho é público
-          // e não prova nada. Vem ausente se a conta ainda não existe no painel
+          // Ã‰ o que a fila (apps/game-api) exige â€” `discordId` sozinho Ã© pÃºblico
+          // e nÃ£o prova nada. Vem ausente se a conta ainda nÃ£o existe no painel
           // (jogador que nunca pediu whitelist).
           launchTicket: user.launchTicket || null,
-          // Multiuso, ~30 dias — troca por um launchTicket novo em
+          // Multiuso, ~30 dias â€” troca por um launchTicket novo em
           // /api/launcher/session/refresh-ticket sem repetir este popup.
           // Ver migration-v25-launcher-sessions.sql.
           sessionToken: user.sessionToken || null,
@@ -1176,8 +1192,8 @@ ipcMain.handle('discord-login', async () => {
           <html>
             <body style="background:#0a0a0a;color:#c9a227;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
               <div style="text-align:center;">
-                <h1>✅ Connexion réussie !</h1>
-                <p style="color:#d6d3d1;">Bienvenue, ${escapeHtml(authData.globalName)} ! Vous pouvez fermer cette fenêtre.</p>
+                <h1>âœ… Connexion rÃ©ussie !</h1>
+                <p style="color:#d6d3d1;">Bienvenue, ${escapeHtml(authData.globalName)} ! Vous pouvez fermer cette fenÃªtre.</p>
               </div>
             </body>
           </html>
@@ -1211,7 +1227,7 @@ ipcMain.handle('discord-login', async () => {
     });
 
     callbackServer.listen(19847, '127.0.0.1', () => {
-      console.log('Le serveur de retour OAuth2 écoute sur 127.0.0.1:19847');
+      console.log('Le serveur de retour OAuth2 Ã©coute sur 127.0.0.1:19847');
     });
 
     const authUrl = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&scope=identify&state=${oauthState}`;
@@ -1253,7 +1269,7 @@ ipcMain.handle('discord-login', async () => {
 });
 
 ipcMain.handle('discord-logout', async () => {
-  // Melhor esforço: se o painel estiver fora do ar, o logout local acontece
+  // Melhor esforÃ§o: se o painel estiver fora do ar, o logout local acontece
   // do mesmo jeito. Sem isto, um auth.json roubado do disco continuaria
   // rendendo launch tickets novos mesmo depois do dono deslogar.
   try {
@@ -1262,7 +1278,7 @@ ipcMain.handle('discord-logout', async () => {
       await postJsonToUrl(`${PANEL_URL}/api/launcher/session/revoke`, { sessionToken: auth.sessionToken });
     }
   } catch (e) {
-    console.error('Impossible de révoquer la session du launcher :', e);
+    console.error('Impossible de rÃ©voquer la session du launcher :', e);
   }
   currentQueueTicket = null;
   clearAuthFile();
@@ -1281,31 +1297,31 @@ ipcMain.handle('get-auth-status', async () => {
   };
 });
 
-// ─── Queue System ───
+// â”€â”€â”€ Queue System â”€â”€â”€
 //
-// A fila é autenticada por ticket, não por `discordId`: discordId é público, e
-// mandá-lo como prova de identidade deixaria qualquer um entrar na fila no
+// A fila Ã© autenticada por ticket, nÃ£o por `discordId`: discordId Ã© pÃºblico, e
+// mandÃ¡-lo como prova de identidade deixaria qualquer um entrar na fila no
 // lugar de outro jogador. O ticket inicial vem do painel no login; cada consulta
-// consome o ticket atual e recebe o próximo (`pollTicket`), então um ticket
-// interceptado já está gasto quando chega em outras mãos.
+// consome o ticket atual e recebe o prÃ³ximo (`pollTicket`), entÃ£o um ticket
+// interceptado jÃ¡ estÃ¡ gasto quando chega em outras mÃ£os.
 
 /**
- * Guarda o ticket da próxima consulta de fila. Vive só em memória de propósito:
- * é de uso único e curto, não faz sentido persistir entre execuções.
+ * Guarda o ticket da prÃ³xima consulta de fila. Vive sÃ³ em memÃ³ria de propÃ³sito:
+ * Ã© de uso Ãºnico e curto, nÃ£o faz sentido persistir entre execuÃ§Ãµes.
  */
 let currentQueueTicket: string | null = null;
 
 /**
- * Antes desta função trocar sempre por um ticket fresco via `sessionToken`,
- * uma segunda tentativa de jogar na mesma sessão do launcher — sem `pollTicket`
- * em memória, ex: a fila admitiu direto na primeira vez, sem fila de espera —
- * reenviava o `launchTicket` do login, que já tinha sido consumido. O servidor
- * respondia 401 invalid_ticket, e a única saída era refazer o OAuth do Discord
+ * Antes desta funÃ§Ã£o trocar sempre por um ticket fresco via `sessionToken`,
+ * uma segunda tentativa de jogar na mesma sessÃ£o do launcher â€” sem `pollTicket`
+ * em memÃ³ria, ex: a fila admitiu direto na primeira vez, sem fila de espera â€”
+ * reenviava o `launchTicket` do login, que jÃ¡ tinha sido consumido. O servidor
+ * respondia 401 invalid_ticket, e a Ãºnica saÃ­da era refazer o OAuth do Discord
  * inteiro. Ver migration-v25-launcher-sessions.sql.
  */
 async function nextQueueTicket(): Promise<string | null> {
-  // Um pollTicket em memória (emitido pelo game-api enquanto na fila) sempre
-  // vence: já está fresco e foi emitido pra esta consulta específica.
+  // Um pollTicket em memÃ³ria (emitido pelo game-api enquanto na fila) sempre
+  // vence: jÃ¡ estÃ¡ fresco e foi emitido pra esta consulta especÃ­fica.
   if (currentQueueTicket) return currentQueueTicket;
 
   const auth = readAuthFile();
@@ -1318,9 +1334,9 @@ async function nextQueueTicket(): Promise<string | null> {
     if (refresh.status === 200 && refresh.data && typeof refresh.data.launchTicket === 'string') {
       return refresh.data.launchTicket;
     }
-    // Sessão expirada/revogada (ex: usuário deslogou de outra máquina): cai
-    // pro launchTicket abaixo, que na pior das hipóteses dá o mesmo
-    // 401 invalid_ticket que já existia antes desta mudança.
+    // SessÃ£o expirada/revogada (ex: usuÃ¡rio deslogou de outra mÃ¡quina): cai
+    // pro launchTicket abaixo, que na pior das hipÃ³teses dÃ¡ o mesmo
+    // 401 invalid_ticket que jÃ¡ existia antes desta mudanÃ§a.
   }
 
   return auth.launchTicket || null;
@@ -1329,17 +1345,17 @@ async function nextQueueTicket(): Promise<string | null> {
 function rememberQueueTicket(response: any) {
   if (response && typeof response.pollTicket === 'string') {
     currentQueueTicket = response.pollTicket;
-    delete response.pollTicket; // o renderer não precisa nem deve ver o ticket
+    delete response.pollTicket; // o renderer nÃ£o precisa nem deve ver o ticket
   }
   return response;
 }
 
-// ─── Status do Servidor ───
+// â”€â”€â”€ Status do Servidor â”€â”€â”€
 //
 // A tela inicial mostrava "Online" fixo no JSX, sem checagem nenhuma por
-// trás — um bolinha verde e um texto que nunca mudavam, independente do
-// apps/game-api estar de pé ou não. `GET /health` já existe no game-api
-// (usado só por operação manual); isto é o primeiro consumidor real dele.
+// trÃ¡s â€” um bolinha verde e um texto que nunca mudavam, independente do
+// apps/game-api estar de pÃ© ou nÃ£o. `GET /health` jÃ¡ existe no game-api
+// (usado sÃ³ por operaÃ§Ã£o manual); isto Ã© o primeiro consumidor real dele.
 ipcMain.handle('check-server-status', async () => {
   const online = await new Promise<boolean>((resolve) => {
     const healthUrl = `${GAME_API_URL}/health`;
@@ -1361,8 +1377,8 @@ ipcMain.handle('check-server-status', async () => {
       }
     );
     req.on('error', () => resolve(false));
-    // Curto de propósito: isto roda no boot da tela e num intervalo — um
-    // timeout de 20s (padrão do httpGetJson) deixaria a UI travada "carregando"
+    // Curto de propÃ³sito: isto roda no boot da tela e num intervalo â€” um
+    // timeout de 20s (padrÃ£o do httpGetJson) deixaria a UI travada "carregando"
     // por muito tempo toda vez que o servidor estiver mesmo fora do ar.
     req.setTimeout(4000, () => {
       req.destroy();
@@ -1386,9 +1402,9 @@ ipcMain.handle('join-queue', async () => {
   return rememberQueueTicket(response.data);
 });
 
-// O ticket vai no corpo do POST, igual ao `join-queue` acima. Já foi query
+// O ticket vai no corpo do POST, igual ao `join-queue` acima. JÃ¡ foi query
 // string de um GET: query string entra em log de acesso e de proxy, e o ticket
-// é credencial — quem o tem consulta a fila como aquela conta. Ver
+// Ã© credencial â€” quem o tem consulta a fila como aquela conta. Ver
 // `SEC-QS-01` em docs/roadmap/ECOSYSTEM_ADAPTATION_ROADMAP.md.
 ipcMain.handle('poll-queue', async () => {
   const ticket = await nextQueueTicket();
@@ -1404,7 +1420,7 @@ ipcMain.handle('poll-queue', async () => {
   return rememberQueueTicket(response.data);
 });
 
-// ─── Mod Manager ───
+// â”€â”€â”€ Mod Manager â”€â”€â”€
 function listDataPlugins(folderPath: string) {
   const dataPath = path.join(folderPath, 'Data');
   if (!fs.existsSync(dataPath)) return [];
@@ -1465,7 +1481,7 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
     const modsJson: any = await httpGetJson(`${GAME_API_URL}/mods.json`);
 
     if (!modsJson || !modsJson.mods) {
-      return { success: false, error: "Impossible de télécharger mods.json. Le serveur est peut-être hors ligne." };
+      return { success: false, error: "Impossible de tÃ©lÃ©charger mods.json. Le serveur est peut-Ãªtre hors ligne." };
     }
 
     const allFiles = fs.readdirSync(dataPath);
@@ -1543,7 +1559,7 @@ ipcMain.handle('sync-loadorder', async (_event, folderPath, serverLoadOrder) => 
     const diskPlugins = allFiles.filter(f => f.toLowerCase().endsWith('.esp') || f.toLowerCase().endsWith('.esl') || f.toLowerCase().endsWith('.esm'));
 
     const resultLines = [
-      '# Ce fichier est géré par le launcher Skyrim Heavy RP.',
+      '# Ce fichier est gÃ©rÃ© par le launcher Skyrim Heavy RP.',
       '# Ne le modifiez pas manuellement.'
     ];
 
@@ -1571,12 +1587,12 @@ ipcMain.handle('kill-game', async () => {
 });
 
 ipcMain.handle('check-client-update', async (_event, gamePath) => {
-  // Sem DIST_REPO, o operador optou por não distribuir via GitHub Releases
-  // (dev local, fork em teste) — isso não é o mesmo caso que "configurei a
-  // distribuição e ela está fora do ar". Bloquear JOGAR aqui puniria quem
-  // nunca pediu esse gate, então este caso passa sem erro. Manifesto ausente
-  // ou inválido COM DIST_REPO configurado continua falhando fechado abaixo:
-  // aí sim alguém decidiu depender do gate e ele está quebrado.
+  // Sem DIST_REPO, o operador optou por nÃ£o distribuir via GitHub Releases
+  // (dev local, fork em teste) â€” isso nÃ£o Ã© o mesmo caso que "configurei a
+  // distribuiÃ§Ã£o e ela estÃ¡ fora do ar". Bloquear JOGAR aqui puniria quem
+  // nunca pediu esse gate, entÃ£o este caso passa sem erro. Manifesto ausente
+  // ou invÃ¡lido COM DIST_REPO configurado continua falhando fechado abaixo:
+  // aÃ­ sim alguÃ©m decidiu depender do gate e ele estÃ¡ quebrado.
   if (!DIST_REPO) return { updateAvailable: false };
   const manifest = await httpGetJson(clientManifestUrl());
   if (!manifest || !manifest.clientVersion) return { updateAvailable: false, error: 'Le manifeste du client est indisponible.' };
@@ -1592,8 +1608,8 @@ ipcMain.handle('check-client-update', async (_event, gamePath) => {
 
 ipcMain.handle('install-client-update', async (_event, gamePath) => {
   if (!gamePath) return { success: false, error: 'Le dossier du jeu est invalide.' };
-  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'Le jeu est ouvert. Fermez-le avant la mise à jour.' };
-  if (!DIST_REPO) return { success: false, error: 'La source des mises à jour (VITE_GITHUB_DIST_REPO) n’est pas configurée.' };
+  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'Le jeu est ouvert. Fermez-le avant la mise Ã  jour.' };
+  if (!DIST_REPO) return { success: false, error: 'La source des mises Ã  jour (VITE_GITHUB_DIST_REPO) nâ€™est pas configurÃ©e.' };
 
   const send = (phase: string, percent: number) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-progress', { phase, percent });
@@ -1610,7 +1626,7 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
     await downloadToFile(manifest.downloadUrl, tmpZip, percent => send('download', percent));
     if (!manifest.sha256) {
       try { fs.unlinkSync(tmpZip); } catch {}
-      return { success: false, error: 'Le manifeste du client ne contient pas de SHA256 : la vérification d’intégrité obligatoire est impossible.' };
+      return { success: false, error: 'Le manifeste du client ne contient pas de SHA256 : la vÃ©rification dâ€™intÃ©gritÃ© obligatoire est impossible.' };
     }
     send('verify', 0);
     const actual = await sha256File(tmpZip);
@@ -1634,7 +1650,7 @@ ipcMain.handle('install-client-update', async (_event, gamePath) => {
     // internet. A checagem previa nao pega tudo: o disco pode encher DURANTE
     // o download, ou a extracao pode precisar de mais que o .zip.
     if (ehDiscoCheio(e)) {
-      return { success: false, error: 'Le disque s’est rempli pendant l’opération. Libérez de l’espace puis réessayez.' };
+      return { success: false, error: 'Le disque sâ€™est rempli pendant lâ€™opÃ©ration. LibÃ©rez de lâ€™espace puis rÃ©essayez.' };
     }
     return { success: false, error: e.message };
   }
@@ -1657,8 +1673,8 @@ ipcMain.handle('check-mods-update', async (_event, gamePath) => {
 
 ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
   if (!gamePath) return { success: false, error: 'Le dossier du jeu est invalide.' };
-  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'Le jeu est ouvert. Fermez-le avant de mettre les mods à jour.' };
-  if (!DIST_REPO) return { success: false, error: 'La source des mises à jour (VITE_GITHUB_DIST_REPO) n’est pas configurée.' };
+  if (await isGameRunning()) return { success: false, gameRunning: true, error: 'Le jeu est ouvert. Fermez-le avant de mettre les mods Ã  jour.' };
+  if (!DIST_REPO) return { success: false, error: 'La source des mises Ã  jour (VITE_GITHUB_DIST_REPO) nâ€™est pas configurÃ©e.' };
 
   const send = (phase: string, percent: number) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mods-update-progress', { phase, percent });
@@ -1707,7 +1723,7 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
       await downloadToFile(part.url, tmpZip, percent => send('download', Math.min(100, base + Math.round(percent * span / 100))));
       if (!part.sha256) {
         try { fs.unlinkSync(tmpZip); } catch {}
-        return { success: false, error: `La partie ${index + 1} ne contient pas de SHA256 : la vérification d’intégrité obligatoire est impossible.` };
+        return { success: false, error: `La partie ${index + 1} ne contient pas de SHA256 : la vÃ©rification dâ€™intÃ©gritÃ© obligatoire est impossible.` };
       }
       send('verify', base);
       const actual = await sha256File(tmpZip);
@@ -1731,13 +1747,13 @@ ipcMain.handle('install-mods-update', async (_event, gamePath, force) => {
     // internet. A checagem previa nao pega tudo: o disco pode encher DURANTE
     // o download, ou a extracao pode precisar de mais que o .zip.
     if (ehDiscoCheio(e)) {
-      return { success: false, error: 'Le disque s’est rempli pendant l’opération. Libérez de l’espace puis réessayez.' };
+      return { success: false, error: 'Le disque sâ€™est rempli pendant lâ€™opÃ©ration. LibÃ©rez de lâ€™espace puis rÃ©essayez.' };
     }
     return { success: false, error: e.message };
   }
 });
 
-// ─── Game Launch ───
+// â”€â”€â”€ Game Launch â”€â”€â”€
 ipcMain.handle('get-recent-crashes', async () => {
   return collectRecentCrashLogs(5).map(file => ({
     name: file.name,
@@ -1760,7 +1776,7 @@ ipcMain.handle('report-recent-crashes', async () => {
       const raw = fs.readFileSync(file.fullPath);
       const maxBytes = 60 * 1024;
       const content = raw.length > maxBytes
-        ? Buffer.concat([raw.subarray(0, maxBytes), Buffer.from('\n...[tronqué par le launcher]')]).toString('utf8')
+        ? Buffer.concat([raw.subarray(0, maxBytes), Buffer.from('\n...[tronquÃ© par le launcher]')]).toString('utf8')
         : raw.toString('utf8');
       return { filename: file.name, mtime: file.mtime, content };
     })
@@ -1772,7 +1788,7 @@ ipcMain.handle('report-recent-crashes', async () => {
 
 ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
   if (!folderPath) {
-    return { ok: false, code: 'GAME_PATH_REQUIRED', error: 'Le dossier du jeu n’est pas configuré.' };
+    return { ok: false, code: 'GAME_PATH_REQUIRED', error: 'Le dossier du jeu nâ€™est pas configurÃ©.' };
   }
   const exePath = path.join(folderPath, 'skse64_loader.exe');
   if (!fs.existsSync(exePath)) {
@@ -1780,6 +1796,18 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
   }
 
   try {
+    const integrity = validatePrimetoileIntegrity(folderPath);
+
+    if (!integrity.ok) {
+      return {
+        ok: false,
+        code: 'INTEGRITY_FAILED',
+        error:
+          'Installation Primetoile ou mods Vortex non conformes.',
+        issues: integrity.issues
+      };
+    }
+
     const auth = readAuthFile();
     if (!auth || !auth.discordId) {
       return { ok: false, code: 'NOT_AUTHENTICATED', error: 'Reconnectez-vous avant de lancer le jeu.' };
@@ -1804,17 +1832,23 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
     console.info(`[launcher] Skyrim iniciado com pid=${processResult.pid}`);
 
     // Handoff de voz: liga o listener loopback pra quando o jogador rodar /voz.
-    // Nunca bloqueia o JOGAR — a voz e opcional.
+    // Nunca bloqueia o JOGAR â€” a voz e opcional.
     armVoiceHandoff(folderPath).catch((e) =>
-      console.warn('[launcher] impossible d’activer le relais vocal :', e?.message));
+      console.warn('[launcher] impossible dâ€™activer le relais vocal :', e?.message));
 
     return { ok: true, pid: processResult.pid };
   } catch (e: any) {
     const code = typeof e?.code === 'string' ? e.code : 'GAME_LAUNCH_FAILED';
     const message = typeof e?.message === 'string' && e.message
       ? e.message
-      : 'Impossible de préparer ou de lancer le jeu.';
-    console.error(`[launcher] Échec de l’initialisation du jeu (${code}) :`, e);
+      : 'Impossible de prÃ©parer ou de lancer le jeu.';
+    console.error(`[launcher] Ã‰chec de lâ€™initialisation du jeu (${code}) :`, e);
     return { ok: false, code, error: message };
   }
 });
+
+
+
+
+
+

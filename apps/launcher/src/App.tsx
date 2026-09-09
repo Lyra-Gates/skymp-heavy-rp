@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { TitleBar } from './components/TitleBar';
 import { Login } from './pages/Login';
 import { Home } from './pages/Home';
 import { Settings } from './pages/Settings';
+import { Tutorial } from './pages/Tutorial';
 import type { AuthData } from './types/electron';
 
 export default function App() {
@@ -44,9 +45,11 @@ export default function App() {
           <Route path="/login" element={auth ? <Navigate to="/home" /> : <Login setAuth={setAuth} />} />
           <Route path="/home" element={auth ? <Home auth={auth} setAuth={setAuth} /> : <Navigate to="/login" />} />
           <Route path="/settings" element={auth ? <Settings /> : <Navigate to="/login" />} />
+          <Route path="/tutorial" element={auth ? <Tutorial /> : <Navigate to="/login" />} />
           <Route path="*" element={<Navigate to={auth ? "/home" : "/login"} />} />
         </Routes>
       </MemoryRouter>
     </div>
   );
 }
+

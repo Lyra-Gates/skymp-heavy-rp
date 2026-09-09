@@ -598,3 +598,22 @@ body {
   justify-content: center;
   text-align: center;
 }
+.discord-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.discord-btn:hover {
+  color: var(--accent-gold);
+  border-color: var(--border-color-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
