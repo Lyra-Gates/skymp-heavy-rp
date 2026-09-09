@@ -134,8 +134,8 @@
                       },
                       {
                           "path":  "Skyrim_Default.ini",
-                          "size":  1859,
-                          "sha256":  "61C151BC60D5D737DAD3D65A99A48D9BB8B50812B6B9F1F993323F0337813FA8"
+                          "size":  1833,
+                          "sha256":  "D467F8D95A173A3EE21AE533C9153E864165A1B9B5E004D9DEDF561C9C242C7B"
                       },
                       {
                           "path":  "SkyrimSE.exe",
@@ -159,16 +159,7 @@
                       }
                   ],
     "voiceFiles":  [
-                       {
-                           "path":  "Data/Skyrim - Voices_en0.bsa",
-                           "size":  1807969854,
-                           "sha256":  "28EED50CAC2F9606E045420E4426F6141DE0B900F7E1BA021ADC41BB8C9F1D08"
-                       },
-                       {
-                           "path":  "Data/Skyrim - Voices_fr0.bsa",
-                           "size":  1829070375,
-                           "sha256":  "51171C3CD9564A77D9E207DB01AFE3B78C929DA6EAE7144D816E3EB9CD2F1DEB"
-                       }
+
                    ],
     "localizationFiles":  [
                               {

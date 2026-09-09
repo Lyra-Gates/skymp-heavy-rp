@@ -1,3 +1,4 @@
+import { normalizePrimetoileRuntimeV11 } from './v11-normalize.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -87,15 +88,6 @@ const CORE_PATCHES: PatchArchive[] = [
   }
 ];
 
-const FRENCH_PATCH: PatchArchive = {
-  label: '489834-fr',
-  url:
-    `${PATCH_BASE}/1.7.99_to_1.6.640/489834.7z.001`,
-  fileName: '489834.7z.001',
-  sha1:
-    '537743eca56cbabecefd3fa5e3ce89f986e24754',
-  parts: 3
-};
 
 export type V10DowngradeStep =
   | 'detect'
@@ -602,6 +594,25 @@ async function applyXdeltaPatches(
         -'.xdelta'.length
       );
 
+    const relativeTarget =
+      path.relative(gamePath, targetFile)
+        .replace(/\\/g, '/');
+
+    // Primetoile n'utilise aucune archive de voix vanilla.
+    // Un patch de langue/voix éventuel ne doit donc jamais bloquer le downgrade.
+    if (
+      /^Data\/Skyrim - Voices_.*\.bsa$/i.test(
+        relativeTarget
+      )
+    ) {
+      await fs.promises.rm(
+        patchFile,
+        { force: true }
+      );
+
+      continue;
+    }
+
     if (!fs.existsSync(targetFile)) {
       throw new Error(
         `Fichier source requis pour le downgrade introuvable : ${targetFile}`
@@ -661,24 +672,6 @@ async function applyXdeltaPatches(
   return patchedFiles;
 }
 
-function assertFrenchSource(
-  gamePath: string
-): void {
-  const frenchVoices = path.join(
-    gamePath,
-    'Data',
-    'Skyrim - Voices_fr0.bsa'
-  );
-
-  if (!fs.existsSync(frenchVoices)) {
-    throw new Error(
-      [
-        'Alpha.10 : le downgrade automatique est actuellement validé uniquement pour Skyrim Steam en français.',
-        'Fichier attendu : Data\\Skyrim - Voices_fr0.bsa'
-      ].join(' ')
-    );
-  }
-}
 
 export async function downgradeSkyrimTo1170V10(
   gamePath: string,
@@ -736,7 +729,7 @@ export async function downgradeSkyrimTo1170V10(
     );
   }
 
-  assertFrenchSource(gamePath);
+
 
   const tempDir =
     await fs.promises.mkdtemp(
@@ -764,8 +757,7 @@ export async function downgradeSkyrimTo1170V10(
     );
 
     const archives = [
-      ...CORE_PATCHES,
-      FRENCH_PATCH
+      ...CORE_PATCHES
     ];
 
     const downloadedArchives: string[] = [];
@@ -839,6 +831,10 @@ export async function downgradeSkyrimTo1170V10(
       message:
         'Validation SHA256 de Skyrim 1.6.1170...'
     });
+
+    await normalizePrimetoileRuntimeV11(
+      gamePath
+    );
 
     const finalValidation =
       await validateSkyrim1170V9(

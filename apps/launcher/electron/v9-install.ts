@@ -8,6 +8,7 @@ import { validateSkyrim1170V9 } from './v9-validate.js';
 import { installSkseV9 } from './v9-skse.js';
 import { installSkympV9 } from './v9-skymp.js';
 import { downgradeSkyrimTo1170V10 } from './v10-downgrade.js';
+import { normalizePrimetoileRuntimeV11 } from './v11-normalize.js';
 
 export const V9_TARGET_RUNTIME = '1.6.1170.0';
 
@@ -103,6 +104,7 @@ export type V9InstallPhase =
 export type V9InstallProgress = {
   phase: V9InstallPhase;
   message: string;
+  phaseProgress?: number;
 };
 
 export type V9InstallResult = {
@@ -151,6 +153,25 @@ async function ensureSkyrimSavePathV9(): Promise<void> {
   } else {
     content =
       `[General]\r\n${desiredLine}\r\n${content}`;
+  }
+
+  const desiredFovLine =
+    'fDefaultWorldFOV=90.0000';
+
+  if (/^fDefaultWorldFOV=.*$/mi.test(content)) {
+    content = content.replace(
+      /^fDefaultWorldFOV=.*$/mi,
+      desiredFovLine
+    );
+  } else if (/^\[Display\]\s*$/mi.test(content)) {
+    content = content.replace(
+      /^\[Display\]\s*$/mi,
+      `[Display]\r\n${desiredFovLine}`
+    );
+  } else {
+    content =
+      `${content.replace(/\s*$/, '')}` +
+      `\r\n\r\n[Display]\r\n${desiredFovLine}\r\n`;
   }
 
   await fs.promises.writeFile(
@@ -344,10 +365,14 @@ export async function installPrimetoileV11(
   await copyVanillaBaseV9(
     sourceGamePath,
     isolatedGamePath,
-    () => {
+    (progress) => {
       onProgress?.({
         phase: 'copy-vanilla',
-        message: 'Copie des fichiers Skyrim vanilla...'
+        message: `Copie Skyrim : ${progress.file}`,
+        phaseProgress:
+          progress.total > 0
+            ? (progress.current / progress.total) * 100
+            : 0
       });
     }
   );
@@ -376,6 +401,10 @@ export async function installPrimetoileV11(
     });
   }
 
+  await normalizePrimetoileRuntimeV11(
+    isolatedGamePath
+  );
+
   onProgress?.({
     phase: 'install-skse',
     message:
@@ -385,9 +414,17 @@ export async function installPrimetoileV11(
   const skse = await installSkseV9(
     isolatedGamePath,
     (progress) => {
+      const stepProgress =
+        progress.step === 'download' ? 10 :
+        progress.step === 'verify' ? 40 :
+        progress.step === 'extract' ? 60 :
+        progress.step === 'install' ? 80 :
+        95;
+
       onProgress?.({
         phase: 'install-skse',
-        message: progress.message
+        message: progress.message,
+        phaseProgress: stepProgress
       });
     }
   );
@@ -401,12 +438,22 @@ export async function installPrimetoileV11(
   const skymp = await installSkympV9(
     isolatedGamePath,
     (progress) => {
+      const phase =
+        progress.step === 'install-ui' ||
+        progress.step === 'validate'
+          ? 'install-ui'
+          : 'install-skymp';
+
+      const stepProgress =
+        progress.step === 'locate' ? 5 :
+        progress.step === 'install-client' ? 45 :
+        progress.step === 'install-ui' ? 65 :
+        95;
+
       onProgress?.({
-        phase:
-          progress.step === 'install-ui'
-            ? 'install-ui'
-            : 'install-skymp',
-        message: progress.message
+        phase,
+        message: progress.message,
+        phaseProgress: stepProgress
       });
     }
   );

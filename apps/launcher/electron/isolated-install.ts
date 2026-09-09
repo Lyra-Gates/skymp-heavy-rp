@@ -53,17 +53,6 @@ export const PRIMETOILE_DATA_FILES = [
   'Video/BGS_Logo.bik',
 ];
 
-export function findSkyrimVoiceArchives(sourceGamePath: string): string[] {
-  const dataPath = path.join(sourceGamePath, 'Data');
-
-  if (!fs.existsSync(dataPath)) {
-    return [];
-  }
-
-  return fs
-    .readdirSync(dataPath)
-    .filter((name) => /^Skyrim - Voices_.*\.bsa$/i.test(name));
-}
 export type PrimetoileInstallProgress = {
   current: number;
   total: number;
@@ -98,8 +87,6 @@ export async function copyPrimetoileBase(
     };
   }
 
-  const voiceArchives = findSkyrimVoiceArchives(source);
-
   const files = [
     ...PRIMETOILE_ROOT_FILES.map((name) => ({
       source: path.join(source, name),
@@ -111,22 +98,12 @@ export async function copyPrimetoileBase(
       source: path.join(source, 'Data', name),
       destination: path.join(destination, 'Data', name),
       displayName: `Data/${name}`
-    })),
-
-    ...voiceArchives.map((name) => ({
-      source: path.join(source, 'Data', name),
-      destination: path.join(destination, 'Data', name),
-      displayName: `Data/${name}`
     }))
   ];
 
   const missing = files
     .filter((file) => !fs.existsSync(file.source))
     .map((file) => file.displayName);
-
-  if (voiceArchives.length === 0) {
-    missing.push('Data/Skyrim - Voices_*.bsa');
-  }
 
   // On ne commence aucune copie si l'installation Skyrim source
   // est incomplète.
@@ -209,11 +186,6 @@ export function checkPrimetoileBase(
     .map((file) => file.displayName);
 
   // Il faut également au moins une archive de voix Skyrim.
-  const voiceArchives = findSkyrimVoiceArchives(destination);
-
-  if (voiceArchives.length === 0) {
-    missing.push('Data/Skyrim - Voices_*.bsa');
-  }
 
   if (missing.length > 0) {
     return {

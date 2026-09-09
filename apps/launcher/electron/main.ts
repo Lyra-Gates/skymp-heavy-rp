@@ -412,18 +412,25 @@ ipcMain.handle('install-isolated-game', async (event, installMode: '1.6' | '1.7'
     };
   }
 
-  const phaseOrder = [
-    'validate-steam',
-    'prepare-destination',
-    'copy-vanilla',
-    'downgrade-runtime',
-    'install-skse',
-    'install-skymp',
-    'install-primetoile',
-    'install-ui',
-    'write-connection',
-    'validate-final'
-  ];
+  const phaseWeights: Record<string, number> = {
+    'validate-steam': 2,
+    'prepare-destination': 1,
+    'copy-vanilla': 50,
+    'downgrade-runtime': installMode === '1.7' ? 20 : 0,
+    'install-skse': 8,
+    'install-skymp': 7,
+    'install-primetoile': 3,
+    'install-ui': 3,
+    'write-connection': 2,
+    'validate-final': 4
+  };
+
+  const phaseOrder = Object.keys(phaseWeights);
+
+  const totalWeight = phaseOrder.reduce(
+    (sum, phase) => sum + phaseWeights[phase],
+    0
+  );
 
   try {
     const result = await installPrimetoileV11(
@@ -433,11 +440,44 @@ ipcMain.handle('install-isolated-game', async (event, installMode: '1.6' | '1.7'
       (progress) => {
         const index = phaseOrder.indexOf(progress.phase);
 
+        const completedWeight =
+          index > 0
+            ? phaseOrder
+                .slice(0, index)
+                .reduce(
+                  (sum, phase) =>
+                    sum + phaseWeights[phase],
+                  0
+                )
+            : 0;
+
+        const phaseWeight =
+          phaseWeights[progress.phase] ?? 0;
+
+        const phasePercent = Math.max(
+          0,
+          Math.min(
+            100,
+            progress.phaseProgress ?? 0
+          )
+        );
+
+        const weightedProgress =
+          completedWeight +
+          phaseWeight * (phasePercent / 100);
+
+        const overallPercent =
+          totalWeight > 0
+            ? Math.round(
+                (weightedProgress / totalWeight) * 100
+              )
+            : 0;
+
         event.sender.send(
           'isolated-install-progress',
           {
-            current: index >= 0 ? index + 1 : 1,
-            total: phaseOrder.length,
+            current: overallPercent,
+            total: 100,
             file: progress.message
           }
         );

@@ -50,7 +50,8 @@ function listOfficialArchives(sourceDataPath: string): string[] {
   return fs.readdirSync(sourceDataPath)
     .filter((name) => {
       return (
-        /^Skyrim - .+\.bsa$/i.test(name) ||
+        (/^Skyrim - .+\.bsa$/i.test(name) &&
+        !/^Skyrim - Voices_.*\.bsa$/i.test(name)) ||
         /^(Dawnguard|Dragonborn|HearthFires)\.bsa$/i.test(name)
       );
     })

@@ -648,7 +648,13 @@ export function Home({ auth, setAuth }: HomeProps) {
         marginTop: '6px'
       }}
     >
-      {isolatedInstallProgress.current} / {isolatedInstallProgress.total}
+      {Math.round(
+        isolatedInstallProgress.total > 0
+          ? (isolatedInstallProgress.current /
+              isolatedInstallProgress.total) *
+            100
+          : 0
+      )} %
       {' — '}
       {isolatedInstallProgress.file}
     </p>
