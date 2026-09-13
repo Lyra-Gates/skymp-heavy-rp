@@ -1,4 +1,4 @@
-﻿import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
 const api = {
   windowMinimize: () => ipcRenderer.send('window-minimize'),
@@ -22,6 +22,7 @@ const api = {
   joinQueue: () => ipcRenderer.invoke('join-queue'),
   pollQueue: () => ipcRenderer.invoke('poll-queue'),
   getLocalPlugins: (folderPath: string) => ipcRenderer.invoke('get-local-plugins', folderPath),
+  normalizeEslPlugins: (folderPath: string) => ipcRenderer.invoke('normalize-esl-plugins', folderPath),
   verifyMods: (folderPath: string) => ipcRenderer.invoke('verify-mods', folderPath),
   analyzePlugins: (folderPath: string, serverLoadOrder?: string[]) => ipcRenderer.invoke('analyze-plugins', folderPath, serverLoadOrder),
   syncLoadorder: (folderPath: string, serverLoadOrder: string[]) => ipcRenderer.invoke('sync-loadorder', folderPath, serverLoadOrder),

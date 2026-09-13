@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthData, LaunchGameResult } from '../types/electron';
 import { Play, Settings as SettingsIcon, LogOut, FolderOpen, RefreshCw, BookOpen } from 'lucide-react';
@@ -402,6 +402,17 @@ export function Home({ auth, setAuth }: HomeProps) {
         return;
       }
 
+      setStatus('Préparation de la compatibilité SkyMP...');
+
+      const esl = await window.electronAPI.normalizeEslPlugins(gamePath);
+
+      if (!esl.ok) {
+        setStatus(
+          `Échec de la préparation des plugins : ${esl.error || 'erreur inconnue'}`
+        );
+        return;
+      }
+
       setStatus('Validation des mods avec le serveur...');
       const verify = await window.electronAPI.verifyMods(gamePath);
 
@@ -418,6 +429,9 @@ export function Home({ auth, setAuth }: HomeProps) {
         );
         return;
       }
+
+      setStatus("Synchronisation de l’ordre de chargement...");
+      await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
 
       const analysis =
         await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);
@@ -614,7 +628,7 @@ export function Home({ auth, setAuth }: HomeProps) {
               style={{ width: '100%', padding: '14px 12px', fontSize: '14px' }}
               onClick={() =>
                 window.electronAPI.openExternal(
-                  'https://www.nexusmods.com/games/skyrimspecialedition/collections/kawzcj/revisions/3'
+                  'https://www.nexusmods.com/games/skyrimspecialedition/collections/kawzcj'
                 )
               }
             >
@@ -702,6 +716,7 @@ export function Home({ auth, setAuth }: HomeProps) {
     </div>
   );
 }
+
 
 
 

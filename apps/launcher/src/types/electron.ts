@@ -1,4 +1,4 @@
-﻿export interface AuthData {
+export interface AuthData {
   discordId: string;
   username: string;
   globalName: string;
@@ -62,6 +62,13 @@ checkIsolatedGame: () => Promise<{
   joinQueue: () => Promise<any>;
   pollQueue: () => Promise<any>;
   getLocalPlugins: (folderPath: string) => Promise<any>;
+  normalizeEslPlugins: (folderPath: string) => Promise<{
+    ok: boolean;
+    error?: string;
+    modified?: string[];
+    alreadyNormalized?: string[];
+    missing?: string[];
+  }>;
   verifyMods: (folderPath: string) => Promise<{ success: boolean; error?: string; loadOrder?: string[] }>;
   analyzePlugins: (folderPath: string, serverLoadOrder?: string[]) => Promise<{ ok: boolean; problems: string[]; plugins: any[] }>;
   syncLoadorder: (folderPath: string, serverLoadOrder: string[]) => Promise<boolean>;

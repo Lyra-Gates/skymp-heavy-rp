@@ -1,4 +1,4 @@
-﻿import { validatePrimetoileIntegrity } from './integrity-validator.js';
+import { validatePrimetoileIntegrity } from './integrity-validator.js';
 import { installPrimetoileV11 } from './v9-install.js';
 import {
   checkPrimetoileBase
@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import { URL, fileURLToPath } from 'url';
 
 import { parsePluginsTxt, parsePluginHeader, compareMods, analyzePlugins, parseCccTxt, analyzeCreationClub } from './parity.mjs';
+import { normalizePrimetoileEslPlugins, PRIMETOILE_ESL_PLUGINS } from './esl-normalizer.js';
 import { avaliarEspaco, ehDiscoCheio } from './disk.mjs';
 import { syncUiBundle } from './ui-integrity.mjs';
 import { syncVoiceHelper } from './voice-helper.mjs';
@@ -1472,6 +1473,70 @@ ipcMain.handle('get-local-plugins', async (_event, folderPath) => {
   }
 });
 
+function hashPluginAsOriginalEsl(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    try {
+      const fd = fs.openSync(filePath, 'r');
+
+      let header: Buffer;
+
+      try {
+        header = Buffer.alloc(12);
+        const bytesRead = fs.readSync(fd, header, 0, 12, 0);
+
+        if (bytesRead < 12 || header.toString('latin1', 0, 4) !== 'TES4') {
+          throw new Error(`En-tête TES4 invalide : ${path.basename(filePath)}`);
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+
+      const flags = header.readUInt32LE(8);
+      header.writeUInt32LE((flags | 0x200) >>> 0, 8);
+
+      const hash = crypto.createHash('sha256');
+      hash.update(header);
+
+      const stream = fs.createReadStream(filePath, { start: 12 });
+
+      stream.on('data', chunk => hash.update(chunk));
+      stream.on('end', () => resolve(hash.digest('hex')));
+      stream.on('error', reject);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+ipcMain.handle('normalize-esl-plugins', async (_event, folderPath) => {
+  if (!folderPath) {
+    return {
+      ok: false,
+      error: 'Le dossier du jeu est invalide.'
+    };
+  }
+
+  try {
+    const result = normalizePrimetoileEslPlugins(folderPath);
+
+    if (result.missing.length > 0) {
+      return {
+        ok: false,
+        error: `Plugins introuvables : ${result.missing.join(', ')}`,
+        ...result
+      };
+    }
+
+    return {
+      ok: true,
+      ...result
+    };
+  } catch (e: any) {
+    return {
+      ok: false,
+      error: e.message
+    };
+  }
+});
 ipcMain.handle('verify-mods', async (_event, folderPath) => {
   if (!folderPath) return { success: false, error: "Le dossier du jeu est invalide." };
   try {
@@ -1485,7 +1550,19 @@ ipcMain.handle('verify-mods', async (_event, folderPath) => {
     }
 
     const allFiles = fs.readdirSync(dataPath);
-    const hashOf = (filename: string) => hashFileForManifest(path.join(dataPath, filename));
+    const normalizedEslPlugins = new Set(
+      PRIMETOILE_ESL_PLUGINS.map(name => name.toLowerCase())
+    );
+
+    const hashOf = (filename: string) => {
+      const filePath = path.join(dataPath, filename);
+
+      if (normalizedEslPlugins.has(filename.toLowerCase())) {
+        return hashPluginAsOriginalEsl(filePath);
+      }
+
+      return hashFileForManifest(filePath);
+    };
 
     const resultado = await compareMods({
       serverMods: modsJson.mods,

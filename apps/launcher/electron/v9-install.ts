@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { app } from 'electron';
@@ -12,7 +12,7 @@ import { normalizePrimetoileRuntimeV11 } from './v11-normalize.js';
 export const V9_TARGET_RUNTIME = '1.6.1170.0';
 
 const PRIMETOILE_ESP_SHA256 =
-  '8FE4F7223ABFB8D31D96E231CCF78F7B3D9838F52AA211B419F151379CA29653';
+  '3B43BA17E715EFB6FEDA53DBD38E8779ACA688BA5E6C3FCB6DDC5766476DAE81';
 
 function resolvePrimetoileEspSourceV11(): string {
   if (app.isPackaged) {
@@ -469,6 +469,13 @@ export async function installPrimetoileV11(
     isolatedGamePath
   );
 
+  // Primetoile.esp doit être la toute dernière écriture dans Data.
+  // Cela garantit que rien exécuté pendant l'installation ne peut
+  // laisser une ancienne version du plugin dans le jeu final.
+  await installPrimetoileEspV11(
+    isolatedGamePath
+  );
+
   return {
     ok: true,
     sourceGamePath,
@@ -480,6 +487,7 @@ export async function installPrimetoileV11(
       skymp.uiFiles
   };
 }
+
 
 
 

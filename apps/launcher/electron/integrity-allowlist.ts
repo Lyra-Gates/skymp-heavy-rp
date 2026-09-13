@@ -15,7 +15,8 @@ export const REQUIRED_ACTIVE_PLUGINS = new Set([
   "JK's Blue Palace.esp",
   'SkyUI_SE.esp',
   'Beards.esp',
-  'Distinct Interiors.esp',
+  'SkyR Mega Merge.esp',
+  'skryrimfarmhouseinns.esp',
   'JKs Skyrim.esp',
   'waccf_armor and clothing extension.esp',
   'Hothtrooper44_ArmorCompilation.esp',
@@ -80,5 +81,6 @@ export const ALLOWED_SKSE_DLLS = new Set([
   'SkyrimSoulsRE.dll',
   'SSEDisplayTweaks.dll'
 ]);
+
 
 
