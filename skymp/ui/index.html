@@ -435,6 +435,43 @@
     }
     .chat-line.fade { opacity: 0; }
 
+    /* Saisie du chat Primétoile */
+    .chat-input-wrap {
+      position: fixed;
+      left: 24px;
+      bottom: 24px;
+      width: min(480px, calc(100vw - 48px));
+      display: none;
+      z-index: 270;
+      pointer-events: auto;
+    }
+
+    .chat-input-wrap.open {
+      display: block;
+    }
+
+    .chat-input {
+      box-sizing: border-box;
+      width: 100%;
+      height: 40px;
+      padding: 8px 12px;
+      border-radius: 7px;
+      border: 1px solid rgba(187,161,107,0.7);
+      background: rgba(10,10,13,0.94);
+      color: #f5f1e8;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .chat-input:focus {
+      border-color: #bba16b;
+    }
+
+    body.chat-open .chat-log {
+      bottom: 76px;
+    }
+
     @media (max-width: 720px) {
       .interaction-shell {
         grid-template-columns: 1fr;
@@ -521,6 +558,20 @@
   </div>
 </div>
 <div id="chat-log" class="chat-log" aria-live="polite"></div>
+
+<div id="primetoile-chat-wrap"
+     class="chat-input-wrap"
+     aria-hidden="true">
+  <input
+    id="primetoile-chat-input"
+    class="chat-input"
+    type="text"
+    maxlength="300"
+    autocomplete="off"
+    spellcheck="false"
+    placeholder="Message ou commande..."
+    aria-label="Chat Primétoile">
+</div>
 
 <!-- Painel do Depósito Regional (Tarefa 10: UI-Depot-Bridge) -->
 <div id="depot-panel" aria-hidden="true">
@@ -834,6 +885,68 @@
   // (comando /voz → property 'voipTicket' → window.handleVoipTicket abaixo).
   // O servidor informa host/porta porque este arquivo é estático — sem isso
   // só funcionaria com o jogador na mesma máquina do servidor.
+  // ── Saisie du chat Primétoile ──────────────────────────────────────────────
+  function setPrimetoileChatVisible(visible) {
+    const wrap = document.getElementById('primetoile-chat-wrap');
+    const input = document.getElementById('primetoile-chat-input');
+
+    if (!wrap || !input) return;
+
+    wrap.classList.toggle('open', visible);
+    wrap.setAttribute('aria-hidden', visible ? 'false' : 'true');
+    document.body.classList.toggle('chat-open', visible);
+
+    if (visible) {
+      input.value = '';
+      setTimeout(() => input.focus(), 0);
+    } else {
+      input.blur();
+    }
+  }
+
+  function closePrimetoileChat() {
+    setPrimetoileChatVisible(false);
+    sendUiEvent('cef::chat:close', {});
+  }
+
+  function submitPrimetoileChat() {
+    const input = document.getElementById('primetoile-chat-input');
+    if (!input) return;
+
+    const text = input.value.trim();
+
+    setPrimetoileChatVisible(false);
+
+    if (text) {
+      sendUiEvent('cef::chat:send', text);
+    } else {
+      sendUiEvent('cef::chat:close', {});
+    }
+  }
+
+  window.openPrimetoileChat = function () {
+    setPrimetoileChatVisible(true);
+  };
+
+  const primetoileChatInput =
+    document.getElementById('primetoile-chat-input');
+
+  if (primetoileChatInput) {
+    primetoileChatInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.stopPropagation();
+        submitPrimetoileChat();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closePrimetoileChat();
+      }
+    });
+  }
   function connectVoip(actorId, ticket, host, port) {
     state.actorId = actorId;
     state.voiceFatal = false; // nova tentativa de /voz — o motivo anterior não vale mais

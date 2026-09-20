@@ -1876,6 +1876,8 @@ ipcMain.handle('launch-game', async (_event, folderPath, ticket) => {
     const integrity = validatePrimetoileIntegrity(folderPath);
 
     if (!integrity.ok) {
+      console.error('[integrity] Echec validation Primetoile :', integrity.issues);
+
       return {
         ok: false,
         code: 'INTEGRITY_FAILED',

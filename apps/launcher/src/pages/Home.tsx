@@ -327,7 +327,15 @@ export function Home({ auth, setAuth }: HomeProps) {
       }
 
       setStatus("Configuration de l’ordre de chargement...");
-      await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
+      const synced = await window.electronAPI.syncLoadorder(
+        gamePath,
+        verify.loadOrder
+      );
+
+      if (!synced) {
+        setStatus("Impossible de synchroniser l'ordre de chargement.");
+        return;
+      }
 
       const analysis =
         await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);
@@ -431,7 +439,15 @@ export function Home({ auth, setAuth }: HomeProps) {
       }
 
       setStatus("Synchronisation de l’ordre de chargement...");
-      await window.electronAPI.syncLoadorder(gamePath, verify.loadOrder);
+      const synced = await window.electronAPI.syncLoadorder(
+        gamePath,
+        verify.loadOrder
+      );
+
+      if (!synced) {
+        setStatus("Impossible de synchroniser l'ordre de chargement.");
+        return;
+      }
 
       const analysis =
         await window.electronAPI.analyzePlugins(gamePath, verify.loadOrder);

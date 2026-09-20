@@ -27,7 +27,7 @@ test('o gate falha fechado quando o manifesto está indisponível ou há atualiz
   assert.match(playHandler[1], /if \(clientUpdate\.updateAvailable\) \{[\s\S]*?return;/);
 });
 
-test('o fluxo JOGAR V11 apenas verifica: nao instala, repara ou sincroniza', () => {
+test('o fluxo JOGAR V11 nao instala nem repara, mas normaliza e sincroniza o load order', () => {
   assert.ok(playHandler, 'handlePlay nao encontrado');
   const source = playHandler[1];
 
@@ -47,8 +47,13 @@ test('o fluxo JOGAR V11 apenas verifica: nao instala, repara ou sincroniza', () 
   );
 
   assert.ok(
-    !source.includes('syncLoadorder('),
-    'JOGAR nao deve modificar plugins.txt'
+    source.includes('normalizeEslPlugins(gamePath)'),
+    'JOGAR deve normalizar os plugins ESL antes da verificacao'
+  );
+
+  assert.ok(
+    source.includes('syncLoadorder('),
+    'JOGAR deve sincronizar plugins.txt com o load order do servidor'
   );
 
   assert.ok(
