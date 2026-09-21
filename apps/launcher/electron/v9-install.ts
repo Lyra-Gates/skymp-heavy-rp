@@ -12,7 +12,7 @@ import { normalizePrimetoileRuntimeV11 } from './v11-normalize.js';
 export const V9_TARGET_RUNTIME = '1.6.1170.0';
 
 const PRIMETOILE_ESP_SHA256 =
-  'FBA779E8F165DA82F94A5F9C3CFD5F9CF9FA85665D1EE97CE7B9BACB8B86E4A2';
+  '492E13F5CB260346705107335AA8BB58C65424FE9FCC1007074AC35B5CB0E6B0';
 
 function resolvePrimetoileEspSourceV11(): string {
   if (app.isPackaged) {
